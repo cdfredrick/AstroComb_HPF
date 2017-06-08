@@ -2,7 +2,42 @@
 """
 Created on Mon Jun 05 13:54:03 2017
 
-@author: rm3531
+@author: Wesley Brand
+
+List of public methods in class Cybel:
+
+Initiate:
+    __init__(res_address)
+    full_initiate()
+
+General:
+    disconnected()
+    reboot()
+    eeprom_save()
+
+Enable:
+    enable_pump(pump_number, pump_on)
+    enable_tec(tec_number, tec_on)
+
+Queries:
+    serial_str, fw_str = query_serial_and_firmware()
+    str = query_cpld_firmware()
+    TF = query_pump_status(pump_number)
+    TF0, TF1, TF2, TF3 = query_temperature_error()
+    TF0, TF1  = query_trigger_n_laser_status()
+    TF = query_tec_status(tec_number)
+    query_pump_read_constants([force]) #writes values to Cybel.pccr_list
+    query_pump_write_constants([force]) #writes values to Cybel.pccw_list
+    query_pump_current_limits([force]) #writes values to Cybel.pcl_list
+    float_list_length_17 = query_analog_input_values()
+    float_list_length_8 = query_analog_output_values()
+
+Set Values:
+    set_analog_output_values(item_str, val_str)
+    set_tec_temp(tec_number, temp)
+    set_pump_current(pump_number, current)
+    set_seed_bias_voltage(voltage)
+
 """
 
 import time
@@ -40,23 +75,44 @@ def tf_toggle(var):
 
 def compute_tec_temp(raw_val):
     """Returns temperature from raw device reading."""
-    return (raw_val/1638.-1.25)/0.025+25.
+    return 40.*(raw_val/1638.-1.25)+25.
 
 def compute_input_current(raw_val, pccr):
     """Returns pump input current from raw device reading."""
     return raw_val*pccr/4095000.
 
+def compute_output_current(raw_val, pccw, pump_num):
+    """Returns pump output current from raw device reading."""
+    constants_list = (1470, 235, 147)
+    return raw_val*pccw/4095000./constants_list[pump_num-1]
+
 def compute_pd_power(raw_val, pd_num):
     """Returns photodiode power from raw device reading."""
-    if pd_num == 1:
-        return raw_val/1638.*0.202
-    if pd_num == 2:
-        return raw_val/1638.*3.912
+    constants_list = (0.202, 3.912)
+    return raw_val/1638.*constants_list[pd_num-1]
 
 def compute_analog_temp(raw_val):
     """Returns sensor temperature from raw device reading."""
-    return (raw_val/1638. - 0.5)/0.01
+    return 100.*(raw_val/1638. - 0.5)
 
+def form_temp_command(temp):
+    """Makes set temperature into machine-readable format"""
+    temp_val = np.floor(1638.*((temp-25.)/40.+1.25))
+    if temp_val > 4095 or temp_val < 0:
+        print 'Temperature to be set is out of bounds!'
+        return
+    temp_str = str(temp_val).zfill(4)
+    return temp_str
+
+def form_current_command(resource, pump_number, current):
+    """Makes set pump current into machine-readable format"""
+    if pump_number == 0:
+        current_val = current*1638.
+    else:
+        constants_list = (1470., 235., 147.)
+        current_val = current*constants_list[pump_number-1]/resource.pccw_list[pump_number-1]*1638.
+        current_str = str(current_val).zfill(4)
+        return current_str
 
 class Cybel():
     """Holds cybel amplifier's attributes and function library."""
@@ -72,11 +128,19 @@ class Cybel():
         self.res.data_bits = 8
         self.res.stop_bits = 1
         self.connected = 1
+        self.pccr_list = [] #Pump read constants, will have length 3
+        self.pccw_list = [] #Pump write constants, will have length 3
+        self.pcl_list = [] #Pump current limits, will have length 4 (includes seed)
         try:
-            self.res.query('SEN') #Disable echo
+            self.res.query('SEN') #Disable echo, echo interferes with string reading
         except pyvisa.errors.VisaIOError:
-            print 'Cybel has disconnected!'
-            self.connected = 0
+            self.disconnected()
+
+    def full_initiate(self):
+        """Needs more added, should be run immediately after __init__()"""
+        self.query_pump_read_constants()
+        self.query_pump_write_constants()
+        self.query_pump_current_limits()
 
     def disconnected(self):
         """Announces connection error."""
@@ -180,7 +244,7 @@ class Cybel():
                 tec_number = 'S'
             tec_status = self.res.query('TEC%s?' % tec_number)
             if tec_status[4] == '0':
-                print '%s TEC is off!'
+                print '%s TEC is off!' % tec_number
                 return False
             return True
         except pyvisa.errors.VisaIOError:
@@ -195,15 +259,47 @@ class Cybel():
         except pyvisa.errors.VisaIOError:
             self.disconnected()
 
-    def query_pump_read_constants(self):
-        """Returns pump read multiplying factors for computing pump currents"""
+    def query_pump_read_constants(self, force=False):
+        """Saves pump read multiplying factors for computing pump currents in Cybel object
+        Must read from device if function argument True is used"""
         try:
-            constants = self.res.query('PCCR?')
-            start = np.arange(0, 2*5, 5)
-            pccr_list = []
-            for i in start:
-                pccr_list.append(int(constants[start[i]:(start[i]+4)]))
-            return pccr_list
+            if self.pccr_list is None or force is True:
+                constants = self.res.query('PCCR?')
+                start = np.arange(0, 2*5, 5)
+                new_pccr_list = []
+                for i in start:
+                    new_pccr_list.append(int(constants[start[i]:(start[i]+4)]))
+                self.pccr_list = new_pccr_list
+        except pyvisa.errors.VisaIOError:
+            self.disconnected()
+
+    def query_pump_write_constants(self, force=False):
+        """Saves pump write multiplying factors for computing pump currents in Cybel object
+        Must read from device if function argument True is used"""
+        try:
+            if self.pccw_list is None or force is True:
+                constants = self.res.query('PCCW?')
+                start = np.arange(0, 2*5, 5)
+                new_pccw_list = []
+                for i in start:
+                    new_pccw_list.append(int(constants[start[i]:(start[i]+4)]))
+                self.pccw_list = new_pccw_list
+        except pyvisa.errors.VisaIOError:
+            self.disconnected()
+
+    def query_pump_current_limits(self, force=False):
+        """Saves pump current limits in Cybel object
+        Must read from device if function argument True is used"""
+        try:
+            if self.pcl_list is None or force is True:
+                raw_limits = self.res.query('AOL?')
+                start = np.arange(0, 2*5, 5)
+                new_pcl_list = [2.5]
+                for i in start:
+                    raw_val = int(raw_limits[start[i]:(start[i]+4)])
+                    pcl = compute_output_current(raw_val, self.pccw_list[i], i)
+                    new_pcl_list.append(pcl)
+                self.pcl_list = new_pcl_list
         except pyvisa.errors.VisaIOError:
             self.disconnected()
 
@@ -215,21 +311,84 @@ class Cybel():
             ai_vals = np.zeros(17)
             start = np.arange(0, 16*5, 5)
             for i in start:
-                val_list.append(int(analog_vals[start[i]:(start[i]+4)]))
-            #Seed and 3 pump TEC temperatures
+                val_list.append(float(analog_vals[start[i]:(start[i]+4)]))
+            #Seed and 3 pump TEC temperatures in Celsius
             ai_vals[0:3] = compute_tec_temp(val_list[0:3])
-            #Pump currents
-            pccr_list = self.query_pump_read_constants()
-            ai_vals[4:6] = compute_input_current(val_list[4:6], pccr_list[0:2])
-            #Pumps 1 and 2 photodiode powers
+            #Pump currents in amps
+            self.query_pump_read_constants()
+            ai_vals[4:6] = compute_input_current(val_list[4:6], self.pccr_list[0:2])
+            #Pumps 1 and 2 photodiode powers in watts
             ai_vals[7] = compute_pd_power(val_list[7], 1)
             ai_vals[8] = compute_pd_power(val_list[8], 1)
             #Seed bias voltage
             ai_vals[9] = val_list[9]/1638.
-            #Analog temperature sensors
+            #Analog temperature sensors in celsius
             ai_vals[10:11] = compute_analog_temp(val_list[10:11])
-            #Voltage tests: 5V, 1.8V, and 28V. Monitor photodiodes 1 and 2
+            #Voltage tests: 5V, 1.8V, and 28V in volts
+            #And Monitor photodiodes 1 and 2 in volts
             ai_vals[12:16] = val_list[12:16]/1638.
             return ai_vals
         except pyvisa.errors.VisaIOError:
             self.disconnected()
+
+    def query_analog_output_values(self):
+        """Returns a length 9 list of manual-specifed values."""
+        try:
+            analog_vals = self.res.query('AO?')
+            val_list = []
+            ao_vals = np.zeros(9)
+            start = np.arange(0, 8*5, 5)
+            for i in start:
+                val_list.append(float(analog_vals[start[i]:(start[i]+4)]))
+            #Seed and 3 pump TEC temperatures in Celsius
+            ao_vals[0:3] = compute_tec_temp(val_list[0:3])
+            #Seed current in amps
+            ao_vals[4] = val_list[4]/1638.
+            #Pump currents in amps
+            self.query_pump_write_constants()
+            ao_vals[5:7] = compute_output_current(val_list[4:6], self.pccw_list[0:2], np.arange(3))
+            #Seed bias voltage in volts
+            ao_vals[8] = val_list[8]/1638.
+            return ao_vals
+        except pyvisa.errors.VisaIOError:
+            self.disconnected()
+
+    def set_analog_output_values(self, item_str, val_str):
+        """Sets a value, accessed by other set commands"""
+        try:
+            self.res.query('AO%s,%s' % (item_str, val_str))
+        except pyvisa.errors.VisaIOError:
+            self.disconnected()
+
+    def set_tec_temp(self, tec_number, temp):
+        """tec_number=0 for seed, ={1,2,3} for corresponding pumps,
+        sets temperature in Celsius"""
+        item_str = '0%d' % tec_number
+        temp_str = form_temp_command(temp)
+        if temp_str is None:
+            return
+        self.set_analog_output_values(item_str, temp_str)
+
+    def set_pump_current(self, pump_number, current):
+        """
+        !!!! Manual gives units of seed current in volts?!?!
+
+        pump_number=0 for seed, ={1,2,3} for corresponding pumps,
+        sets current in amps"""
+        self.query_pump_current_limits()
+        if current > self.pcl_list[pump_number] or current < 0:
+            print 'Pump current to be set is out of bounds!'
+            return
+        item_str = '0%d' % (pump_number + 3)
+        current_str = form_current_command(self, pump_number, current)
+        self.set_analog_output_values(item_str, current_str)
+
+    def set_seed_bias_voltage(self, voltage):
+        """Sets the voltage in volts"""
+        item_str = '08'
+        volt_val = voltage*1638.
+        if volt_val > 4095 or volt_val < 0:
+            print 'Seed bias voltage to be set is out of bounds!'
+            return
+        volt_str = str(volt_val).zfill(4)
+        self.set_analog_output_values(item_str, volt_str)

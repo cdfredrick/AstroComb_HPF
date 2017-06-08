@@ -23,9 +23,9 @@ Queries:
     TF0, TF1, TF2, TF3 = query_temp_error()
     TF0, TF1  = query_trigger_n_laser_status()
     TF = query_tec_status(tec_number)
-    query_pump_read_constants([force]) #writes values to Cybel.pccr_list
-    query_pump_write_constants([force]) #writes values to Cybel.pccw_list
-    query_pump_current_limits([force]) #writes values to Cybel.pcl_list
+    query_pump_read_constants() #writes values to Cybel.pccr_list
+    query_pump_write_constants() #writes values to Cybel.pccw_list
+    query_pump_current_limits() #writes values to Cybel.pcl_list
     float_list_length_17 = query_analog_input_values()
     float_list_length_8 = query_analog_output_values()
     float = query_trigger_timeout() #Hz
@@ -52,7 +52,7 @@ import numpy as np
 import visa
 import pyvisa
 
-CYBEL_ADDRESS = ''
+CYBEL_ADDRESS = '' #ADD ME!!!!
 
 def open_resource(res_address):
     """Returns specified resource object."""
@@ -269,8 +269,7 @@ class Cybel():
             self.disconnected()
 
     def query_tec_status(self, tec_number):
-        """tec_number=0 for seed, ={1,2,3} for corresponding pumps,
-        returns True if tec is on"""
+        """tec_number=0 for seed, ={1,2,3} for corresponding pumps, returns True if tec is on"""
         try:
             if tec_number == 0:
                 tec_number = 'S'
@@ -282,47 +281,41 @@ class Cybel():
         except pyvisa.errors.VisaIOError:
             self.disconnected()
 
-    def query_pump_read_constants(self, force=False):
-        """Saves pump read multiplying factors for computing pump currents in Cybel object
-        Must read from device if function argument True is used"""
+    def query_pump_read_constants(self):
+        """Saves pump read multiplying factors for computing pump currents in Cybel object"""
         try:
-            if self.pccr_list is None or force is True:
-                raw_constants = self.res.query('PCCR?')
-                start = np.arange(0, 2*5, 5)
-                new_pccr_list = []
-                for i in start:
-                    new_pccr_list.append(float(raw_constants[start[i]:(start[i]+4)]))
-                self.pccr_list = new_pccr_list
+            raw_constants = self.res.query('PCCR?')
+            start = np.arange(0, 2*5, 5)
+            new_pccr_list = []
+            for i in start:
+                new_pccr_list.append(float(raw_constants[start[i]:(start[i]+4)]))
+            self.pccr_list = new_pccr_list
         except pyvisa.errors.VisaIOError:
             self.disconnected()
 
-    def query_pump_write_constants(self, force=False):
-        """Saves pump write multiplying factors for computing pump currents in Cybel object
-        Must read from device if function argument True is used"""
+    def query_pump_write_constants(self):
+        """Saves pump write multiplying factors for computing pump currents in Cybel object"""
         try:
-            if self.pccw_list is None or force is True:
-                raw_constants = self.res.query('PCCW?')
-                start = np.arange(0, 2*5, 5)
-                new_pccw_list = []
-                for i in start:
-                    new_pccw_list.append(float(raw_constants[start[i]:(start[i]+4)]))
-                self.pccw_list = new_pccw_list
+            raw_constants = self.res.query('PCCW?')
+            start = np.arange(0, 2*5, 5)
+            new_pccw_list = []
+            for i in start:
+                new_pccw_list.append(float(raw_constants[start[i]:(start[i]+4)]))
+            self.pccw_list = new_pccw_list
         except pyvisa.errors.VisaIOError:
             self.disconnected()
 
-    def query_pump_current_limits(self, force=False):
-        """Saves pump current limits in Cybel object
-        Must read from device if function argument True is used"""
+    def query_pump_current_limits(self):
+        """Saves pump current limits in Cybel object"""
         try:
-            if self.pcl_list is None or force is True:
-                raw_limits = self.res.query('AOL?')
-                start = np.arange(0, 2*5, 5)
-                new_pcl_list = [2.5]
-                for i in start:
-                    raw_val = float(raw_limits[start[i]:(start[i]+4)])
-                    pcl = compute_output_current(raw_val, self.pccw_list[i], i)
-                    new_pcl_list.append(pcl)
-                self.pcl_list = new_pcl_list
+            raw_limits = self.res.query('AOL?')
+            start = np.arange(0, 2*5, 5)
+            new_pcl_list = [2.5]
+            for i in start:
+                raw_val = float(raw_limits[start[i]:(start[i]+4)])
+                pcl = compute_output_current(raw_val, self.pccw_list[i], i)
+                new_pcl_list.append(pcl)
+            self.pcl_list = new_pcl_list
         except pyvisa.errors.VisaIOError:
             self.disconnected()
 
@@ -483,6 +476,9 @@ class Cybel():
         if current > self.pcl_list[pump_number] or current < 0:
             print 'Pump current to be set is out of bounds!'
             return
+        if pump_number == 2 and current != 2:
+            print 'Pump 2 must stay at 2 amps!'
+            return
         item_str = '0%d' % (pump_number + 3)
         current_str = form_current_command(self, pump_number, current)
         self.set_analog_output_values(item_str, current_str)
@@ -520,18 +516,25 @@ class Cybel():
             self.disconnected()
 
     def set_pump_read_constant(self, pump_number, val):
-        """Sets the read constant of pump_number={1,2,3} must be an integer between 0 and 4095(?)"""
+        """Sets the read constant of pump_number={1,2,3}
+
+        val must be an integer between 0 and 4095(?)"""
         try:
             val_str = str(val).zfill(4)
-            self.res.query('PCCR%d%d' % (pump_number, val_str))
+            self.res.query('PCCR%d%s' % (pump_number, val_str))
         except pyvisa.errors.VisaIOError:
             self.disconnected()
 
     def set_pump_write_constant(self, pump_number, val):
         """Sets the write constant of pump_number={1,2,3}
-        must be an integer between 0 and 4095(?)"""
+
+        val must be an integer between 0 and 4095(?)
+        probably safest to leave these alone unless desired current cant be reached"""
         try:
+            if pump_number == 2:
+                print 'Cannot change pump 2 current!'
+                return
             val_str = str(val).zfill(4)
-            self.res.query('PCCW%d%d' % (pump_number, val_str))
+            self.res.query('PCCW%d%s' % (pump_number, val_str))
         except pyvisa.errors.VisaIOError:
             self.disconnected()

@@ -54,7 +54,7 @@ import pyvisa
 
 CYBEL_ADDRESS = '' #ADD ME!!!!
 
-def open_resource(res_address):
+def visa_open_resource(res_address):
     """Returns specified resource object."""
     try:
         res_man = visa.ResourceManager()
@@ -66,9 +66,9 @@ def open_resource(res_address):
         print 'Device Cannot Be Connected To!'
         return None
 
-def check_connection(resource, res_address):
+def visa_check_connection(resource, res_address):
     """If resource is not connected initiates resources disconnection commands."""
-    connected = open_resource(res_address)
+    connected = visa_open_resource(res_address)
     if connected is None:
         resource.disconnected()
 
@@ -132,7 +132,7 @@ class Cybel():
     #General methods
 
     def __init__(self, res_address):
-        self.res = open_resource(res_address)
+        self.res = visa_open_resource(res_address)
         if self.res is None:
             print 'Could not create Cybel instrument!'
             return
@@ -142,7 +142,7 @@ class Cybel():
         self.res.baud_rate = 57600
         self.res.data_bits = 8
         self.res.stop_bits = 1
-        self.connected = 1
+        self.connected = True
         try:
             self.res.query('SEN') #Disable echo, echo interferes with string reading
         except pyvisa.errors.VisaIOError:
@@ -157,7 +157,7 @@ class Cybel():
     def disconnected(self):
         """Announces connection error."""
         print 'Cybel has disconnected!'
-        self.connected = 0
+        self.connected = False
 
     def reboot(self):
         """Reboots electronic board."""

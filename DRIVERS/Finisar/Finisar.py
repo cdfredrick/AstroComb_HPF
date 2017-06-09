@@ -57,9 +57,9 @@ class Finisar:
         """Writes amplitude, phase, and port vectors to waveshaper
         vectors should all be V(1,dim) in dimension.
         format, freq(xxx.xxx) TAB amp(xx.xxx) TAB phase(x.xxxxxx) TAB port(x) NewLine"""
-        buffer = "%7.3f" % self.StartF + "\t" + "%6.3f" % amp[0] + "\t" + "%8.6f" % phase[0] + "\t" + "%1i" % phase[0] + "\n"                                                 
+        buffer = "%7.3f" % self.StartF + "\t" + "%6.3f" % amp[0] + "\t" + "%8.6f" % phase[0] + "\t" + "%1i" % port[0] + "\n"                                                 
         for i in range(1,int(dim)):
-            buffer = buffer + "%7.3f" % (self.StartF+0.001*i-0.001) + "\t" + "%6.3f" % amp[i] + "\t" + "%8.6f" % phase[i] + "\t" + "%1i" % phase[i] + "\n"
+            buffer = buffer + "%7.3f" % (self.StartF+0.001*i-0.001) + "\t" + "%6.3f" % amp[i] + "\t" + "%8.6f" % phase[i] + "\t" + "%1i" % port[i] + "\n"
         self.rc = ws.ws_load_profile("ws1",buffer)                                                
         print "ws_write_waveshaper rc=" + str(ws.ws_get_result_description(self.rc))
         
@@ -69,3 +69,5 @@ class Finisar:
         print "ws_close_waveshaper rc=" + str(ws.ws_get_result_description(self.rc))
         self.rc = ws.ws_delete_waveshaper("ws1")
         print "ws_delete_waveshaper rc=" + str(ws.ws_get_result_description(self.rc))
+        
+   

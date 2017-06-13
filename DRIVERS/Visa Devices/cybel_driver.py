@@ -53,19 +53,10 @@ Set Values:
 
 import time
 import numpy as np
-import pyvisa
 import visa_objects as vo
 
 CYBEL_ADDRESS = '' #ADD ME!!!!
 CYBEL_NAME = 'Cybel Amplifier'
-
-def tf_toggle(var):
-    """Returns 0 or 1 in place of T/F variable."""
-    if var is True:
-        binary = 1
-    elif var is False:
-        binary = 0
-    return binary
 
 def compute_tec_temp(raw_val):
     """Returns temperature from raw device reading."""
@@ -130,11 +121,7 @@ class Cybel(vo.Visa):
         self.res.baud_rate = 57600
         self.res.data_bits = 8
         self.res.stop_bits = 1
-        self.connected = True
-        try:
-            self.res.query('SEN') #Disable echo, echo interferes with string reading
-        except pyvisa.errors.VisaIOError:
-            self.disconnected()
+        self.enable_echo(False)
         self.pccr_list = [] #Pump read constants, will have length 3
         self.query_pump_read_constants()
         self.pccw_list = [] #Pump write constants, will have length 3
@@ -142,309 +129,266 @@ class Cybel(vo.Visa):
         self.pcl_list = [] #Pump current limits, will have length 4 (includes seed)
         self.query_pump_current_limits()
 
-    def disconnected(self):
-        """Announces connection error."""
-        print 'Cybel has disconnected!'
-        self.connected = False
-
+    @vo.attempt
     def reboot(self):
         """Reboots electronic board."""
-        try:
-            self.res.query('RESET')
-        except pyvisa.errors.VisaIOError:
-            self.disconnected()
+        self.res.query('RESET')
 
+    @vo.attempt
     def eeprom_save(self):
         """Saves manual-specified values into electronic board."""
-        try:
-            self.res.query('SAVE')
-            time.sleep(3) #Takes a few seconds and can't be interrupted
-        except pyvisa.errors.VisaIOError:
-            self.disconnected()
+        self.res.query('SAVE')
+        time.sleep(3) #Takes a few seconds and can't be interrupted
 
-#Enable Component Methods
+#Enable Methods
 
+    @vo.attempt
+    def enable_echo(self, echo_on):
+        """Turns on echo, but you should keep it off"""
+        if echo_on is True:
+            self.res.query('SEE')
+        if echo_on is False:
+            self.res.query('SEN')
+
+    @vo.attempt       
     def enable_pump(self, pump_number, pump_on):
         """Turns pump on (pump_on=True) or off (pump_on=False),
         pump numbers are 1,2, or 3"""
-        try:
-            self.res.query('P%d%d' % (pump_number, tf_toggle(pump_on)))
-        except pyvisa.errors.VisaIOError:
-            self.disconnected()
+        self.res.query('P%d%d' % (pump_number, vo.tf_toggle(pump_on)))
 
+    @vo.attempt
     def enable_tec(self, tec_number, tec_on):
         """tec_number=0 for seed, ={1,2,3} for corresponding pumps, turns on if tec_on=True."""
-        try:
-            if tec_number == 0:
-                tec_number = 'S'
-            self.res.query('TEC%s%d?' % (tec_number, tf_toggle(tec_on)))
-        except pyvisa.errors.VisaIOError:
-            self.disconnected()
+        if tec_number == 0:
+            tec_number = 'S'
+        self.res.query('TEC%s%d?' % (tec_number, vo.tf_toggle(tec_on)))
 
+    @vo.attempt
     def enable_keep_on(self, keep_on):
         """Enables keeping laser on when electronic board connection ends if True"""
-        try:
-            self.res.query('KP%d' % tf_toggle(keep_on))
-        except pyvisa.errors.VisaIOError:
-            self.disconnected()
+        self.res.query('KP%d' % vo.tf_toggle(keep_on))
 
 #Query Methods
 
+    @vo.attempt
     def query_serial_and_firmware(self):
         """Returns 8 character SN and 4 character microcontroller firmware #."""
-        try:
-            raw_sn_and_fw = self.res.query('CO')
-            serial = raw_sn_and_fw[:8]
-            firmware = raw_sn_and_fw[:10]
-            return serial, firmware
-        except pyvisa.errors.VisaIOError:
-            self.disconnected()
+        raw_sn_and_fw = self.res.query('CO')
+        serial = raw_sn_and_fw[:8]
+        firmware = raw_sn_and_fw[:10]
+        return serial, firmware
 
+    @vo.attempt
     def query_cpld_firmware(self):
         """Returns 4 character CPLD firmware version."""
-        try:
-            raw_cpld = self.res.query('CPLD?')
-            return raw_cpld[4:8]
-        except pyvisa.errors.VisaIOError:
-            self.disconnected()
+        raw_cpld = self.res.query('CPLD?')
+        return raw_cpld[4:8]
 
+    @vo.attempt
     def query_pump_status(self, pump_number):
         """Returns True if pump is on and False if pump is off,
         pump_numbers are 1,2, or 3"""
-        try:
-            pump_status = self.res.query('P%d?' % pump_number)
-            if pump_status[2] == '0':
-                print 'Pump %d is off!' % pump_number
-                return False
-            return True
-        except pyvisa.errors.VisaIOError:
-            self.disconnected()
-
+        pump_status = self.res.query('P%d?' % pump_number)
+        if pump_status[2] == '0':
+            print 'Pump %d is off!' % pump_number
+            return False
+        return True
+        
+    @vo.attempt
     def query_temp_error(self):
         """Returns a value for each TEC, True if within error, False if not"""
-        try:
-            temp_error = self.res.query('FB?')
-            seed_temp = pump1_temp = pump2_temp = pump3_temp = True
-            if temp_error[2] == '0':
-                print 'Seed temperature outsde error limit!'
-                seed_temp = False
-            if temp_error[3] == '0':
-                print 'Pump 1 temperature outsde error limit!'
-                pump1_temp = False
-            if temp_error[4] == '0':
-                print 'Pump 2 temperature outsde error limit!'
-                pump2_temp = False
-            if temp_error[5] == '0':
-                print 'Pump 3 temperature outsde error limit!'
-                pump3_temp = False
-            return seed_temp, pump1_temp, pump2_temp, pump3_temp
-        except pyvisa.errors.VisaIOError:
-            self.disconnected()
+        temp_error = self.res.query('FB?')
+        seed_temp = pump1_temp = pump2_temp = pump3_temp = True
+        if temp_error[2] == '0':
+            print 'Seed temperature outsde error limit!'
+            seed_temp = False
+        if temp_error[3] == '0':
+            print 'Pump 1 temperature outsde error limit!'
+            pump1_temp = False
+        if temp_error[4] == '0':
+            print 'Pump 2 temperature outsde error limit!'
+            pump2_temp = False
+        if temp_error[5] == '0':
+            print 'Pump 3 temperature outsde error limit!'
+            pump3_temp = False
+        return seed_temp, pump1_temp, pump2_temp, pump3_temp
 
+    @vo.attempt
     def  query_trigger_n_laser_status(self):
         """Returns True's if trigger is correct and laser is emitting"""
-        try:
-            tl_status = self.res.query('TS?')
-            trigger_match = laser_on = True
-            if tl_status[2] == '0':
-                print 'External trigger does not match requirement!'
-                trigger_match = False
-            if tl_status[3] == '0':
-                print 'Laser not emitting!'
-                laser_on = False
-            return trigger_match, laser_on
-        except pyvisa.errors.VisaIOError:
-            self.disconnected()
+        tl_status = self.res.query('TS?')
+        trigger_match = laser_on = True
+        if tl_status[2] == '0':
+            print 'External trigger does not match requirement!'
+            trigger_match = False
+        if tl_status[3] == '0':
+            print 'Laser not emitting!'
+            laser_on = False
+        return trigger_match, laser_on
 
+    @vo.attempt
     def query_tec_status(self, tec_number):
         """tec_number=0 for seed, ={1,2,3} for corresponding pumps, returns True if tec is on"""
-        try:
-            if tec_number == 0:
-                tec_number = 'S'
-            tec_status = self.res.query('TEC%s?' % tec_number)
-            if tec_status[4] == '0':
-                print '%s TEC is off!' % tec_number
-                return False
-            return True
-        except pyvisa.errors.VisaIOError:
-            self.disconnected()
+        if tec_number == 0:
+            tec_number = 'S'
+        tec_status = self.res.query('TEC%s?' % tec_number)
+        if tec_status[4] == '0':
+            print '%s TEC is off!' % tec_number
+            return False
+        return True
 
+    @vo.attempt
     def query_pump_read_constants(self):
         """Saves pump read multiplying factors for computing pump currents in Cybel object"""
-        try:
-            raw_constants = self.res.query('PCCR?')
-            start = np.arange(0, 2*5, 5)
-            new_pccr_list = []
-            for i in start:
-                new_pccr_list.append(float(raw_constants[start[i]:(start[i]+4)]))
-            self.pccr_list = new_pccr_list
-        except pyvisa.errors.VisaIOError:
-            self.disconnected()
+        raw_constants = self.res.query('PCCR?')
+        start = np.arange(0, 2*5, 5)
+        new_pccr_list = []
+        for i in start:
+            new_pccr_list.append(float(raw_constants[start[i]:(start[i]+4)]))
+        self.pccr_list = new_pccr_list
 
+    @vo.attempt
     def query_pump_write_constants(self):
         """Saves pump write multiplying factors for computing pump currents in Cybel object"""
-        try:
-            raw_constants = self.res.query('PCCW?')
-            start = np.arange(0, 2*5, 5)
-            new_pccw_list = []
-            for i in start:
-                new_pccw_list.append(float(raw_constants[start[i]:(start[i]+4)]))
-            self.pccw_list = new_pccw_list
-        except pyvisa.errors.VisaIOError:
-            self.disconnected()
+        raw_constants = self.res.query('PCCW?')
+        start = np.arange(0, 2*5, 5)
+        new_pccw_list = []
+        for i in start:
+            new_pccw_list.append(float(raw_constants[start[i]:(start[i]+4)]))
+        self.pccw_list = new_pccw_list
 
+    @vo.attempt
     def query_pump_current_limits(self):
         """Saves pump current limits in Cybel object"""
-        try:
-            raw_limits = self.res.query('AOL?')
-            start = np.arange(0, 2*5, 5)
-            new_pcl_list = [2.5]
-            for i in start:
-                raw_val = float(raw_limits[start[i]:(start[i]+4)])
-                pcl = compute_output_current(raw_val, self.pccw_list[i], i)
-                new_pcl_list.append(pcl)
-            self.pcl_list = new_pcl_list
-        except pyvisa.errors.VisaIOError:
-            self.disconnected()
+        raw_limits = self.res.query('AOL?')
+        start = np.arange(0, 2*5, 5)
+        new_pcl_list = [2.5]
+        for i in start:
+            raw_val = float(raw_limits[start[i]:(start[i]+4)])
+            pcl = compute_output_current(raw_val, self.pccw_list[i], i)
+            new_pcl_list.append(pcl)
+        self.pcl_list = new_pcl_list
 
+    @vo.attempt
     def query_analog_input_values(self):
         """Returns a length 17 list of manual-specifed values."""
-        try:
-            analog_raw = self.res.query('AI?')
-            val_list = []
-            ai_vals = np.zeros(17)
-            start = np.arange(0, 16*5, 5)
-            for i in start:
-                val_list.append(float(analog_raw[start[i]:(start[i]+4)]))
-            #Seed and 3 pump TEC temperatures in Celsius
-            ai_vals[0:3] = compute_tec_temp(val_list[0:3])
-            #Pump currents in amps
-            ai_vals[4:6] = compute_input_current(val_list[4:6], self.pccr_list[0:2])
-            #Pumps 1 and 2 photodiode powers in watts
-            ai_vals[7] = compute_pd_power(val_list[7], 1)
-            ai_vals[8] = compute_pd_power(val_list[8], 1)
-            #Seed bias voltage
-            ai_vals[9] = val_list[9]/1638.
-            #Analog temperature sensors in celsius
-            ai_vals[10:11] = compute_analog_temp(val_list[10:11])
-            #Voltage tests: 5V, 1.8V, and 28V in volts
-            #And Monitor photodiodes 1 and 2 in volts
-            ai_vals[12:16] = val_list[12:16]/1638.
-            return ai_vals
-        except pyvisa.errors.VisaIOError:
-            self.disconnected()
+        analog_raw = self.res.query('AI?')
+        val_list = []
+        ai_vals = np.zeros(17)
+        start = np.arange(0, 16*5, 5)
+        for i in start:
+            val_list.append(float(analog_raw[start[i]:(start[i]+4)]))
+        #Seed and 3 pump TEC temperatures in Celsius
+        ai_vals[0:3] = compute_tec_temp(val_list[0:3])
+        #Pump currents in amps
+        ai_vals[4:6] = compute_input_current(val_list[4:6], self.pccr_list[0:2])
+        #Pumps 1 and 2 photodiode powers in watts
+        ai_vals[7] = compute_pd_power(val_list[7], 1)
+        ai_vals[8] = compute_pd_power(val_list[8], 1)
+        #Seed bias voltage
+        ai_vals[9] = val_list[9]/1638.
+        #Analog temperature sensors in celsius
+        ai_vals[10:11] = compute_analog_temp(val_list[10:11])
+        #Voltage tests: 5V, 1.8V, and 28V in volts
+        #And Monitor photodiodes 1 and 2 in volts
+        ai_vals[12:16] = val_list[12:16]/1638.
+        return ai_vals
 
+    @vo.attempt
     def query_analog_output_values(self):
         """Returns a length 9 list of manual-specifed values."""
-        try:
-            analog_raw = self.res.query('AO?')
-            val_list = []
-            ao_vals = np.zeros(9)
-            start = np.arange(0, 8*5, 5)
-            for i in start:
-                val_list.append(float(analog_raw[start[i]:(start[i]+4)]))
-            #Seed and 3 pump TEC temperatures in Celsius
-            ao_vals[0:3] = compute_tec_temp(val_list[0:3])
-            #Seed current in amps
-            ao_vals[4] = val_list[4]/1638.
-            #Pump currents in amps
-            ao_vals[5:7] = compute_output_current(val_list[4:6], self.pccw_list[0:2], np.arange(3))
-            #Seed bias voltage in volts
-            ao_vals[8] = val_list[8]/1638.
-            return ao_vals
-        except pyvisa.errors.VisaIOError:
-            self.disconnected()
+        analog_raw = self.res.query('AO?')
+        val_list = []
+        ao_vals = np.zeros(9)
+        start = np.arange(0, 8*5, 5)
+        for i in start:
+            val_list.append(float(analog_raw[start[i]:(start[i]+4)]))
+        #Seed and 3 pump TEC temperatures in Celsius
+        ao_vals[0:3] = compute_tec_temp(val_list[0:3])
+        #Seed current in amps
+        ao_vals[4] = val_list[4]/1638.
+        #Pump currents in amps
+        ao_vals[5:7] = compute_output_current(val_list[4:6], self.pccw_list[0:2], np.arange(3))
+        #Seed bias voltage in volts
+        ao_vals[8] = val_list[8]/1638.
+        return ao_vals
 
+    @vo.attempt
     def query_trigger_timeout(self):
         """Returns the minimum trigger value in Hz"""
-        try:
-            trig_raw = self.res.query('TRTO?')
-            trig_val = float(trig_raw[4:8])
-            trig_freq = 75000./trig_val
-        except pyvisa.errors.VisaIOError:
-            self.disconnected()
+        trig_raw = self.res.query('TRTO?')
+        trig_val = float(trig_raw[4:8])
+        trig_freq = 75000./trig_val
         return trig_freq
 
+    @vo.attempt
     def query_pulse_width(self):
         """Returns pulse width in ns"""
-        try:
-            pw_raw = self.res.query('PWA?')
-            pw_val = int(pw_raw[3])
-            #          | 0 |  1 |  2 |  3 |  4 |  5 |  6 |  7 |  8 |  9 |
-            pw_table = [2.7, 3.4, 3.8, 3.9, 4.6, 4.9, 5.2, 5.7, 6.8, 7.7]
-            width = pw_table[pw_val]
-            return width
-        except pyvisa.errors.VisaIOError:
-            self.disconnected()
+        pw_raw = self.res.query('PWA?')
+        pw_val = int(pw_raw[3])
+        #          | 0 |  1 |  2 |  3 |  4 |  5 |  6 |  7 |  8 |  9 |
+        pw_table = [2.7, 3.4, 3.8, 3.9, 4.6, 4.9, 5.2, 5.7, 6.8, 7.7]
+        width = pw_table[pw_val]
+        return width
 
+    @vo.attempt
     def query_digital_temp_sensors(self):
         """Returns temperature from two digital sensors in Celsius"""
-        try:
-            raw_temps = self.res.query('TEMP?')
-            temp1 = float(raw_temps[4:8])/16.
-            temp2 = float(raw_temps[10:14])/16.
-            return temp1, temp2
-        except pyvisa.errors.VisaIOError:
-            self.disconnected()
+        raw_temps = self.res.query('TEMP?')
+        temp1 = float(raw_temps[4:8])/16.
+        temp2 = float(raw_temps[10:14])/16.
+        return temp1, temp2
 
+    @vo.attempt
     def query_pulse_rep_rate(self):
         """Returns pulse repetition rate in kHz"""
-        try:
-            raw_prr = self.res.query('PR?')
-            prr_val = float(raw_prr[2:6])
-            rep_rate = prr_val/75000.+0.5
-            return rep_rate
-        except pyvisa.errors.VisaIOError:
-            self.disconnected()
+        raw_prr = self.res.query('PR?')
+        prr_val = float(raw_prr[2:6])
+        rep_rate = prr_val/75000.+0.5
+        return rep_rate
 
+    @vo.attempt
     def query_keep_on(self):
         """Returns True if laser is set to 'Keep ON' when connection with electronic board ends"""
-        try:
-            keep_on = self.res.query('KP?')
-            if keep_on[2] == '1':
-                return True
-            return False
-        except pyvisa.errors.VisaIOError:
-            self.disconnected()
+        keep_on = self.res.query('KP?')
+        if keep_on[2] == '1':
+            return True
+        return False
 
+    @vo.attempt
     def query_allowed_components(self):
         """Prints a list of components that are connected to electronic board"""
-        try:
-            raw_allowed = self.res.query('DC?')
-            device_list1 = ['Seed current', 'Pump 1 current', 'Pump 2 current',
-                            'Pump 3 current', 'Seed temperature', 'Pump 1 temperature',
-                            'Pump 2 temperature', 'Pump 3 temperature']
-            device_list2 = ['Digital temperature sensor 1', 'Digital temperature sensor 2',
-                            'Analog temperature sensor 1', 'Analog temperature sensor 1',
-                            'Voltage test 28V', 'Voltage test 1.8V', 'Voltage test 5V',
-                            'Pump 1 photodiode']
-            device_list3 = ['Pump 2 photodiode', 'Monitor photodiode 1',
-                            'Monitor photodiode 2', 'Trigger', 'Pulse width',
-                            'Pulse rate', '', '']
-            device_list4 = ['', '', '', 'Seed bias voltage', '', '', '', '']
-            device_array = [device_list1, device_list2, device_list3, device_list4]
-            allowed = ['allowed!', 'NOT ALLOWED!']
-            i = 0
-            while i < len(device_array):
-                ascii = raw_allowed[2+i]
-                bits = string_to_bits(ascii)
-                j = 0
-                while j < len(bits):
-                    if device_array[i][j]:
-                        print device_array[i][j] + ' is ' + allowed[int(bits[j])]
-                    j += 1
-                i += 1
-        except pyvisa.errors.VisaIOError:
-            self.disconnected()
+        raw_allowed = self.res.query('DC?')
+        device_list1 = ['Seed current', 'Pump 1 current', 'Pump 2 current',
+                        'Pump 3 current', 'Seed temperature', 'Pump 1 temperature',
+                        'Pump 2 temperature', 'Pump 3 temperature']
+        device_list2 = ['Digital temperature sensor 1', 'Digital temperature sensor 2',
+                        'Analog temperature sensor 1', 'Analog temperature sensor 1',
+                        'Voltage test 28V', 'Voltage test 1.8V', 'Voltage test 5V',
+                        'Pump 1 photodiode']
+        device_list3 = ['Pump 2 photodiode', 'Monitor photodiode 1',
+                        'Monitor photodiode 2', 'Trigger', 'Pulse width',
+                        'Pulse rate', '', '']
+        device_list4 = ['', '', '', 'Seed bias voltage', '', '', '', '']
+        device_array = [device_list1, device_list2, device_list3, device_list4]
+        allowed = ['allowed!', 'NOT ALLOWED!']
+        i = 0
+        while i < len(device_array):
+            ascii = raw_allowed[2+i]
+            bits = string_to_bits(ascii)
+            j = 0
+            while j < len(bits):
+                if device_array[i][j]:
+                    print device_array[i][j] + ' is ' + allowed[int(bits[j])]
+                j += 1
+            i += 1
 
 #Set Value Methods
 
+    @vo.attempt
     def set_analog_output_values(self, item_str, val_str):
         """Sets a value, accessed by other set commands"""
-        try:
-            self.res.query('AO%s,%s' % (item_str, val_str))
-        except pyvisa.errors.VisaIOError:
-            self.disconnected()
+        self.res.query('AO%s,%s' % (item_str, val_str))
 
     def set_tec_temp(self, tec_number, temp):
         """tec_number=0 for seed, ={1,2,3} for corresponding pumps,
@@ -481,6 +425,7 @@ class Cybel(vo.Visa):
         volt_str = str(volt_val).zfill(4)
         self.set_analog_output_values(item_str, volt_str)
 
+    @vo.attempt
     def set_trigger_timeout(self, frequency):
         """Sets the trigger timeout in Hz"""
         trig_val = int(np.floor(frequency/75000.))
@@ -488,41 +433,32 @@ class Cybel(vo.Visa):
             print 'Trigger timeout to be set is out of bounds!'
             return
         trig_str = str(trig_val).zfill(4)
-        try:
-            self.res.query('TRTO%s' % trig_str)
-        except pyvisa.errors.VisaIOError:
-            self.disconnected()
+        self.res.query('TRTO%s' % trig_str)
 
+    @vo.attempt
     def set_pulse_width(self, pw_val):
         """Sets the pulse width in ns, use table below for correct pw_val
 
         pw_val =      | 0 |  1 |  2 |  3 |  4 |  5 |  6 |  7 |  8 |  9 |
         pulse in ns = |2.7| 3.4| 3.8| 3.9| 4.6| 4.9| 5.2| 5.7| 6.8| 7.7|"""
-        try:
-            self.res.query('PWA%d' % pw_val)
-        except pyvisa.errors.VisaIOError:
-            self.disconnected()
+        self.res.query('PWA%d' % pw_val)
 
+    @vo.attempt
     def set_pump_read_constant(self, pump_number, val):
         """Sets the read constant of pump_number={1,2,3}
 
         val must be an integer between 0 and 4095(?)"""
-        try:
-            val_str = str(val).zfill(4)
-            self.res.query('PCCR%d%s' % (pump_number, val_str))
-        except pyvisa.errors.VisaIOError:
-            self.disconnected()
+        val_str = str(val).zfill(4)
+        self.res.query('PCCR%d%s' % (pump_number, val_str))
 
+    @vo.attempt
     def set_pump_write_constant(self, pump_number, val):
         """Sets the write constant of pump_number={1,2,3}
 
         val must be an integer between 0 and 4095(?)
         probably safest to leave these alone unless desired current cant be reached"""
-        try:
-            if pump_number == 2:
-                print 'Cannot change pump 2 current!'
-                return
-            val_str = str(val).zfill(4)
-            self.res.query('PCCW%d%s' % (pump_number, val_str))
-        except pyvisa.errors.VisaIOError:
-            self.disconnected()
+        if pump_number == 2:
+            print 'Cannot change pump 2 current!'
+            return
+        val_str = str(val).zfill(4)
+        self.res.query('PCCW%d%s' % (pump_number, val_str))

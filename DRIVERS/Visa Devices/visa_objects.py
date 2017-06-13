@@ -2,6 +2,8 @@
 """
 Created on Mon Jun 12 15:29:26 2017
 
+@author: Wesley Brand
+
 
 Defines the super class to which all visa controlled devices should belong
 
@@ -10,8 +12,20 @@ Using this file you should not need to import visa and pyvisa into the drivers f
 import visa_objects as vo
 
 
-@author: Wesley Brand
+List of public functions:
+
+0/1 = tf_toggle(var)
+method = handle_timeout(method)
+
+
+List of public methods in class Visa:
+
+__init__(res_name, res_address)
+open_resource()
+check_connection()
+disconnected()
 """
+
 import visa
 import pyvisa
 
@@ -31,6 +45,7 @@ def handle_timeout(method):
         except pyvisa.errors.VisaIOError:
             super(type(self), self).disconnected()
     return attempt_method
+
 
 class Visa(object):
     """Defines the basic visa operations for all visa controlled devices"""
@@ -53,11 +68,11 @@ class Visa(object):
             print '%s Cannot Be Connected To!' % self.name
             return None
 
-    def check_connection(self, resource):
+    def check_connection(self):
         """If resource is not connected initiates resources disconnection commands."""
         connected = self.open_resource()
         if connected is None:
-            resource.disconnected()
+            self.disconnected()
 
     def disconnected(self):
         """Announces connection error."""

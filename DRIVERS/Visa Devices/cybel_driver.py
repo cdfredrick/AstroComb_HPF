@@ -8,6 +8,9 @@ Created on Mon Jun 05 13:54:03 2017
 Depends on visa_objects.py
 
 
+The functions in this module are all private
+
+
 List of public methods in class Cybel:
 
 General:
@@ -16,7 +19,6 @@ General:
     eeprom_save()
 
 Enable Components:
-    enable_echo(echo_on)
     enable_pump(pump_number, pump_on)
     enable_tec(tec_number, tec_on)
     enable_keep_on(keep_on)
@@ -41,8 +43,7 @@ Queries:
     query_allowed_components()
 
 Set Values:
-    set_analog_output_values(item_str, val_str)
-    set_tec_temp(tec_number, temp) #celsius
+    set_tec_temp(tec_number, temp) #Celsius
     set_pump_current(pump_number, current) #amps
     set_seed_bias_voltage(voltage) #volts
     set_trigger_timeout(frequency) #Hz
@@ -59,29 +60,29 @@ import visa_objects as vo
 CYBEL_ADDRESS = '' #ADD ME!!!!
 CYBEL_NAME = 'Cybel Amplifier'
 
-def compute_tec_temp(raw_val):
+def _compute_tec_temp(raw_val):
     """Returns temperature from raw device reading."""
     return 40.*(raw_val/1638.-1.25)+25.
 
-def compute_input_current(raw_val, pccr):
+def _compute_input_current(raw_val, pccr):
     """Returns pump input current from raw device reading."""
     return raw_val*pccr/4095000.
 
-def compute_output_current(raw_val, pccw, pump_num):
+def _compute_output_current(raw_val, pccw, pump_num):
     """Returns pump output current from raw device reading."""
     constants_list = [1470, 235, 147]
     return raw_val*pccw/4095000./constants_list[pump_num-1]
 
-def compute_pd_power(raw_val, pd_num):
+def _compute_pd_power(raw_val, pd_num):
     """Returns photodiode power from raw device reading."""
     constants_list = [0.202, 3.912]
     return raw_val/1638.*constants_list[pd_num-1]
 
-def compute_analog_temp(raw_val):
+def _compute_analog_temp(raw_val):
     """Returns sensor temperature from raw device reading."""
     return 100.*(raw_val/1638. - 0.5)
 
-def form_temp_command(temp):
+def _form_temp_command(temp):
     """Makes set temperature into machine-readable format"""
     temp_val = int(np.floor(1638.*((temp-25.)/40.+1.25)))
     if temp_val > 4095 or temp_val < 0:
@@ -90,7 +91,7 @@ def form_temp_command(temp):
     temp_str = str(temp_val).zfill(4)
     return temp_str
 
-def form_current_command(resource, pump_number, current):
+def _form_current_command(resource, pump_number, current):
     """Makes set pump current into machine-readable format"""
     if pump_number == 0:
         current_val = int(np.floor(current*1638.))
@@ -101,9 +102,10 @@ def form_current_command(resource, pump_number, current):
         current_str = str(current_val).zfill(4)
         return current_str
 
-def string_to_bits(string=''):
+def _string_to_bits(string=''):
     """Converts ascii character into bit string"""
     return [bin(ord(x))[2:].zfill(8) for x in string][0]
+
 
 class Cybel(vo.Visa):
     """Holds cybel amplifier's attributes and method library."""
@@ -122,7 +124,7 @@ class Cybel(vo.Visa):
         self.res.baud_rate = 57600
         self.res.data_bits = 8
         self.res.stop_bits = 1
-        self.enable_echo(False)
+        self.__disable_echo()
         self.pccr_list = [] #Pump read constants, will have length 3
         self.query_pump_read_constants()
         self.pccw_list = [] #Pump write constants, will have length 3
@@ -144,12 +146,12 @@ class Cybel(vo.Visa):
 #Enable Methods
 
     @vo.handle_timeout
-    def enable_echo(self, echo_on):
-        """Turns on echo, but you should keep it OFF"""
-        if echo_on is True:
-            self.res.query('SEE')
-        if echo_on is False:
+    def __disable_echo(self, echo_off=True):
+        """Turns off echo, made private because it should stay off"""
+        if echo_off is True:
             self.res.query('SEN')
+        if echo_off is False:
+            self.res.query('SEE')
 
     @vo.handle_timeout       
     def enable_pump(self, pump_number, pump_on):
@@ -266,7 +268,7 @@ class Cybel(vo.Visa):
         new_pcl_list = [2.5]
         for i in start:
             raw_val = float(raw_limits[start[i]:(start[i]+4)])
-            pcl = compute_output_current(raw_val, self.pccw_list[i], i)
+            pcl = _compute_output_current(raw_val, self.pccw_list[i], i)
             new_pcl_list.append(pcl)
         self.pcl_list = new_pcl_list
 
@@ -280,16 +282,16 @@ class Cybel(vo.Visa):
         for i in start:
             val_list.append(float(analog_raw[start[i]:(start[i]+4)]))
         #Seed and 3 pump TEC temperatures in Celsius
-        ai_vals[0:3] = compute_tec_temp(val_list[0:3])
+        ai_vals[0:3] = _compute_tec_temp(val_list[0:3])
         #Pump currents in amps
-        ai_vals[4:6] = compute_input_current(val_list[4:6], self.pccr_list[0:2])
+        ai_vals[4:6] = _compute_input_current(val_list[4:6], self.pccr_list[0:2])
         #Pumps 1 and 2 photodiode powers in watts
-        ai_vals[7] = compute_pd_power(val_list[7], 1)
-        ai_vals[8] = compute_pd_power(val_list[8], 1)
+        ai_vals[7] = _compute_pd_power(val_list[7], 1)
+        ai_vals[8] = _compute_pd_power(val_list[8], 1)
         #Seed bias voltage
         ai_vals[9] = val_list[9]/1638.
         #Analog temperature sensors in celsius
-        ai_vals[10:11] = compute_analog_temp(val_list[10:11])
+        ai_vals[10:11] = _compute_analog_temp(val_list[10:11])
         #Voltage tests: 5V, 1.8V, and 28V in volts
         #And Monitor photodiodes 1 and 2 in volts
         ai_vals[12:16] = val_list[12:16]/1638.
@@ -305,11 +307,11 @@ class Cybel(vo.Visa):
         for i in start:
             val_list.append(float(analog_raw[start[i]:(start[i]+4)]))
         #Seed and 3 pump TEC temperatures in Celsius
-        ao_vals[0:3] = compute_tec_temp(val_list[0:3])
+        ao_vals[0:3] = _compute_tec_temp(val_list[0:3])
         #Seed current in amps
         ao_vals[4] = val_list[4]/1638.
         #Pump currents in amps
-        ao_vals[5:7] = compute_output_current(val_list[4:6], self.pccw_list[0:2], np.arange(3))
+        ao_vals[5:7] = _compute_output_current(val_list[4:6], self.pccw_list[0:2], np.arange(3))
         #Seed bias voltage in volts
         ao_vals[8] = val_list[8]/1638.
         return ao_vals
@@ -376,7 +378,7 @@ class Cybel(vo.Visa):
         i = 0
         while i < len(device_array):
             ascii = raw_allowed[2+i]
-            bits = string_to_bits(ascii)
+            bits = _string_to_bits(ascii)
             j = 0
             while j < len(bits):
                 if device_array[i][j]:
@@ -387,7 +389,7 @@ class Cybel(vo.Visa):
 #Set Value Methods
 
     @vo.handle_timeout
-    def set_analog_output_values(self, item_str, val_str):
+    def __set_analog_output_values(self, item_str, val_str):
         """Sets a value, accessed by other set commands"""
         self.res.query('AO%s,%s' % (item_str, val_str))
 
@@ -395,10 +397,10 @@ class Cybel(vo.Visa):
         """tec_number=0 for seed, ={1,2,3} for corresponding pumps,
         sets temperature in Celsius"""
         item_str = '0%d' % tec_number
-        temp_str = form_temp_command(temp)
+        temp_str = _form_temp_command(temp)
         if temp_str is None:
             return
-        self.set_analog_output_values(item_str, temp_str)
+        self.__set_analog_output_values(item_str, temp_str)
 
     def set_pump_current(self, pump_number, current):
         """
@@ -413,8 +415,8 @@ class Cybel(vo.Visa):
             print 'Pump 2 must stay at 2 amps!'
             return
         item_str = '0%d' % (pump_number + 3)
-        current_str = form_current_command(self, pump_number, current)
-        self.set_analog_output_values(item_str, current_str)
+        current_str = _form_current_command(self, pump_number, current)
+        self.__set_analog_output_values(item_str, current_str)
 
     def set_seed_bias_voltage(self, voltage):
         """Sets the voltage in volts"""
@@ -424,7 +426,7 @@ class Cybel(vo.Visa):
             print 'Seed bias voltage to be set is out of bounds!'
             return
         volt_str = str(volt_val).zfill(4)
-        self.set_analog_output_values(item_str, volt_str)
+        self.__set_analog_output_values(item_str, volt_str)
 
     @vo.handle_timeout
     def set_trigger_timeout(self, frequency):

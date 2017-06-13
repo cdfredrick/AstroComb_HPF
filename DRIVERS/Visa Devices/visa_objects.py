@@ -23,7 +23,7 @@ def tf_toggle(var):
         binary = 0
     return binary
 
-def attempt(method):
+def handle_timeout(method):
     """To be used as a function decorator that does disconnection error coding"""
     def attempt_method(self, *args, **kwargs):
         try:
@@ -61,5 +61,5 @@ class Visa(object):
 
     def disconnected(self):
         """Announces connection error."""
-        print '%s has disconnected!' % self.name
+        print '%s has timed out!' % self.name
         self.connected = False

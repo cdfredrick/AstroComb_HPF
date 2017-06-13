@@ -2,7 +2,15 @@
 """
 Created on Mon Jun 12 15:29:26 2017
 
-@author: wjb4
+
+Defines the super class to which all visa controlled devices should belong
+
+Using this file you should not need to import visa and pyvisa into the drivers for other visa devices
+
+import visa_objects as vo
+
+
+@author: Wesley Brand
 """
 import visa
 import pyvisa
@@ -16,6 +24,7 @@ def tf_toggle(var):
     return binary
 
 def attempt(method):
+    """To be used as a function decorator that does disconnection error coding"""
     def attempt_method(self, *args, **kwargs):
         try:
             method(self, *args, **kwargs)

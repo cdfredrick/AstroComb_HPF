@@ -38,12 +38,12 @@ def tf_toggle(var):
     return binary
 
 def handle_timeout(method):
-    """To be used as a function decorator that does disconnection error coding"""
+    """To be used as a function decorator that does timeout error coding"""
     def attempt_method(self, *args, **kwargs):
         try:
             method(self, *args, **kwargs)
         except pyvisa.errors.VisaIOError:
-            super(type(self), self).disconnected()
+            super(type(self), self).check_connection()
     return attempt_method
 
 

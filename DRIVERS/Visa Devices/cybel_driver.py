@@ -19,17 +19,17 @@ General:
     eeprom_save()
 
 Enable Components:
-    enable_pump(pump_number, pump_on)
-    enable_tec(tec_number, tec_on)
+    enable_pump(pump_num, pump_on)
+    enable_tec(tec_num, tec_on)
     enable_keep_on(keep_on)
 
 Queries:
     sn_str, fw_str = query_serial_and_firmware()
     str = query_cpld_firmware()
-    TF = query_pump_status(pump_number)
+    TF = query_pump_status(pump_num)
     TF0, TF1, TF2, TF3 = query_temp_error()
     TF0, TF1  = query_trigger_n_laser_status()
-    TF = query_tec_status(tec_number)
+    TF = query_tec_status(tec_num)
     query_pump_read_constants() #writes values to Cybel.pccr_list
     query_pump_write_constants() #writes values to Cybel.pccw_list
     query_pump_current_limits() #writes values to Cybel.pcl_list
@@ -43,13 +43,13 @@ Queries:
     query_allowed_components()
 
 Set Values:
-    set_tec_temp(tec_number, temp) #Celsius
-    set_pump_current(pump_number, current) #amps
+    set_tec_temp(tec_num, temp) #Celsius
+    set_pump_current(pump_num, current) #amps
     set_seed_bias_voltage(voltage) #volts
     set_trigger_timeout(frequency) #Hz
     set_pulse_width(pw_val) #see table
-    set_pump_read_constant(pump_number, val)
-    set_pump_write_constant(pump_number, val)
+    set_pump_read_constant(pump_num, val)
+    set_pump_write_constant(pump_num, val)
 
 """
 
@@ -91,16 +91,16 @@ def _form_temp_command(temp):
     temp_str = str(temp_val).zfill(4)
     return temp_str
 
-def _form_current_command(resource, pump_number, current):
+def _form_current_command(pump_num, current, pccw_list):
     """Makes set pump current into machine-readable format"""
-    if pump_number == 0:
+    if pump_num == 0:
         current_val = int(np.floor(current*1638.))
     else:
         constants_list = [1470., 235., 147.]
-        current_val = current*constants_list[pump_number-1]/resource.pccw_list[pump_number-1]*1638.
+        current_val = current*constants_list[pump_num-1]/pccw_list[pump_num-1]*1638.
         current_val = int(np.floor(current_val))
-        current_str = str(current_val).zfill(4)
-        return current_str
+    current_str = str(current_val).zfill(4)
+    return current_str
 
 def _string_to_bits(string=''):
     """Converts ascii character into bit string"""
@@ -154,17 +154,17 @@ class Cybel(vo.Visa):
             self.res.query('SEE')
 
     @vo.handle_timeout       
-    def enable_pump(self, pump_number, pump_on):
+    def enable_pump(self, pump_num, pump_on):
         """Turns pump on (pump_on=True) or off (pump_on=False),
         pump numbers are 1,2, or 3"""
-        self.res.query('P%d%d' % (pump_number, vo.tf_toggle(pump_on)))
+        self.res.query('P%d%d' % (pump_num, vo.tf_toggle(pump_on)))
 
     @vo.handle_timeout
-    def enable_tec(self, tec_number, tec_on):
-        """tec_number=0 for seed, ={1,2,3} for corresponding pumps, turns on if tec_on=True."""
-        if tec_number == 0:
-            tec_number = 'S'
-        self.res.query('TEC%s%d?' % (tec_number, vo.tf_toggle(tec_on)))
+    def enable_tec(self, tec_num, tec_on):
+        """tec_num=0 for seed, ={1,2,3} for corresponding pumps, turns on if tec_on=True."""
+        if tec_num == 0:
+            tec_num = 'S'
+        self.res.query('TEC%s%d?' % (tec_num, vo.tf_toggle(tec_on)))
 
     @vo.handle_timeout
     def enable_keep_on(self, keep_on):
@@ -188,12 +188,12 @@ class Cybel(vo.Visa):
         return raw_cpld[4:8]
 
     @vo.handle_timeout
-    def query_pump_status(self, pump_number):
+    def query_pump_status(self, pump_num):
         """Returns True if pump is on and False if pump is off,
-        pump_numbers are 1,2, or 3"""
-        pump_status = self.res.query('P%d?' % pump_number)
+        pump numbers are 1,2, or 3"""
+        pump_status = self.res.query('P%d?' % pump_num)
         if pump_status[2] == '0':
-            print 'Pump %d is off!' % pump_number
+            print 'Pump %d is off!' % pump_num
             return False
         return True
         
@@ -230,13 +230,13 @@ class Cybel(vo.Visa):
         return trigger_match, laser_on
 
     @vo.handle_timeout
-    def query_tec_status(self, tec_number):
-        """tec_number=0 for seed, ={1,2,3} for corresponding pumps, returns True if tec is on"""
-        if tec_number == 0:
-            tec_number = 'S'
-        tec_status = self.res.query('TEC%s?' % tec_number)
+    def query_tec_status(self, tec_num):
+        """tec_num=0 for seed, ={1,2,3} for corresponding pumps, returns True if tec is on"""
+        if tec_num == 0:
+            tec_num = 'S'
+        tec_status = self.res.query('TEC%s?' % tec_num)
         if tec_status[4] == '0':
-            print '%s TEC is off!' % tec_number
+            print '%s TEC is off!' % tec_num
             return False
         return True
 
@@ -356,7 +356,7 @@ class Cybel(vo.Visa):
         keep_on = self.res.query('KP?')
         if keep_on[2] == '1':
             return True
-        return False
+        else: return False
 
     @vo.handle_timeout
     def query_allowed_components(self):
@@ -393,29 +393,29 @@ class Cybel(vo.Visa):
         """Sets a value, accessed by other set commands"""
         self.res.query('AO%s,%s' % (item_str, val_str))
 
-    def set_tec_temp(self, tec_number, temp):
-        """tec_number=0 for seed, ={1,2,3} for corresponding pumps,
+    def set_tec_temp(self, tec_num, temp):
+        """tec_num=0 for seed, ={1,2,3} for corresponding pumps,
         sets temperature in Celsius"""
-        item_str = '0%d' % tec_number
+        item_str = '0%d' % tec_num
         temp_str = _form_temp_command(temp)
         if temp_str is None:
             return
         self.__set_analog_output_values(item_str, temp_str)
 
-    def set_pump_current(self, pump_number, current):
+    def set_pump_current(self, pump_num, current):
         """
         !!!! Manual gives units of seed current in volts?!?!
 
-        pump_number=0 for seed, ={1,2,3} for corresponding pumps,
+        pump_num=0 for seed, ={1,2,3} for corresponding pumps,
         sets current in amps"""
-        if current > self.pcl_list[pump_number] or current < 0:
+        if current > self.pcl_list[pump_num] or current < 0:
             print 'Pump current to be set is out of bounds!'
             return
-        if pump_number == 2 and current != 2:
+        if pump_num == 2 and current != 2:
             print 'Pump 2 must stay at 2 amps!'
             return
-        item_str = '0%d' % (pump_number + 3)
-        current_str = _form_current_command(self, pump_number, current)
+        item_str = '0%d' % (pump_num + 3)
+        current_str = _form_current_command(pump_num, current, self.pccw_list)
         self.__set_analog_output_values(item_str, current_str)
 
     def set_seed_bias_voltage(self, voltage):
@@ -447,21 +447,21 @@ class Cybel(vo.Visa):
         self.res.query('PWA%d' % pw_val)
 
     @vo.handle_timeout
-    def set_pump_read_constant(self, pump_number, val):
-        """Sets the read constant of pump_number={1,2,3}
+    def set_pump_read_constant(self, pump_num, val):
+        """Sets the read constant of pump_num={1,2,3}
 
         val must be an integer between 0 and 4095(?)"""
         val_str = str(val).zfill(4)
-        self.res.query('PCCR%d%s' % (pump_number, val_str))
+        self.res.query('PCCR%d%s' % (pump_num, val_str))
 
     @vo.handle_timeout
-    def set_pump_write_constant(self, pump_number, val):
-        """Sets the write constant of pump_number={1,2,3}
+    def set_pump_write_constant(self, pump_num, val):
+        """Sets the write constant of pump_num={1,2,3}
 
         val must be an integer between 0 and 4095(?)
         probably safest to leave these alone unless desired current cant be reached"""
-        if pump_number == 2:
+        if pump_num == 2:
             print 'Cannot change pump 2 current!'
             return
         val_str = str(val).zfill(4)
-        self.res.query('PCCW%d%s' % (pump_number, val_str))
+        self.res.query('PCCW%d%s' % (pump_num, val_str))

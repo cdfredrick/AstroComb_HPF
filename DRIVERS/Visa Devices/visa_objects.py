@@ -43,6 +43,8 @@ def handle_timeout(method):
         try:
             method(self, *args, **kwargs)
         except pyvisa.errors.VisaIOError:
+            name = super(type(self), self).name
+            print '%s has timed out!' % name
             super(type(self), self).check_connection()
     return attempt_method
 
@@ -66,15 +68,16 @@ class Visa(object):
 
         except (pyvisa.errors.VisaIOError, UnboundLocalError):
             print '%s Cannot Be Connected To!' % self.name
+            self.connected = False
             return None
 
     def check_connection(self):
         """If resource is not connected initiates resources disconnection commands."""
-        connected = self.open_resource()
-        if connected is None:
+        self.open_resource()
+        if self.connected is False:
             self.disconnected()
 
     def disconnected(self):
         """Announces connection error."""
-        print '%s has timed out!' % self.name
-        self.connected = False
+        print '%s has disconnected!' % self.name
+        #Do thing that depends on self

@@ -56,6 +56,7 @@ Set Values:
 import time
 import numpy as np
 import visa_objects as vo
+import eventlog as log
 
 CYBEL_ADDRESS = '' #ADD ME!!!!
 CYBEL_NAME = 'Cybel Amplifier'
@@ -112,8 +113,9 @@ class Cybel(vo.Visa):
 
     #General methods
 
-    def __init__(self, res_address, res_name):
-        super(Cybel, self).__init__(res_address, res_name)
+    @log.log_this()
+    def __init__(self, res_name, res_address):
+        super(Cybel, self).__init__(res_name, res_address)
         self.res = super(Cybel, self).open_resource()
         if self.res is None:
             print 'Could not create Cybel instrument!'
@@ -132,12 +134,19 @@ class Cybel(vo.Visa):
         self.pcl_list = [] #Pump current limits, will have length 4 (includes seed)
         self.query_pump_current_limits()
 
+    @log.log_this(20)
+    def close(self):
+        """Ends device session"""
+        self.res.close()
+    
     @vo.handle_timeout
+    @log.log_this(20)
     def reboot(self):
         """Reboots electronic board."""
         self.res.query('RESET')
 
     @vo.handle_timeout
+    @log.log_this(20)
     def eeprom_save(self):
         """Saves manual-specified values into electronic board."""
         self.res.query('SAVE')
@@ -145,7 +154,9 @@ class Cybel(vo.Visa):
 
 #Enable Methods
 
+    
     @vo.handle_timeout
+    @log.log_this()
     def __disable_echo(self, echo_off=True):
         """Turns off echo, made private because it should stay off"""
         if echo_off is True:
@@ -153,13 +164,15 @@ class Cybel(vo.Visa):
         if echo_off is False:
             self.res.query('SEE')
 
-    @vo.handle_timeout       
+    @vo.handle_timeout    
+    @log.log_this(20)
     def enable_pump(self, pump_num, pump_on):
         """Turns pump on (pump_on=True) or off (pump_on=False),
         pump numbers are 1,2, or 3"""
         self.res.query('P%d%d' % (pump_num, vo.tf_toggle(pump_on)))
 
     @vo.handle_timeout
+    @log.log_this(20)
     def enable_tec(self, tec_num, tec_on):
         """tec_num=0 for seed, ={1,2,3} for corresponding pumps, turns on if tec_on=True."""
         if tec_num == 0:
@@ -167,6 +180,7 @@ class Cybel(vo.Visa):
         self.res.query('TEC%s%d?' % (tec_num, vo.tf_toggle(tec_on)))
 
     @vo.handle_timeout
+    @log.log_this()
     def enable_keep_on(self, keep_on):
         """Enables keeping laser on when electronic board connection ends if True"""
         self.res.query('KP%d' % vo.tf_toggle(keep_on))
@@ -174,6 +188,7 @@ class Cybel(vo.Visa):
 #Query Methods
 
     @vo.handle_timeout
+    @log.log_this()
     def query_serial_and_firmware(self):
         """Returns 8 character SN and 4 character microcontroller firmware #."""
         raw_sn_and_fw = self.res.query('CO')
@@ -182,12 +197,14 @@ class Cybel(vo.Visa):
         return serial, firmware
 
     @vo.handle_timeout
+    @log.log_this()
     def query_cpld_firmware(self):
         """Returns 4 character CPLD firmware version."""
         raw_cpld = self.res.query('CPLD?')
         return raw_cpld[4:8]
 
     @vo.handle_timeout
+    @log.log_this()
     def query_pump_status(self, pump_num):
         """Returns True if pump is on and False if pump is off,
         pump numbers are 1,2, or 3"""
@@ -198,6 +215,7 @@ class Cybel(vo.Visa):
         return True
         
     @vo.handle_timeout
+    @log.log_this()
     def query_temp_error(self):
         """Returns a value for each TEC, True if within error, False if not"""
         temp_error = self.res.query('FB?')
@@ -217,6 +235,7 @@ class Cybel(vo.Visa):
         return seed_temp, pump1_temp, pump2_temp, pump3_temp
 
     @vo.handle_timeout
+    @log.log_this()
     def  query_trigger_n_laser_status(self):
         """Returns True's if trigger is correct and laser is emitting"""
         tl_status = self.res.query('TS?')
@@ -230,6 +249,7 @@ class Cybel(vo.Visa):
         return trigger_match, laser_on
 
     @vo.handle_timeout
+    @log.log_this()
     def query_tec_status(self, tec_num):
         """tec_num=0 for seed, ={1,2,3} for corresponding pumps, returns True if tec is on"""
         if tec_num == 0:
@@ -241,6 +261,7 @@ class Cybel(vo.Visa):
         return True
 
     @vo.handle_timeout
+    @log.log_this()
     def query_pump_read_constants(self):
         """Saves pump read multiplying factors for computing pump currents in Cybel object"""
         raw_constants = self.res.query('PCCR?')
@@ -251,6 +272,7 @@ class Cybel(vo.Visa):
         self.pccr_list = new_pccr_list
 
     @vo.handle_timeout
+    @log.log_this()
     def query_pump_write_constants(self):
         """Saves pump write multiplying factors for computing pump currents in Cybel object"""
         raw_constants = self.res.query('PCCW?')
@@ -261,6 +283,7 @@ class Cybel(vo.Visa):
         self.pccw_list = new_pccw_list
 
     @vo.handle_timeout
+    @log.log_this()
     def query_pump_current_limits(self):
         """Saves pump current limits in Cybel object"""
         raw_limits = self.res.query('AOL?')
@@ -273,6 +296,7 @@ class Cybel(vo.Visa):
         self.pcl_list = new_pcl_list
 
     @vo.handle_timeout
+    @log.log_this()
     def query_analog_input_values(self):
         """Returns a length 17 list of manual-specifed values."""
         analog_raw = self.res.query('AI?')
@@ -298,6 +322,7 @@ class Cybel(vo.Visa):
         return ai_vals
 
     @vo.handle_timeout
+    @log.log_this()
     def query_analog_output_values(self):
         """Returns a length 9 list of manual-specifed values."""
         analog_raw = self.res.query('AO?')
@@ -317,6 +342,7 @@ class Cybel(vo.Visa):
         return ao_vals
 
     @vo.handle_timeout
+    @log.log_this()
     def query_trigger_timeout(self):
         """Returns the minimum trigger value in Hz"""
         trig_raw = self.res.query('TRTO?')
@@ -325,6 +351,7 @@ class Cybel(vo.Visa):
         return trig_freq
 
     @vo.handle_timeout
+    @log.log_this()
     def query_pulse_width(self):
         """Returns pulse width in ns"""
         pw_raw = self.res.query('PWA?')
@@ -335,6 +362,7 @@ class Cybel(vo.Visa):
         return width
 
     @vo.handle_timeout
+    @log.log_this()
     def query_digital_temp_sensors(self):
         """Returns temperature from two digital sensors in Celsius"""
         raw_temps = self.res.query('TEMP?')
@@ -343,6 +371,7 @@ class Cybel(vo.Visa):
         return temp1, temp2
 
     @vo.handle_timeout
+    @log.log_this()
     def query_pulse_rep_rate(self):
         """Returns pulse repetition rate in kHz"""
         raw_prr = self.res.query('PR?')
@@ -351,6 +380,7 @@ class Cybel(vo.Visa):
         return rep_rate
 
     @vo.handle_timeout
+    @log.log_this()
     def query_keep_on(self):
         """Returns True if laser is set to 'Keep ON' when connection with electronic board ends"""
         keep_on = self.res.query('KP?')
@@ -359,6 +389,7 @@ class Cybel(vo.Visa):
         else: return False
 
     @vo.handle_timeout
+    @log.log_this()
     def query_allowed_components(self):
         """Prints a list of components that are connected to electronic board"""
         raw_allowed = self.res.query('DC?')
@@ -389,10 +420,12 @@ class Cybel(vo.Visa):
 #Set Value Methods
 
     @vo.handle_timeout
+    @log.log_this()
     def __set_analog_output_values(self, item_str, val_str):
         """Sets a value, accessed by other set commands"""
         self.res.query('AO%s,%s' % (item_str, val_str))
 
+    @log.log_this()
     def set_tec_temp(self, tec_num, temp):
         """tec_num=0 for seed, ={1,2,3} for corresponding pumps,
         sets temperature in Celsius"""
@@ -402,6 +435,7 @@ class Cybel(vo.Visa):
             return
         self.__set_analog_output_values(item_str, temp_str)
 
+    @log.log_this()
     def set_pump_current(self, pump_num, current):
         """
         !!!! Manual gives units of seed current in volts?!?!
@@ -418,6 +452,7 @@ class Cybel(vo.Visa):
         current_str = _form_current_command(pump_num, current, self.pccw_list)
         self.__set_analog_output_values(item_str, current_str)
 
+    @log.log_this()
     def set_seed_bias_voltage(self, voltage):
         """Sets the voltage in volts"""
         item_str = '08'
@@ -429,6 +464,7 @@ class Cybel(vo.Visa):
         self.__set_analog_output_values(item_str, volt_str)
 
     @vo.handle_timeout
+    @log.log_this()
     def set_trigger_timeout(self, frequency):
         """Sets the trigger timeout in Hz"""
         trig_val = int(np.floor(frequency/75000.))
@@ -439,6 +475,7 @@ class Cybel(vo.Visa):
         self.res.query('TRTO%s' % trig_str)
 
     @vo.handle_timeout
+    @log.log_this()
     def set_pulse_width(self, pw_val):
         """Sets the pulse width in ns, use table below for correct pw_val
 
@@ -447,6 +484,7 @@ class Cybel(vo.Visa):
         self.res.query('PWA%d' % pw_val)
 
     @vo.handle_timeout
+    @log.log_this()
     def set_pump_read_constant(self, pump_num, val):
         """Sets the read constant of pump_num={1,2,3}
 
@@ -455,6 +493,7 @@ class Cybel(vo.Visa):
         self.res.query('PCCR%d%s' % (pump_num, val_str))
 
     @vo.handle_timeout
+    @log.log_this()
     def set_pump_write_constant(self, pump_num, val):
         """Sets the write constant of pump_num={1,2,3}
 

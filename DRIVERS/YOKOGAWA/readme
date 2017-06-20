@@ -1,0 +1,6 @@
+This is currently a work in progress.
+
+An inital OSA driver was written, but just to show we could communicate and read data. osa_driver.py
+
+Also, there is a TestOSA.py script which calls the osa_driver.  It also has commented out code which creates a file structure
+and will automatically update and save file names, so that we dont overide existing data. 

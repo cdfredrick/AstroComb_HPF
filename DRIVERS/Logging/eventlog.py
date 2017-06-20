@@ -58,7 +58,7 @@ def log_this(level1=10, level2=10, log_string1='', log_string2=''):
         return wrapper
     return function_decorator
 
-def log_error(module, name, err, log_str='', level=40):
+def log_error(mod_name, func_name, err, log_str='', level=40):
     """Takes originating function name and module and error to log, optional string & log level
 
     Note that if function is in error handling function decorator you'll need
@@ -66,5 +66,5 @@ def log_error(module, name, err, log_str='', level=40):
     Levels |   10  |  20  |   30    |   40  |    50    |
            | debug | info | warning | error | critical |"""
 
-    logger = logging.getLogger('astroComb.%s.%s' % (module, name))
+    logger = logging.getLogger('astroComb.%s.%s' % (mod_name, func_name))
     logger.log(level, str(err) + log_str)

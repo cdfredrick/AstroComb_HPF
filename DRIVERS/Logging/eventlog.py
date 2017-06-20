@@ -2,6 +2,8 @@
 """
 Created on Thu Jun 15 12:56:31 2017
 
+@author: Wesley Brand
+
 Module: eventlog
     import eventlog as log
 
@@ -12,10 +14,8 @@ Requires:
 Public functions:
     start_logging()
     log_this(level1=10, level2=10, log_string1='', log_string2='')
-    log_error(func, err, log_str='', level=40)
+    log_error(mod_name, func_name, err, log_str='', level=40)
 
-
-@author: Wesley Brand
 """
 #pylint: disable=W0702
 
@@ -65,6 +65,5 @@ def log_error(mod_name, func_name, err, log_str='', level=40):
     to use functools.wraps on the function in th error handler that calls log_error
     Levels |   10  |  20  |   30    |   40  |    50    |
            | debug | info | warning | error | critical |"""
-
     logger = logging.getLogger('astroComb.%s.%s' % (mod_name, func_name))
     logger.log(level, str(err) + log_str)

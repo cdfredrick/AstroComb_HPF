@@ -4,24 +4,38 @@ Created on Mon Jun 19 14:19:40 2017
 @author: ajm6
 """
 
+import matplotlib.pyplot as plt
 import osa_driver as yok
 import eventlog as log
 
 log.start_logging()
-YOKO = yok.OSA(yok.OSA_NAME, yok.OSA_ADDRESS)
-if YOKO.res is None:
-    raise SystemExit
-YOKO.read()
-YOKO.write()
-YOKO.close()
+
+def plot_spectrum(lambdas, levels):
+    """Plots spectrum from yokogawa"""
+    plt.plot(lambdas, levels)
+    plt.xlabel('wavelength nm')
+    plt.ylabel('dBm')
+    plt.grid(True)
+    plt.show()
+
+def test():
+    """Tests some basic methods and connectability of OSA"""
+    osa = yok.OSA(yok.OSA_NAME, yok.OSA_ADDRESS)
+    if osa.res is None:
+        raise SystemExit
+    osa.query_identity()
+    (lambdas, levels) = osa.query_spectrum()
+    plot_spectrum(lambdas, levels)
+    osa.close()
+
+test()
 
 
-
-#"""Look for directory with Yokogawa which contains OSA spectrum Files, 
+#"""Look for directory with Yokogawa which contains OSA spectrum Files,
 #create directory if it does not exist"""
 #directory = "YokogawaFiles"
 #if not os.path.exists(directory):
-#    os.makedirs(directory)   
+#    os.makedirs(directory)
 #testString = directory + "/Yokogawa_"
 #extension = ".txt"
 #currentCount = 0

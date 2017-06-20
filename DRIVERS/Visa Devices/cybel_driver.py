@@ -160,16 +160,16 @@ class Cybel(vo.Visa):
     def __disable_echo(self, echo_off=True):
         """Turns off echo, made private because it should stay off"""
         if echo_off is True:
-            self.res.query('SEN')
+            self.res.write('SEN')
         if echo_off is False:
-            self.res.query('SEE')
+            self.res.write('SEE')
 
     @vo.handle_timeout    
     @log.log_this(20)
     def enable_pump(self, pump_num, pump_on):
         """Turns pump on (pump_on=True) or off (pump_on=False),
         pump numbers are 1,2, or 3"""
-        self.res.query('P%d%d' % (pump_num, vo.tf_toggle(pump_on)))
+        self.res.write('P%d%d' % (pump_num, vo.tf_toggle(pump_on)))
 
     @vo.handle_timeout
     @log.log_this(20)
@@ -177,13 +177,13 @@ class Cybel(vo.Visa):
         """tec_num=0 for seed, ={1,2,3} for corresponding pumps, turns on if tec_on=True."""
         if tec_num == 0:
             tec_num = 'S'
-        self.res.query('TEC%s%d?' % (tec_num, vo.tf_toggle(tec_on)))
+        self.res.write('TEC%d%d' % (tec_num, vo.tf_toggle(tec_on)))
 
     @vo.handle_timeout
     @log.log_this()
     def enable_keep_on(self, keep_on):
         """Enables keeping laser on when electronic board connection ends if True"""
-        self.res.query('KP%d' % vo.tf_toggle(keep_on))
+        self.res.write('KP%d' % vo.tf_toggle(keep_on))
 
 #Query Methods
 
@@ -423,7 +423,7 @@ class Cybel(vo.Visa):
     @log.log_this()
     def __set_analog_output_values(self, item_str, val_str):
         """Sets a value, accessed by other set commands"""
-        self.res.query('AO%s,%s' % (item_str, val_str))
+        self.res.write('AO%s,%s' % (item_str, val_str))
 
     @log.log_this()
     def set_tec_temp(self, tec_num, temp):
@@ -472,7 +472,7 @@ class Cybel(vo.Visa):
             print 'Trigger timeout to be set is out of bounds!'
             return
         trig_str = str(trig_val).zfill(4)
-        self.res.query('TRTO%s' % trig_str)
+        self.res.write('TRTO%s' % trig_str)
 
     @vo.handle_timeout
     @log.log_this()
@@ -481,7 +481,7 @@ class Cybel(vo.Visa):
 
         pw_val =      | 0 |  1 |  2 |  3 |  4 |  5 |  6 |  7 |  8 |  9 |
         pulse in ns = |2.7| 3.4| 3.8| 3.9| 4.6| 4.9| 5.2| 5.7| 6.8| 7.7|"""
-        self.res.query('PWA%d' % pw_val)
+        self.res.write('PWA%d' % pw_val)
 
     @vo.handle_timeout
     @log.log_this()
@@ -490,7 +490,7 @@ class Cybel(vo.Visa):
 
         val must be an integer between 0 and 4095(?)"""
         val_str = str(val).zfill(4)
-        self.res.query('PCCR%d%s' % (pump_num, val_str))
+        self.res.write('PCCR%d%s' % (pump_num, val_str))
 
     @vo.handle_timeout
     @log.log_this()
@@ -503,4 +503,4 @@ class Cybel(vo.Visa):
             print 'Cannot change pump 2 current!'
             return
         val_str = str(val).zfill(4)
-        self.res.query('PCCW%d%s' % (pump_num, val_str))
+        self.res.write('PCCW%d%s' % (pump_num, val_str))

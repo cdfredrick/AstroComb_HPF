@@ -19,6 +19,9 @@ def test():
     if osa.res is None:
         raise SystemExit
     osa.query_identity()
+    osa.set_sweep_parameters()
+    pdict = osa.query_sweep_parameters()
+    print pdict
     osa.save_n_graph_spectrum()
     osa.close()
 

@@ -11,15 +11,29 @@ Requires:
     eventlog.py
     visa_objects.py
 
-Public class:
+Public Function:
+    plot_spectrum(array)
+
+Public Class:
     OSA
 
 with Public Methods:
+
+    General:
+
     __init__(res_name, res_address)
     close()
-    query_identity()
-    query_spectrum()
+    reset()
 
+    Query:
+
+    str = query_identity()
+    save_n_graph_spectrum()
+    dict = query_sweep_parameters()
+
+    Set:
+
+    set_sweep_parameters(center_wl=1064, span_wl=200, res_wl=2, sensitivity=1)
 
 """
 
@@ -63,15 +77,18 @@ def _form_file_name(file_string, count):
     """Formats a file name string for saving"""
     return file_string + str(count).zfill(4) + EXT
 
-@log.log_this()
 def _write_data_file(data, file_name):
     """Saves OSA spectrum in tab delimited txt file"""
     data_file = open(file_name, 'w')
     np.savetxt(data_file, data, delimiter='\t')
     data_file.close()
 
+
 class OSA(vo.Visa):
     """Holds Yokogawa OSA's attributes and method library."""
+
+#General Methods
+
     @log.log_this(20)
     def __init__(self, res_name, res_address):
         super(OSA, self).__init__(res_name, res_address)
@@ -90,17 +107,39 @@ class OSA(vo.Visa):
         self.res.close()
 
     @vo.handle_timeout
-    @log.log_this()
-    def __set_command_format(self):
-        """Sets the OSA's formatting to AQ6370 style, should always be 1"""
-        self.res.write('CFORM1')
+    @log.log_this(20)
+    def reset(self):
+        """Stops current operation being processed and returns OSA to default values"""
+        self.res.write('*RST')
+        self.__set_command_format()
+
+#Query Methods
 
     @vo.handle_timeout
     @log.log_this()
     def query_identity(self):
         """Queries OSA's identity"""
         ident = self.res.query('*IDN?')
-        print 'OSA Identity = %s' % ident
+        return ident
+
+    @vo.handle_timeout
+    @log.log_this()
+    def query_sweep_parameters(self):
+        """Returns sweep parameters as a dictionary
+
+        dictionary keys: center_wl, span_wl, res_wl, sensitivity
+        wavelengths are in nm
+
+        Sensitivites:
+              0     |      1      |    2   |  3  |    4   |    5   |    6   |
+        Normal Hold | Normal Auto | Normal | Mid | High 1 | High 2 | High 3 |
+        """
+        pdict = {}
+        pdict['center_wl'] = float(self.res.query(':SENSe:WAVelength:CENTer?'))*10**9
+        pdict['span_wl'] = float(self.res.query(':SENSe:WAVelength:SPAN?'))*10**9
+        pdict['res_wl'] = float(self.res.query(':SENSe:BANDwidth:RESolution?'))*10**9
+        pdict['sensitivity'] = int(self.res.query(':SENSe:SENSe?'))
+        return pdict
 
     @log.log_this()
     def save_n_graph_spectrum(self):
@@ -114,15 +153,33 @@ class OSA(vo.Visa):
     @vo.handle_timeout
     @log.log_this()
     def _query_spectrum(self):
-        """Queries OSA's spectrum"""
-        y_trace = self.res.query(':TRACE:DATA:Y? TRA')
-        x_trace = self.res.query(':TRACE:DATA:X? TRA')
-        lambdas = np.fromstring(x_trace, sep=',')*1000000000
-        levels = np.fromstring(y_trace, sep=',')
-        lambdas = lambdas[1:]
-        levels = levels[1:]
-        data = np.array([lambdas, levels]).T
+        """Sweepss OSA's spectrum"""
+        y_trace = self.res.query(':TRACe:DATA:Y? TRA')
+        x_trace = self.res.query(':TRACe:DATA:X? TRA')
+        wavelengths = np.fromstring(x_trace, sep=',')*10**9
+        powers = np.fromstring(y_trace, sep=',')
+        #lambdas = lambdas[1:]
+        #levels = levels[1:]
+        data = np.array([wavelengths, powers]).T
         return data
         #startWL = float(osa.query("STAWL?")[0:-2])
         #stopWL  = float(osa.query("STPWL?")[0:-2])
         #self.lambdas = np.linspace(startWL,stopWL,nPoints)
+
+#Set Methods
+
+    @vo.handle_timeout
+    @log.log_this()
+    def __set_command_format(self):
+        """Sets the OSA's formatting to AQ6370 style, should always be 1"""
+        self.res.write('CFORM1')
+
+    @vo.handle_timeout
+    @log.log_this()
+    def set_sweep_parameters(self, center_wl=1064, span_wl=200, res_wl=2, sensitivity=1):
+        """Sets OSA sweep region"""
+        self.res.write(':SENSe:WAVelength:CENTer %snm' % center_wl)
+        self.res.write(':SENSe:WAVelength:SPAN %snm' %span_wl)
+        self.res.write(':SENSe:BANDwidth:RESolution %snm' %res_wl)
+        self.res.write(':SENSe:SENSe %s' %sensitivity)
+        return

@@ -122,7 +122,8 @@ class Cybel(vo.Visa):
         super(Cybel, self).__init__(res_name, res_address)
         self.res = super(Cybel, self).open_resource()
         if self.res is None:
-            print 'Could not create Cybel instrument!'
+            log.log_warn(__name__, '__init__',
+                         'Could not create Cybel instrument!')
             return
         self.res.clear()
         self.res.term_chars = 'CR+LF'
@@ -213,7 +214,8 @@ class Cybel(vo.Visa):
         pump numbers are 1,2, or 3"""
         pump_status = self.res.query('P%d?' % pump_num)
         if pump_status[2] == '0':
-            print 'Pump %d is off!' % pump_num
+            log.log_warn(__name__, 'query_pump_status',
+                         'Pump %d is off!' % pump_num)
             return False
         return True
 
@@ -224,16 +226,20 @@ class Cybel(vo.Visa):
         temp_error = self.res.query('FB?')
         seed_temp = pump1_temp = pump2_temp = pump3_temp = True
         if temp_error[2] == '0':
-            print 'Seed temperature outsde error limit!'
+            log.log_warn(__name__, 'query_temp_error',
+                         'Seed temperature outsde error limit!')
             seed_temp = False
         if temp_error[3] == '0':
-            print 'Pump 1 temperature outsde error limit!'
+            log.log_warn(__name__, 'query_temp_error',
+                         'Pump 1 temperature outsde error limit!')
             pump1_temp = False
         if temp_error[4] == '0':
-            print 'Pump 2 temperature outsde error limit!'
+            log.log_warn(__name__, 'query_temp_error',
+                         'Pump 2 temperature outsde error limit!')
             pump2_temp = False
         if temp_error[5] == '0':
-            print 'Pump 3 temperature outsde error limit!'
+            log.log_warn(__name__, 'query_temp_error',
+                         'Pump 3 temperature outsde error limit!')
             pump3_temp = False
         return seed_temp, pump1_temp, pump2_temp, pump3_temp
 
@@ -244,22 +250,25 @@ class Cybel(vo.Visa):
         tl_status = self.res.query('TS?')
         trigger_match = laser_on = True
         if tl_status[2] == '0':
-            print 'External trigger does not match requirement!'
+            log.log_warn(__name__, 'query_trigger_n_laser_status',
+                         'External trigger does not match requirement!')
             trigger_match = False
         if tl_status[3] == '0':
-            print 'Laser not emitting!'
+            log.log_warn(__name__, 'query_trigger_n_laser_status',
+                         'Laser not emitting!')
             laser_on = False
         return trigger_match, laser_on
 
     @vo.handle_timeout
     @log.log_this()
     def query_tec_status(self, tec_num):
-        """tec_num=0 for seed, ={1,2,3} for corresponding pumps, returns True if tec is on"""
+        """tec_num=0 for seed, ={1,2,3} for pumps, returns True if tec is on"""
         if tec_num == 0:
             tec_num = 'S'
         tec_status = self.res.query('TEC%s?' % tec_num)
         if tec_status[4] == '0':
-            print '%s TEC is off!' % tec_num
+            log.log_warn(__name__, 'query_tec_status',
+                         '%s TEC is off!' % tec_num)
             return False
         return True
 
@@ -437,7 +446,9 @@ class Cybel(vo.Visa):
             j = 0
             while j < len(bits):
                 if device_array[i][j]:
-                    print device_array[i][j] + ' is ' + allowed[int(bits[j])]
+                    log.log_warn(__name__, 'query_allowed_components',
+                                 device_array[i][j] + ' is '
+                                 + allowed[int(bits[j])])
                 j += 1
             i += 1
 
@@ -467,10 +478,12 @@ class Cybel(vo.Visa):
         pump_num=0 for seed, ={1,2,3} for corresponding pumps,
         sets current in amps"""
         if current > self.pcl_list[pump_num] or current < 0:
-            print 'Pump current to be set is out of bounds!'
+            log.log_warn(__name__, 'set_pump_current',
+                         'Pump current to be set is out of bounds!')
             return
         if pump_num == 2 and current != 2:
-            print 'Pump 2 must stay at 2 amps!'
+            log.log_warn(__name__, 'set_pump_current',
+                         'Pump 2 must stay at 2 amps!')
             return
         item_str = '0%d' % (pump_num + 3)
         current_str = _form_current_command(pump_num, current, self.pccw_list)
@@ -482,7 +495,8 @@ class Cybel(vo.Visa):
         item_str = '08'
         volt_val = int(np.floor(voltage*1638.))
         if volt_val > 4095 or volt_val < 0:
-            print 'Seed bias voltage to be set is out of bounds!'
+            log.log_warn(__name__, 'set_seed_bia_voltage',
+                         'Seed bias voltage to be set is out of bounds!')
             return
         volt_str = str(volt_val).zfill(4)
         self.__set_analog_output_values(item_str, volt_str)
@@ -493,7 +507,8 @@ class Cybel(vo.Visa):
         """Sets the trigger timeout in Hz"""
         trig_val = int(np.floor(frequency/75000.))
         if trig_val < 751 or trig_val > 8190:
-            print 'Trigger timeout to be set is out of bounds!'
+            log.log_warn(__name__, 'set_trigger_timeout',
+                         'Trigger timeout to be set is out of bounds!')
             return
         trig_str = str(trig_val).zfill(4)
         self.res.write('TRTO%s' % trig_str)
@@ -524,7 +539,8 @@ class Cybel(vo.Visa):
         val must be an integer between 0 and 4095(?)
         probably safest to leave these alone unless desired current cant be reached"""
         if pump_num == 2:
-            print 'Cannot change pump 2 current!'
+            log.log_warn(__name__, 'set_pump_write_constants',
+                         'Cannot change pump 2 current!')
             return
         val_str = str(val).zfill(4)
         self.res.write('PCCW%d%s' % (pump_num, val_str))

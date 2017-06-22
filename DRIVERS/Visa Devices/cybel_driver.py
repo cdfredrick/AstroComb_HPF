@@ -33,8 +33,8 @@ Queries:
     query_pump_read_constants() #writes values to Cybel.pccr_list
     query_pump_write_constants() #writes values to Cybel.pccw_list
     query_pump_current_limits() #writes values to Cybel.pcl_list
-    float_list_length_17 = query_analog_input_values()
-    float_list_length_8 = query_analog_output_values()
+    dict = query_analog_input_values()
+    dict = query_analog_output_values()
     float = query_trigger_timeout() #Hz
     float = query_pulse_width() #ns
     float1, float2 = query_digital_temp_sensors(self) #Celsius
@@ -52,6 +52,7 @@ Set Values:
     set_pump_write_constant(pump_num, val)
 
 """
+#pylint: disable=R0904
 
 import time
 import numpy as np
@@ -60,6 +61,9 @@ import eventlog as log
 
 CYBEL_ADDRESS = '' #ADD ME!!!!
 CYBEL_NAME = 'Cybel Amplifier'
+
+def _dict_assign(dictionary, keys, values):
+    dictionary.update(zip(keys, values))
 
 def _compute_tec_temp(raw_val):
     """Returns temperature from raw device reading."""
@@ -138,7 +142,7 @@ class Cybel(vo.Visa):
     def close(self):
         """Ends device session"""
         self.res.close()
-    
+
     @vo.handle_timeout
     @log.log_this(20)
     def reboot(self):
@@ -154,7 +158,6 @@ class Cybel(vo.Visa):
 
 #Enable Methods
 
-    
     @vo.handle_timeout
     @log.log_this()
     def __disable_echo(self, echo_off=True):
@@ -164,7 +167,7 @@ class Cybel(vo.Visa):
         if echo_off is False:
             self.res.write('SEE')
 
-    @vo.handle_timeout    
+    @vo.handle_timeout
     @log.log_this(20)
     def enable_pump(self, pump_num, pump_on):
         """Turns pump on (pump_on=True) or off (pump_on=False),
@@ -213,7 +216,7 @@ class Cybel(vo.Visa):
             print 'Pump %d is off!' % pump_num
             return False
         return True
-        
+
     @vo.handle_timeout
     @log.log_this()
     def query_temp_error(self):
@@ -298,47 +301,70 @@ class Cybel(vo.Visa):
     @vo.handle_timeout
     @log.log_this()
     def query_analog_input_values(self):
-        """Returns a length 17 list of manual-specifed values."""
+        """Returns a dictionary with  values specified by the manual's conversions.
+
+        Dictionary entries:
+            'seed_temp', 'pump1_temp', 'pump2_temp', 'pump3_temp'  ## Celsius
+            'pump1_amps', 'pump2_amps', 'pump3_amps'               ## Amps
+            'pump1_pd_power','pump2_pd_power'                      ## Watts
+            'seed_bias_volts'                                      ## Volts
+            'anlg_temp_sens1', 'anlg_temp_sens2'                   ## Celsius
+            'test_5volt', 'test_1_8volt', 'test_28volt'            ## Volts
+            'monitor_pd1','monitor_pd2'                            ## Volts
+        """
         analog_raw = self.res.query('AI?')
         val_list = []
-        ai_vals = np.zeros(17)
+        ai_vals = {}
         start = np.arange(0, 16*5, 5)
         for i in start:
             val_list.append(float(analog_raw[start[i]:(start[i]+4)]))
         #Seed and 3 pump TEC temperatures in Celsius
-        ai_vals[0:3] = _compute_tec_temp(val_list[0:3])
+        _dict_assign(ai_vals, ('seed_temp', 'pump1_temp', 'pump2_temp', 'pump3_temp'),
+                     _compute_tec_temp(val_list[0:3]))
         #Pump currents in amps
-        ai_vals[4:6] = _compute_input_current(val_list[4:6], self.pccr_list[0:2])
+        _dict_assign(ai_vals, ('pump1_amps', 'pump2_amps', 'pump3_amps'),
+                     _compute_input_current(val_list[4:6], self.pccr_list[0:2]))
         #Pumps 1 and 2 photodiode powers in watts
-        ai_vals[7] = _compute_pd_power(val_list[7], 1)
-        ai_vals[8] = _compute_pd_power(val_list[8], 1)
+        _dict_assign(ai_vals, ('pump1_pd_power', 'pump2_pd_power'),
+                     _compute_pd_power(val_list[7:8], [1, 2]))
         #Seed bias voltage
-        ai_vals[9] = val_list[9]/1638.
+        ai_vals['seed_bias_volts'] = val_list[9]/1638.
         #Analog temperature sensors in celsius
-        ai_vals[10:11] = _compute_analog_temp(val_list[10:11])
+        _dict_assign(ai_vals, ('anlg_temp_sens1', 'anlg_temp_sens2'),
+                     _compute_analog_temp(val_list[10:11]))
         #Voltage tests: 5V, 1.8V, and 28V in volts
         #And Monitor photodiodes 1 and 2 in volts
-        ai_vals[12:16] = val_list[12:16]/1638.
+        _dict_assign(ai_vals, ('test_5volt', 'test_1_8volt', 'test_28volt',
+                               'monitor_pd1', 'monitor_pd2'), val_list[12:16]/1638.)
         return ai_vals
 
     @vo.handle_timeout
     @log.log_this()
     def query_analog_output_values(self):
-        """Returns a length 9 list of manual-specifed values."""
+        """Returns a dictionary with  values specified by the manual's conversions.'
+
+        Dictionary entries:
+            'seed_temp', 'pump1_temp', 'pump2_temp', 'pump3_temp'  ## Celsius
+            'seed_amps', 'pump1_amps', 'pump2_amps', 'pump3_amps'  ## Amps
+            'seed_bias_volts'                                      ## Volts
+            """
         analog_raw = self.res.query('AO?')
         val_list = []
-        ao_vals = np.zeros(9)
+        ao_vals = {}
         start = np.arange(0, 8*5, 5)
         for i in start:
             val_list.append(float(analog_raw[start[i]:(start[i]+4)]))
         #Seed and 3 pump TEC temperatures in Celsius
-        ao_vals[0:3] = _compute_tec_temp(val_list[0:3])
+        _dict_assign(ao_vals, ('seed_temp', 'pump1_temp', 'pump2_temp', 'pump3_temp'),
+                     _compute_tec_temp(val_list[0:3]))
         #Seed current in amps
+        ao_vals['seed_amps'] = val_list[4]/1638.
         ao_vals[4] = val_list[4]/1638.
         #Pump currents in amps
-        ao_vals[5:7] = _compute_output_current(val_list[4:6], self.pccw_list[0:2], np.arange(3))
+        _dict_assign(ao_vals, ('pump1_amps', 'pump2_amps', 'pump3_amps'),
+                     _compute_output_current(val_list[5:7], self.pccw_list[0:2], np.arange(3)))
         #Seed bias voltage in volts
-        ao_vals[8] = val_list[8]/1638.
+        ao_vals['seed_bias_volts'] = val_list[8]/1638.
         return ao_vals
 
     @vo.handle_timeout
@@ -383,10 +409,8 @@ class Cybel(vo.Visa):
     @log.log_this()
     def query_keep_on(self):
         """Returns True if laser is set to 'Keep ON' when connection with electronic board ends"""
-        keep_on = self.res.query('KP?')
-        if keep_on[2] == '1':
-            return True
-        else: return False
+        keep_on = int(self.res.query('KP?'))
+        return bool(keep_on)
 
     @vo.handle_timeout
     @log.log_this()

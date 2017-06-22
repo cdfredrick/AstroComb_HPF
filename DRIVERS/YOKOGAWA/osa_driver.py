@@ -29,11 +29,11 @@ with Public Methods:
 
     str = query_identity()
     save_n_graph_spectrum()
-    dict = query_sweep_parameters()
+    dict = query_sweep_parameters() #nm
 
     Set:
 
-    set_sweep_parameters(center_wl=1064, span_wl=200, res_wl=2, sensitivity=1)
+    set_sweep_parameters(center_wl=1064, span_wl=200, res_wl=2, sensitivity=1) #nm
 
 """
 
@@ -94,7 +94,8 @@ class OSA(vo.Visa):
         super(OSA, self).__init__(res_name, res_address)
         self.res = super(OSA, self).open_resource()
         if self.res is None:
-            print 'Could not create OSA instrument!'
+            log.log_warn(__name__, '__init__',
+                         'Could not create OSA instrument!')
             return
         self.__set_command_format()
         self.file_string = _find_directory()

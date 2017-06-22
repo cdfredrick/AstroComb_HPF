@@ -33,7 +33,8 @@ with Public Methods:
 
     Set:
 
-    set_sweep_parameters(center_wl=1064, span_wl=200, res_wl=2, sensitivity=1) #nm
+    set_sweep_parameters(center_wl=1064,
+                         span_wl=200, res_wl=2, sensitivity=1) #nm
 
 """
 
@@ -50,23 +51,21 @@ EXT = '.txt'
 def plot_spectrum(data):
     """Plots spectrum from yokogawa"""
     (lambdas, levels) = data.T
-    plt.plot(lambdas, levels)
+    spectrum = plt.plot(lambdas, levels)
     plt.xlabel('wavelength nm')
     plt.ylabel('dBm')
     plt.grid(True)
-    plt.show()
+    return spectrum
 
 def _find_directory():
-    """Look for directory with Yokogawa which contains OSA spectrum Files,
-    create directory if it does not exist"""
+    """Look for/create directory with OSA spectrum Files"""
     directory = 'YokogawaFiles'
     if not os.path.exists(directory):
         os.makedirs(directory)
     return directory + '/Yokogawa_'
 
 def _check_file_path(file_string, count):
-    """Look for highest numberd file in /YokogawaFiles/ sub directory and return
-    file name of latest file number + 1 then create file"""
+    """Returns 1+number of highest file in /YokogawaFiles/ sub directory"""
     while True:
         if os.path.exists(_form_file_name(file_string, count)):
             count += 1
@@ -110,7 +109,7 @@ class OSA(vo.Visa):
     @vo.handle_timeout
     @log.log_this(20)
     def reset(self):
-        """Stops current operation being processed and returns OSA to default values"""
+        """Stops current machine operation and returns OSA to default values"""
         self.res.write('*RST')
         self.__set_command_format()
 
@@ -136,28 +135,31 @@ class OSA(vo.Visa):
         Normal Hold | Normal Auto | Normal | Mid | High 1 | High 2 | High 3 |
         """
         pdict = {}
-        pdict['center_wl'] = float(self.res.query(':SENSe:WAVelength:CENTer?'))*10**9
-        pdict['span_wl'] = float(self.res.query(':SENSe:WAVelength:SPAN?'))*10**9
-        pdict['res_wl'] = float(self.res.query(':SENSe:BANDwidth:RESolution?'))*10**9
-        pdict['sensitivity'] = int(self.res.query(':SENSe:SENSe?'))
+        nano = 10.**9
+        pdict['center_wl'] = float(self.res.query(':SENS:WAV:CENT?'))*nano
+        pdict['span_wl'] = float(self.res.query(':SENS:WAV:SPAN?'))*nano
+        pdict['res_wl'] = float(self.res.query(':SENS:BAND:RES?'))*nano
+        pdict['sensitivity'] = int(self.res.query(':SENS:SENS?'))
         return pdict
 
     @log.log_this()
-    def save_n_graph_spectrum(self):
-        """Prints a graph of osa spectrum to console and saves values to a file"""
+    def get_spectrum(self, graph=False):
+        """Saves OSA spectrum values to a file, returns a plot"""
         data = self._query_spectrum()
         _write_data_file(data, self.file_name)
         self.file_count += 1
         self.file_name = _form_file_name(self.file_string, self.file_count)
-        plot_spectrum(data)
+        if graph:
+            spectrum = plot_spectrum(data)
+            plt.show(spectrum)
 
     @vo.handle_timeout
     @log.log_this()
     def _query_spectrum(self):
         """Sweepss OSA's spectrum"""
-        y_trace = self.res.query(':TRACe:DATA:Y? TRA')
-        x_trace = self.res.query(':TRACe:DATA:X? TRA')
-        wavelengths = np.fromstring(x_trace, sep=',')*10**9
+        y_trace = self.res.query(':TRAC:DATA:Y? TRA')
+        x_trace = self.res.query(':TRAC:DATA:X? TRA')
+        wavelengths = np.fromstring(x_trace, sep=',')*10.**9
         powers = np.fromstring(y_trace, sep=',')
         #lambdas = lambdas[1:]
         #levels = levels[1:]
@@ -177,10 +179,11 @@ class OSA(vo.Visa):
 
     @vo.handle_timeout
     @log.log_this()
-    def set_sweep_parameters(self, center_wl=1064, span_wl=200, res_wl=2, sensitivity=1):
+    def set_sweep_parameters(self, center_wl=1064, span_wl=600,
+                             res_wl=2, sensitivity=1):
         """Sets OSA sweep region"""
-        self.res.write(':SENSe:WAVelength:CENTer %snm' % center_wl)
-        self.res.write(':SENSe:WAVelength:SPAN %snm' %span_wl)
-        self.res.write(':SENSe:BANDwidth:RESolution %snm' %res_wl)
-        self.res.write(':SENSe:SENSe %s' %sensitivity)
+        self.res.write(':SENS:WAV:CENT %snm' % center_wl)
+        self.res.write(':SENS:WAV:SPAN %snm' %span_wl)
+        self.res.write(':SENS:BAND:RES %snm' %res_wl)
+        self.res.write(':SENS:SENS %s' %sensitivity)
         return

@@ -10,19 +10,18 @@ import eventlog as log
 
 log.start_logging()
 
-
+print __name__
 
 def test():
     """Tests some basic methods and connectability of OSA"""
     osa = yok.OSA(yok.OSA_NAME, yok.OSA_ADDRESS)
-    print osa.file_name
     if osa.res is None:
         raise SystemExit
     osa.query_identity()
     osa.set_sweep_parameters()
     pdict = osa.query_sweep_parameters()
     print pdict
-    osa.save_n_graph_spectrum()
+    osa.get_spectrum(True)
     osa.close()
 
 test()

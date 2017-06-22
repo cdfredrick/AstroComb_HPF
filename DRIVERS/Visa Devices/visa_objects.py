@@ -83,7 +83,7 @@ class Visa(object):
 
     @log.log_this()
     def check_connection(self):
-        """If resource is not connected initiates resources disconnection commands."""
+        """If not connected initiates resources disconnection commands."""
         res_man = visa.ResourceManager()
         res_list = res_man.list_resources()
         self.connected = False

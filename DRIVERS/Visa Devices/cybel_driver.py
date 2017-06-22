@@ -63,6 +63,7 @@ CYBEL_ADDRESS = '' #ADD ME!!!!
 CYBEL_NAME = 'Cybel Amplifier'
 
 def _dict_assign(dictionary, keys, values):
+    """Assigns multiple values to dictionary at once."""
     dictionary.update(zip(keys, values))
 
 def _compute_tec_temp(raw_val):
@@ -88,27 +89,28 @@ def _compute_analog_temp(raw_val):
     return 100.*(raw_val/1638. - 0.5)
 
 def _form_temp_command(temp):
-    """Makes set temperature into machine-readable format"""
+    """Makes set temperature into machine-readable format."""
     temp_val = int(np.floor(1638.*((temp-25.)/40.+1.25)))
     if temp_val > 4095 or temp_val < 0:
-        print 'Temperature to be set is out of bounds!'
+        log.log_warn(__name__, '_form_temp_command',
+                     'Temperature to be set is out of bounds!')
         return
     temp_str = str(temp_val).zfill(4)
     return temp_str
 
 def _form_current_command(pump_num, current, pccw_list):
-    """Makes set pump current into machine-readable format"""
+    """Makes set pump current into machine-readable format."""
     if pump_num == 0:
         current_val = int(np.floor(current*1638.))
     else:
-        constants_list = [1470., 235., 147.]
-        current_val = current*constants_list[pump_num-1]/pccw_list[pump_num-1]*1638.
-        current_val = int(np.floor(current_val))
+        const_list = [1470., 235., 147.]
+        factor = const_list[pump_num-1]/pccw_list[pump_num-1]*1638.
+        current_val = int(np.floor(current*factor))
     current_str = str(current_val).zfill(4)
     return current_str
 
 def _string_to_bits(string=''):
-    """Converts ascii character into bit string"""
+    """Converts ascii character into bit string."""
     return [bin(ord(x))[2:].zfill(8) for x in string][0]
 
 
@@ -132,16 +134,16 @@ class Cybel(vo.Visa):
         self.res.data_bits = 8
         self.res.stop_bits = 1
         self.__disable_echo()
-        self.pccr_list = [] #Pump read constants, will have length 3
+        self.pccr_list = [] #Pump read constants, length 3
         self.query_pump_read_constants()
-        self.pccw_list = [] #Pump write constants, will have length 3
+        self.pccw_list = [] #Pump write constants, length 3
         self.query_pump_write_constants()
-        self.pcl_list = [] #Pump current limits, will have length 4 (includes seed)
+        self.pcl_list = [] #Pump current limits, length 4 (includes seed)
         self.query_pump_current_limits()
 
     @log.log_this(20)
     def close(self):
-        """Ends device session"""
+        """Ends device session."""
         self.res.close()
 
     @vo.handle_timeout
@@ -162,7 +164,7 @@ class Cybel(vo.Visa):
     @vo.handle_timeout
     @log.log_this()
     def __disable_echo(self, echo_off=True):
-        """Turns off echo, made private because it should stay off"""
+        """Turns off echo, made private because it should stay off."""
         if echo_off is True:
             self.res.write('SEN')
         if echo_off is False:
@@ -171,14 +173,13 @@ class Cybel(vo.Visa):
     @vo.handle_timeout
     @log.log_this(20)
     def enable_pump(self, pump_num, pump_on):
-        """Turns pump on (pump_on=True) or off (pump_on=False),
-        pump numbers are 1,2, or 3"""
+        """Turns pump on (pump_on=True) or off (pump_on=False).3"""
         self.res.write('P%d%d' % (pump_num, vo.tf_toggle(pump_on)))
 
     @vo.handle_timeout
     @log.log_this(20)
     def enable_tec(self, tec_num, tec_on):
-        """tec_num=0 for seed, ={1,2,3} for corresponding pumps, turns on if tec_on=True."""
+        """tec_num=0 for seed, ={1,2,3} for pumps, turns on if tec_on=True."""
         if tec_num == 0:
             tec_num = 'S'
         self.res.write('TEC%d%d' % (tec_num, vo.tf_toggle(tec_on)))
@@ -186,7 +187,7 @@ class Cybel(vo.Visa):
     @vo.handle_timeout
     @log.log_this()
     def enable_keep_on(self, keep_on):
-        """Enables keeping laser on when electronic board connection ends if True"""
+        """Enables keeping laser on when connection ends if True"""
         self.res.write('KP%d' % vo.tf_toggle(keep_on))
 
 #Query Methods
@@ -194,7 +195,7 @@ class Cybel(vo.Visa):
     @vo.handle_timeout
     @log.log_this()
     def query_serial_and_firmware(self):
-        """Returns 8 character SN and 4 character microcontroller firmware #."""
+        """Returns 8 character SN and 4 character ucontroller firmware #."""
         raw_sn_and_fw = self.res.query('CO')
         serial = raw_sn_and_fw[:8]
         firmware = raw_sn_and_fw[:10]
@@ -210,8 +211,7 @@ class Cybel(vo.Visa):
     @vo.handle_timeout
     @log.log_this()
     def query_pump_status(self, pump_num):
-        """Returns True if pump is on and False if pump is off,
-        pump numbers are 1,2, or 3"""
+        """Returns True if pump is on and False if pump is off."""
         pump_status = self.res.query('P%d?' % pump_num)
         if pump_status[2] == '0':
             log.log_warn(__name__, 'query_pump_status',
@@ -222,7 +222,7 @@ class Cybel(vo.Visa):
     @vo.handle_timeout
     @log.log_this()
     def query_temp_error(self):
-        """Returns a value for each TEC, True if within error, False if not"""
+        """Returns True for each TEC within error, False if not."""
         temp_error = self.res.query('FB?')
         seed_temp = pump1_temp = pump2_temp = pump3_temp = True
         if temp_error[2] == '0':
@@ -246,7 +246,7 @@ class Cybel(vo.Visa):
     @vo.handle_timeout
     @log.log_this()
     def  query_trigger_n_laser_status(self):
-        """Returns True's if trigger is correct and laser is emitting"""
+        """Returns True's if trigger is correct and laser is emitting."""
         tl_status = self.res.query('TS?')
         trigger_match = laser_on = True
         if tl_status[2] == '0':
@@ -262,7 +262,7 @@ class Cybel(vo.Visa):
     @vo.handle_timeout
     @log.log_this()
     def query_tec_status(self, tec_num):
-        """tec_num=0 for seed, ={1,2,3} for pumps, returns True if tec is on"""
+        """tec_num=0 for seed, ={1,2,3} for pumps, returns True if tec is on."""
         if tec_num == 0:
             tec_num = 'S'
         tec_status = self.res.query('TEC%s?' % tec_num)
@@ -275,7 +275,7 @@ class Cybel(vo.Visa):
     @vo.handle_timeout
     @log.log_this()
     def query_pump_read_constants(self):
-        """Saves pump read multiplying factors for computing pump currents in Cybel object"""
+        """Saves pump current read multiplying factors in Cybel object."""
         raw_constants = self.res.query('PCCR?')
         start = np.arange(0, 2*5, 5)
         new_pccr_list = []
@@ -286,7 +286,7 @@ class Cybel(vo.Visa):
     @vo.handle_timeout
     @log.log_this()
     def query_pump_write_constants(self):
-        """Saves pump write multiplying factors for computing pump currents in Cybel object"""
+        """Saves pump current write multiplying factors in Cybel object."""
         raw_constants = self.res.query('PCCW?')
         start = np.arange(0, 2*5, 5)
         new_pccw_list = []
@@ -297,7 +297,7 @@ class Cybel(vo.Visa):
     @vo.handle_timeout
     @log.log_this()
     def query_pump_current_limits(self):
-        """Saves pump current limits in Cybel object"""
+        """Saves pump current limits in Cybel object."""
         raw_limits = self.res.query('AOL?')
         start = np.arange(0, 2*5, 5)
         new_pcl_list = [2.5]
@@ -310,7 +310,7 @@ class Cybel(vo.Visa):
     @vo.handle_timeout
     @log.log_this()
     def query_analog_input_values(self):
-        """Returns a dictionary with  values specified by the manual's conversions.
+        """Returns a dictionary of values.
 
         Dictionary entries:
             'seed_temp', 'pump1_temp', 'pump2_temp', 'pump3_temp'  ## Celsius
@@ -328,11 +328,13 @@ class Cybel(vo.Visa):
         for i in start:
             val_list.append(float(analog_raw[start[i]:(start[i]+4)]))
         #Seed and 3 pump TEC temperatures in Celsius
-        _dict_assign(ai_vals, ('seed_temp', 'pump1_temp', 'pump2_temp', 'pump3_temp'),
+        _dict_assign(ai_vals, ('seed_temp', 'pump1_temp', 'pump2_temp',
+                               'pump3_temp'),
                      _compute_tec_temp(val_list[0:3]))
         #Pump currents in amps
         _dict_assign(ai_vals, ('pump1_amps', 'pump2_amps', 'pump3_amps'),
-                     _compute_input_current(val_list[4:6], self.pccr_list[0:2]))
+                     _compute_input_current(val_list[4:6],
+                                            self.pccr_list[0:2]))
         #Pumps 1 and 2 photodiode powers in watts
         _dict_assign(ai_vals, ('pump1_pd_power', 'pump2_pd_power'),
                      _compute_pd_power(val_list[7:8], [1, 2]))
@@ -344,13 +346,14 @@ class Cybel(vo.Visa):
         #Voltage tests: 5V, 1.8V, and 28V in volts
         #And Monitor photodiodes 1 and 2 in volts
         _dict_assign(ai_vals, ('test_5volt', 'test_1_8volt', 'test_28volt',
-                               'monitor_pd1', 'monitor_pd2'), val_list[12:16]/1638.)
+                               'monitor_pd1', 'monitor_pd2'),
+                     val_list[12:16]/1638.)
         return ai_vals
 
     @vo.handle_timeout
     @log.log_this()
     def query_analog_output_values(self):
-        """Returns a dictionary with  values specified by the manual's conversions.'
+        """Returns a dictionary of values.'
 
         Dictionary entries:
             'seed_temp', 'pump1_temp', 'pump2_temp', 'pump3_temp'  ## Celsius
@@ -364,14 +367,17 @@ class Cybel(vo.Visa):
         for i in start:
             val_list.append(float(analog_raw[start[i]:(start[i]+4)]))
         #Seed and 3 pump TEC temperatures in Celsius
-        _dict_assign(ao_vals, ('seed_temp', 'pump1_temp', 'pump2_temp', 'pump3_temp'),
+        _dict_assign(ao_vals, ('seed_temp', 'pump1_temp', 'pump2_temp',
+                               'pump3_temp'),
                      _compute_tec_temp(val_list[0:3]))
         #Seed current in amps
         ao_vals['seed_amps'] = val_list[4]/1638.
         ao_vals[4] = val_list[4]/1638.
         #Pump currents in amps
         _dict_assign(ao_vals, ('pump1_amps', 'pump2_amps', 'pump3_amps'),
-                     _compute_output_current(val_list[5:7], self.pccw_list[0:2], np.arange(3)))
+                     _compute_output_current(val_list[5:7],
+                                             self.pccw_list[0:2],
+                                             np.arange(3)))
         #Seed bias voltage in volts
         ao_vals['seed_bias_volts'] = val_list[8]/1638.
         return ao_vals
@@ -417,27 +423,31 @@ class Cybel(vo.Visa):
     @vo.handle_timeout
     @log.log_this()
     def query_keep_on(self):
-        """Returns True if laser is set to 'Keep ON' when connection with electronic board ends"""
+        """Returns True if laser is set to 'Keep ON'"""
         keep_on = int(self.res.query('KP?'))
         return bool(keep_on)
 
     @vo.handle_timeout
     @log.log_this()
     def query_allowed_components(self):
-        """Prints a list of components that are connected to electronic board"""
+        """Prints a list of components connected to electronic board"""
         raw_allowed = self.res.query('DC?')
         device_list1 = ['Seed current', 'Pump 1 current', 'Pump 2 current',
-                        'Pump 3 current', 'Seed temperature', 'Pump 1 temperature',
-                        'Pump 2 temperature', 'Pump 3 temperature']
-        device_list2 = ['Digital temperature sensor 1', 'Digital temperature sensor 2',
-                        'Analog temperature sensor 1', 'Analog temperature sensor 1',
-                        'Voltage test 28V', 'Voltage test 1.8V', 'Voltage test 5V',
-                        'Pump 1 photodiode']
+                        'Pump 3 current', 'Seed temperature',
+                        'Pump 1 temperature', 'Pump 2 temperature',
+                        'Pump 3 temperature']
+        device_list2 = ['Digital temperature sensor 1',
+                        'Digital temperature sensor 2',
+                        'Analog temperature sensor 1',
+                        'Analog temperature sensor 1',
+                        'Voltage test 28V', 'Voltage test 1.8V',
+                        'Voltage test 5V', 'Pump 1 photodiode']
         device_list3 = ['Pump 2 photodiode', 'Monitor photodiode 1',
                         'Monitor photodiode 2', 'Trigger', 'Pulse width',
                         'Pulse rate', '', '']
         device_list4 = ['', '', '', 'Seed bias voltage', '', '', '', '']
-        device_array = [device_list1, device_list2, device_list3, device_list4]
+        device_array = [device_list1, device_list2,
+                        device_list3, device_list4]
         allowed = ['allowed!', 'NOT ALLOWED!']
         i = 0
         while i < len(device_array):
@@ -537,7 +547,8 @@ class Cybel(vo.Visa):
         """Sets the write constant of pump_num={1,2,3}
 
         val must be an integer between 0 and 4095(?)
-        probably safest to leave these alone unless desired current cant be reached"""
+        probably safest to leave these alone
+        unless desired current cant be reached"""
         if pump_num == 2:
             log.log_warn(__name__, 'set_pump_write_constants',
                          'Cannot change pump 2 current!')

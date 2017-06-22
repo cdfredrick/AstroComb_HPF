@@ -67,3 +67,12 @@ def log_error(mod_name, func_name, err, log_str='', level=40):
            | debug | info | warning | error | critical |"""
     logger = logging.getLogger('astroComb.%s.%s' % (mod_name, func_name))
     logger.log(level, str(err) + log_str)
+
+def log_warn(mod_name, func_name, log_str, level=30):
+    """Takes originating function name and module and string to log, optional level
+
+    The most general log-what-you-want call
+    Levels |   10  |  20  |   30    |   40  |    50    |
+           | debug | info | warning | error | critical |"""
+    logger = logging.getLogger('astroComb.%s.%s' % (mod_name, func_name))
+    logger.log(level, log_str)

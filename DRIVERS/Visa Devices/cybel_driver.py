@@ -53,6 +53,7 @@ Set Values:
 
 """
 #pylint: disable=R0904
+### There's good reason to have this many public methods
 
 import time
 import numpy as np

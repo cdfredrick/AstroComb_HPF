@@ -25,21 +25,21 @@ Enable:
     enable_tec(tec_on)
 
 Query laser:
-    query_las_on()
-    query_las_mode()
-    query_las_current()
-    query_las_current_limit()
-    query_las_current_set_point()
+    TF = query_las_on()
+    str = query_las_mode()
+    float = query_las_current()
+    float = query_las_current_limit()
+    float = query_las_current_set_point()
 
 Set laser:
     set_las_current(current)
     set_las_current_limit(current)
-    set_las_mode(, mode_num)
+    set_las_mode(mode_num)
 
 Query TEC:
-    query_tec_on()
-    query_tec_mode()
-    query_tec_temp()
+    TF = query_tec_on()
+    str = query_tec_mode()
+    float = query_tec_temp()
 
 Set TEC:
     set_tec_mode(mode_num)

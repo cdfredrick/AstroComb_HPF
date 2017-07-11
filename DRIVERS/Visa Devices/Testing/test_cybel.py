@@ -10,13 +10,16 @@ module: cybel_test
 import time
 import numpy as np
 import cybel_driver as cy
+import eventlog as log
+
+log.start_logging()
 
 def wait(delay=2):
     """Sleeps for reading log output."""
     time.sleep(delay)
 
 def test_run1():
-    """Runs through method list"""
+    """Runs through basic queries."""
     cybel = cy.Cybel(cy.CYBEL_NAME, cy.CYBEL_ADDRESS)
     wait(6)
     print cybel.query_n_firmware()
@@ -54,7 +57,7 @@ def test_run3():
     cybel.query_pulse_rep_rate(), ' kHz'
     cybel.close
 
-def get_temp_lists(cybel):
+def _get_temp_lists(cybel):
     input_dic = cybel.query_analog_input_values()
     output_dic = cybel.query_analog_output_values()
     in_list = [input_dic['seed_temp'], input_dic['pump1_temp'],
@@ -74,17 +77,17 @@ def test_run4():
 
     wait(10)
 
-    in_list, out_list = get_temp_lists(cybel)
+    in_list, out_list = _get_temp_lists(cybel)
     for i in np.arange(4):
         cybel.set_tec_temp(i, out_list[i]+1)
         
     wait(10)
-    in_list, out_list = get_temp_lists(cybel)
+    in_list, out_list = _get_temp_lists(cybel)
     for i in np.arange(4):
         cybel.set_tec_temp(i, out_list[i]-1)
 
     wait(10)
-    get_temp_lists(cybel)
+    _get_temp_lists(cybel)
 
 """
     reboot()

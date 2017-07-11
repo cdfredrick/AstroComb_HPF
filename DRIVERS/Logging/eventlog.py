@@ -18,24 +18,28 @@ Public functions:
     log_error(mod_name, func_name, err, log_str='', level=40)
 
 """
-#pylint: disable=W0702
+#pylint: disable=W0703
+### Intentionally catching a general exception
 
 import logging
 import logging.config
 from functools import wraps
 
 def start_logging():
-    """Must be called by external module to begin logging
+    """Must be called by external module to begin logging.
 
     logs to astroComb.log
     see logging.conf for format details"""
     logging.config.fileConfig('logging.conf')
+    # If you get a "cannot find formatters section" error include
+    #   the full file path for logging.conf, python is actually
+    #   not finding the file itself
     logger = logging.getLogger('astroComb')
     logger.info('Logging started!')
     return logger
 
 def log_this(level1=10, level2=10, log_string1='', log_string2=''):
-    """Takes optional integers for levels and optional descriptors
+    """Takes optional integers for levels and optional descriptors.
 
     Levels |   10  |  20  |   30    |   40  |    50    |
            | debug | info | warning | error | critical |"""
@@ -51,8 +55,8 @@ def log_this(level1=10, level2=10, log_string1='', log_string2=''):
             result = func(*args, **kwargs)
             try:
                 res_str = str(result)
-                print res_str
-            except:  #Many possible reasons a result is not string-able
+            except Exception:  #There are many possible reasons a
+                               #result is not string-able
                 res_str = '{}'
             message = log_string2 + ' Returns: ' + res_str
             logger.log(level2, message)
@@ -61,7 +65,7 @@ def log_this(level1=10, level2=10, log_string1='', log_string2=''):
     return function_decorator
 
 def log_error(mod_name, func_name, err, log_str='', level=40):
-    """Takes originating function name and module and error to log
+    """Takes originating function name and module and error to log.
 
     Optional descriptive string & log level
     Note that if function is in error handling function decorator
@@ -73,7 +77,7 @@ def log_error(mod_name, func_name, err, log_str='', level=40):
     logger.log(level, str(err) + log_str)
 
 def log_warn(mod_name, func_name, log_str, level=30):
-    """Takes originating function name and module and string to log
+    """Takes originating function name and module and string to log.
 
     Optional level, not just for warnings
     The most general log-what-you-want call, use instead of print

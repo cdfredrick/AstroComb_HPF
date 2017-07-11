@@ -37,7 +37,7 @@ Queries:
     dict = query_analog_output_values()
     float = query_trigger_timeout() #Hz
     float = query_pulse_width() #ns
-    float1, float2 = query_digital_temp_sensors(self) #Celsius
+    float1, float2 = query_digital_temp_sensors() #Celsius
     float = query_pulse_rep_rate() #kHz
     TF = query_keep_on()
     query_allowed_components()
@@ -60,8 +60,9 @@ import numpy as np
 import visa_objects as vo
 import eventlog as log
 
-CYBEL_ADDRESS = '' #ADD ME!!!!
 CYBEL_NAME = 'Cybel Amplifier'
+CYBEL_ADDRESS = '' #ADD ME!!!!
+
 
 def _dict_assign(dictionary, keys, values):
     """Assigns multiple values to dictionary at once."""
@@ -128,12 +129,11 @@ class Cybel(vo.Visa):
             log.log_warn(__name__, '__init__',
                          'Could not create Cybel instrument!')
             return
-        self.res.clear()
         self.res.term_chars = 'CR+LF'
         self.res.timeout = 3
         self.res.baud_rate = 57600
         self.res.data_bits = 8
-        self.res.stop_bits = 1
+        self.res.stop_bits = vo.SB_ONE
         self.__disable_echo()
         self.pccr_list = [] #Pump read constants, length 3
         self.query_pump_read_constants()
@@ -195,7 +195,7 @@ class Cybel(vo.Visa):
 
     @vo.handle_timeout
     @log.log_this()
-    def query_serial_and_firmware(self):
+    def query_serial_n_firmware(self):
         """Returns 8 character SN and 4 character ucontroller firmware #."""
         raw_sn_and_fw = self.res.query('CO')
         serial = raw_sn_and_fw[:8]
@@ -263,7 +263,7 @@ class Cybel(vo.Visa):
     @vo.handle_timeout
     @log.log_this()
     def query_tec_status(self, tec_num):
-        """tec_num=0 for seed, ={1,2,3} for pumps, returns True if tec is on."""
+        """tec_num=0 for seed, ={1,2,3} for pumps, returns True if tec on."""
         if tec_num == 0:
             tec_num = 'S'
         tec_status = self.res.query('TEC%s?' % tec_num)

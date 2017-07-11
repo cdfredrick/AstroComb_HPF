@@ -31,6 +31,8 @@ import visa
 import pyvisa
 import eventlog as log
 
+SB_ONE = pyvisa.constants.StopBits.one
+
 def tf_toggle(var):
     """Returns 0 or 1 in place of T/F variable."""
     if var is True:

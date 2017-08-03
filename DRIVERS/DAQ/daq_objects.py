@@ -5,7 +5,21 @@ Created on Fri Jun 23 11:40:31 2017
 @author: Wesley Brand
 
 Module: daq_objects
+
+Public function:
+    handle_daq_error(function)
+
+Public class:
+   DAQAnalogIn(object)
+
+Public methods:
+    creat_analog_in(n_samples, log_rate, max_v=10, min_v=-10)
+    list_of_floats = read_analog_in() #Volts
+    end_task()
+    float = point_measure(samples=100, rate=10000)
 """
+#pylint: disable=E1101
+##PyDAQmx has all of these functions, its just wonky
 
 from functools import wraps
 import numpy as np
@@ -26,7 +40,8 @@ def handle_daq_error(func):
             return None
     return attempt_func
 
-class DAQ(object):
+
+class DAQAnalogIn(object):
     """Defines basic DAQ actions."""
     @log.log_this()
     def __init__(self, chan_num):
@@ -83,3 +98,10 @@ class DAQ(object):
         if self.task_handle:
             pydaq.DAQmxStopTask(self.task_handle)
             pydaq.DAQmxClearTask(self.task_handle)
+
+    def point_measure(self, samples=100, rate=10000):
+        """Averages over a quick data run to return one point"""
+        self.create_analog_in(samples, rate)
+        result = np.average(self.read_analog_in())
+        self.end_task()
+        return result

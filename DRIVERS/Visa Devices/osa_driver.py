@@ -38,16 +38,26 @@ with Public Methods:
 
 """
 
+
+#Python imports
 import os
+
+#3rd party imports
 import numpy as np
 import matplotlib.pyplot as plt
+
+#Astrocomb imports
 import visa_objects as vo
 import eventlog as log
 
+
+#Constants
 OSA_NAME = 'OSA'
 OSA_ADDRESS = u'GPIB0::28::INSTR'
 EXT = '.txt'
 
+
+#Public functions
 def plot_spectrum(data):
     """Plots spectrum from yokogawa"""
     (lambdas, levels) = data.T
@@ -57,6 +67,7 @@ def plot_spectrum(data):
     plt.grid(True)
     return spectrum
 
+#Private functions
 def _find_directory():
     """Look for/create directory with OSA spectrum Files"""
     directory = 'YokogawaFiles'

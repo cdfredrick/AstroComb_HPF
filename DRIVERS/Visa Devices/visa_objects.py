@@ -26,13 +26,23 @@ check_connection()
 disconnected()
 """
 
+
+#Python imports
 from functools import wraps
+
+#3rd party imports
 import visa
 import pyvisa
+
+#Astrocomb imports
 import eventlog as log
 
+
+#Constants
 SB_ONE = pyvisa.constants.StopBits.one
 
+
+#Public functions
 def tf_toggle(var):
     """Returns 0 or 1 in place of T/F variable."""
     if var is True:

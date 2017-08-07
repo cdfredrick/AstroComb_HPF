@@ -53,17 +53,26 @@ Set Values:
 
 """
 #pylint: disable=R0904
-### There's good reason to have this many public methods
+### We have this many public methods because the cybel has that many commands
 
+
+#Python imports
 import time
+
+#3rd party imports
 import numpy as np
+
+#Astrocomb imports
 import visa_objects as vo
 import eventlog as log
 
+
+#Constants
 CYBEL_NAME = 'Cybel Amplifier'
 CYBEL_ADDRESS = '' #ADD ME!!!!
 
 
+#Private Functions
 def _dict_assign(dictionary, keys, values):
     """Assigns multiple values to dictionary at once."""
     dictionary.update(zip(keys, values))
@@ -119,7 +128,7 @@ def _string_to_bits(string=''):
 class Cybel(vo.Visa):
     """Holds cybel amplifier's attributes and method library."""
 
-    #General methods
+#General methods
 
     @log.log_this()
     def __init__(self, res_name, res_address):

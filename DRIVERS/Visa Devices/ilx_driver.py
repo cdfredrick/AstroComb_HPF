@@ -50,11 +50,14 @@ Set TEC:
 ### Avoid ILX.__init__() in LDControl.__init__ because inherits
 ###  from ILX instance
 
+
+#Astrocomb imports
 import visa_objects as vo
 import eventlog as log
 
-_MARKER = object()  #To check errors in LDControl class inheritance
 
+#Constants
+_MARKER = object()  #To check errors in LDControl class inheritance
 ILX_NAME = 'ILX Laser Diode Control Housing'
 ILX_ADDRESS = '' #ADD ME!!!
 
@@ -62,7 +65,7 @@ ILX_ADDRESS = '' #ADD ME!!!
 class ILX(vo.Visa):
     """Holds commands for ILX chassis and passes commands for components."""
     @log.log_this()
-    def __init__(self, res_name, res_address):
+    def __init__(self, res_name=ILX_NAME, res_address=ILX_ADDRESS):
         self.res = super(ILX, self).__init__(res_name, res_address)
         if self.res is None:
             log.log_warn(__name__, '__init__',
@@ -117,7 +120,7 @@ class LDControl(ILX):
         if name not in self.__dict__:
             raise AttributeError(name)
 
-#--Command passers---#
+#Private command passing methods
 
     @vo.handle_timeout
     def _las_query(self, command):
@@ -145,7 +148,8 @@ class LDControl(ILX):
         self.tec_chan_switch(self.num)
         self.res.write('TEC:' + command)
 
-#---Enable---#
+#Enable methods
+
     @log.log_this(20)
     def enable_las(self, las_on):
         """Turns the laser on if las_on is True.
@@ -160,7 +164,8 @@ class LDControl(ILX):
     def enable_tec(self, tec_on):
         """Turns the TEC on if tec_on is True."""
         self._tex_set('ONLY:OUT %d' % vo.tf_toggle(tec_on))
-#---Laser Queries---#
+
+#laser query methods
 
     @log.log_this()
     def query_las_on(self):
@@ -193,7 +198,7 @@ class LDControl(ILX):
         """Returns the laser current set point in mA."""
         return float(self._las_query('SET:LDI?'))
 
-#---Laser Settings---#
+#Laser settings methods
 
     @log.log_this()
     def set_las_current(self, current):
@@ -216,7 +221,7 @@ class LDControl(ILX):
         modes = ['IHBW', 'ILBW', 'MDP']
         self._las_set('MODE:%s' % modes[mode_num])
 
-#---TEC Queries---#
+#TEC query methods
 
     @log.log_this()
     def query_tec_on(self):
@@ -239,7 +244,7 @@ class LDControl(ILX):
         """Returns the TEC temp in C with 6 digits of precision."""
         return float(self._teq_query('T?'))
 
-#---TEC Settings---#
+#TEC settings methods
 
     @log.log_this()
     def set_tec_mode(self, mode_num):

@@ -21,10 +21,13 @@ Public functions:
 #pylint: disable=W0703
 ### Intentionally catching a general exception
 
+
+#Python imports
 import logging
-import logging.config
 from functools import wraps
 
+
+#Public functions
 def start_logging():
     """Must be called by external module to begin logging.
 

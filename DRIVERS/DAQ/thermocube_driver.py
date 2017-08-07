@@ -14,9 +14,13 @@ Public method:
 
 """
 
+
+#Astrocomb imports
 import eventlog as log
 import daq_objects as do
 
+
+#Constants
 TEMP_ALARM_CHANNEL = 0 #DAQ analog input channel ##NEEDS correct number!!!
 SYSTEM_ALARM_CHANNEL = 1 #DAQ analog input channel ##NEEDS correct number!!!
 
@@ -28,6 +32,8 @@ class ThermoCube(do.DAQAnalogIn):
                  sys_chan=SYSTEM_ALARM_CHANNEL):
         self.temp_alarm = super(ThermoCube, self).__init__(temp_chan)
         self.sys_alarm = super(ThermoCube, self).__init__(sys_chan)
+
+#Query methods
 
     def query_alarms(self):
         """Returns True if alarm is active."""
@@ -65,6 +71,8 @@ class ThermoCube(do.DAQAnalogIn):
                 return True
             attempts += 1
 
+
+#Old code
 #def data_loop(daq1, daq2, loops):
 #    """Takes some data from the DAQ"""
 #    tempdata = []

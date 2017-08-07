@@ -6,9 +6,6 @@ Created on Fri Jun 23 11:40:31 2017
 
 Module: daq_objects
 
-Public function:
-    handle_daq_error(function)
-
 Public class:
    DAQAnalogIn(object)
 
@@ -21,12 +18,18 @@ Public methods:
 #pylint: disable=E1101
 ##PyDAQmx has all of these functions, its just wonky
 
+#Python imports
 from functools import wraps
+
+#3rd party imports
 import numpy as np
 import PyDAQmx as pydaq
+
+#Astrocomb imports
 import eventlog as log
 
-def handle_daq_error(func):
+#Private functions
+def _handle_daq_error(func):
     """To be used as a function decorator that handles daq errors."""
     @wraps(func)
     def attempt_func(self, *args, **kwargs):
@@ -51,7 +54,7 @@ class DAQAnalogIn(object):
         self.task_handle = None
         self.chan_name = None
 
-    @handle_daq_error
+    @_handle_daq_error
     @log.log_this()
     def create_analog_in(self, n_samples, log_rate, max_v=10., min_v=-10.):
         """Sets up a task handler for an analog input channel."""
@@ -76,7 +79,7 @@ class DAQAnalogIn(object):
                                     pydaq.DAQmx_Val_FiniteSamps,
                                     self.params['samples'])
 
-    @handle_daq_error
+    @_handle_daq_error
     @log.log_this()
     def read_analog_in(self):
         """Reads from analog input channel that has a task handler."""
@@ -91,7 +94,7 @@ class DAQAnalogIn(object):
                                  pydaq.byref(read), None)
         return data
 
-    @handle_daq_error
+    @_handle_daq_error
     @log.log_this()
     def end_task(self):
         """Stops DAQ"""

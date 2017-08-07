@@ -14,8 +14,11 @@ Public methods:
     TF = query_threshold
 """
 
+
+#Astrocomb imports
 import daq_objects as do
 import eventlog as log
+
 
 class SimpleDAQ(do.DAQAnalogIn):
     """Holds daq data for a simple analog channel monitor."""

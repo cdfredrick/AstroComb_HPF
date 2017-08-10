@@ -17,24 +17,32 @@ Public methods:
 
 #Astrocomb imports
 import daq_objects as do
-import eventlog as log
+import ac_excepts
 
 
 class SimpleDAQ(do.DAQAnalogIn):
     """Holds daq data for a simple analog channel monitor."""
 
-    def __init__(self, chan_num, threshold=0):
+    def __init__(self, chan_num, error_text, threshold=0):
         self.daq_object = super(SimpleDAQ, self).__init__(chan_num)
         self.threshold = threshold
+        self.error_text = error_text # Says what quantity the channel is
+                                     # monitoring i.e. 'Laser power'
 
     def query_analog(self):
         """Returns analog measurement in volts."""
         return self.daq_object.point_measure()
 
-    def query_threshold(self, warning_text):
-        """Returns True if value exceeds threshold."""
+    def query_over_threshold(self):
+        """Raises error  if value under threshold."""
         volts = self.daq_object.point_measure()
-        if volts >= self.threshold:
-            return True
-        log.log_warn(__name__, 'query_threshold', warning_text)
-        return False
+        if volts < self.threshold:
+            raise ac_excepts.ThresholdError(
+                self.error_text + ' is under threshold.', self.query_threshold)
+
+    def query_under_threshold(self):
+        """Raises error  if value under threshold."""
+        volts = self.daq_object.point_measure()
+        if volts > self.threshold:
+            raise ac_excepts.ThresholdError(
+                self.error_text + ' is over threshold.', self.query_threshold)

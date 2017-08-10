@@ -18,6 +18,7 @@ Public method:
 #Astrocomb imports
 import eventlog as log
 import daq_objects as do
+import ac_excepts
 
 
 #Constants
@@ -41,34 +42,36 @@ class ThermoCube(do.DAQAnalogIn):
         sys = self.sys_alarm.point_measure()
         attempts = 0
         while True:
-            if temp > 4.3:
-                alarm1 = False
+            retry = False
+            if temp >= 4.3:
+                pass #In range, do nothing
             elif temp < 0.7:
-                alarm1 = True
-                log.log_warn(__name__, 'check_alarms',
-                             'Thermocube temperature is out of range!', 50)
+                raise ac_excepts.TempError(
+                    'Thermocube temperature is out of range',
+                    self.query_alarms)
             else:
-                alarm1 = 'Retry'
-                log.log_warn(__name__, 'check_alarms',
-                             'Thermocube temp alarm outside of voltage range!')
+                retry = True
+                channel = 'temp'
+                log.log_warn(__name__, 'query_alarms',
+                             'Thermocube temp alarm out of voltage range')
 
-            if sys > 4.3:
-                alarm2 = False
+            if sys >= 4.3:
+                pass #In range, do nothing
             elif sys < 0.7:
-                alarm2 = True
-                log.log_warn(__name__, 'check_alarms',
-                             'Thermocube system error!', 50)
+                raise ac_excepts.TempError('Thermocube system error!',
+                                           self.query_alarms)
             else:
-                alarm2 = 'Retry'
-                log.log_warn(__name__, 'check_alarms',
-                             'Thermocube system alarm outside of voltage range!')
+                retry = True
+                channel = 'system'
+                log.log_warn(__name__, 'query_alarms',
+                             'Thermocube system alarm out of voltage range')
 
-            if alarm1 is True or alarm2 is True:
-                return True
-            if alarm1 != 'Retry' and alarm2 != 'Retry':
-                return False
-            if attempts == 3:
-                return True
+            if not retry: #retries if either signal is an intermediate value
+                return
+            if attempts == 3: #only 3 retries allowed, before throws error
+                raise ac_excepts.TempError(
+                    'Thermocube %s alarm is out of voltage range!' % channel,
+                    self.query_alarms)
             attempts += 1
 
 

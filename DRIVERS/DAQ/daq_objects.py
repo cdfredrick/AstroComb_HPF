@@ -27,10 +27,11 @@ import PyDAQmx as pydaq
 
 #Astrocomb imports
 import eventlog as log
+import ac_excepts
 
 #Private functions
 def _handle_daq_error(func):
-    """To be used as a function decorator that handles daq errors."""
+    """A function decorator that handles daq errors."""
     @wraps(func)
     def attempt_func(self, *args, **kwargs):
         """Wrapped function"""
@@ -39,8 +40,8 @@ def _handle_daq_error(func):
             return result
         except pydaq.DAQError as err:
             log.log_error(func.__module__, func.__name__, err)
-            self.end_task()
-            return None
+            self.end_task() #May be problematic if err raised while ending task
+            raise ac_excepts.DAQError('See previous error', _handle_daq_error)
     return attempt_func
 
 

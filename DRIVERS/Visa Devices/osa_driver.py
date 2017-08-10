@@ -49,6 +49,7 @@ import matplotlib.pyplot as plt
 #Astrocomb imports
 import visa_objects as vo
 import eventlog as log
+import ac_excepts
 
 
 #Constants
@@ -104,9 +105,8 @@ class OSA(vo.Visa):
         super(OSA, self).__init__(res_name, res_address)
         self.res = super(OSA, self).open_resource()
         if self.res is None:
-            log.log_warn(__name__, '__init__',
-                         'Could not create OSA instrument!')
-            return
+            raise ac_excepts.VirtualDeviceError(
+                'Could not create OSA instrument!', self.__init__)
         self.__set_command_format()
         self.file_string = _find_directory()
         self.file_count = _check_file_path(self.file_string, 0)

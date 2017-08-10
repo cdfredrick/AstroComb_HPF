@@ -54,6 +54,7 @@ Set TEC:
 #Astrocomb imports
 import visa_objects as vo
 import eventlog as log
+import ac_excepts
 
 
 #Constants
@@ -68,9 +69,8 @@ class ILX(vo.Visa):
     def __init__(self, res_name=ILX_NAME, res_address=ILX_ADDRESS):
         self.res = super(ILX, self).__init__(res_name, res_address)
         if self.res is None:
-            log.log_warn(__name__, '__init__',
-                         'Could not create ILX instrument!')
-            return
+            raise ac_excepts.VirtualDeviceError(
+                'Could not create ILX instrument!', self.__init__)
         self.las_chan = 0
         self.tec_chan = 0
         self.las_chan_switch(1)
@@ -158,8 +158,8 @@ class LDControl(ILX):
         if self.query_tec_on():
             self._las_set('ONLY:OUT %d' % vo.tf_toggle(las_on))
         else:
-            log.log_warn(__name__, 'enable_las',
-                         "Can't turn laser on if TEC is off!")
+            raise ac_excepts.EnableError("Can't turn laser on if TEC is off!",
+                                         self.enable_las)
     @log.log_this(20)
     def enable_tec(self, tec_on):
         """Turns the TEC on if tec_on is True."""

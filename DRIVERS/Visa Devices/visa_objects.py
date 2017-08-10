@@ -36,6 +36,7 @@ import pyvisa
 
 #Astrocomb imports
 import eventlog as log
+import ac_excepts
 
 
 #Constants
@@ -104,10 +105,5 @@ class Visa(object):
                 self.connected = True
                 break
         if self.connected is False:
-            self.disconnected()
-
-    @log.log_this(30)
-    def disconnected(self):
-        """Announces connection error."""
-        print '%s has disconnected!' % self.name
-        #Do thing that depends on device
+            raise ac_excepts.ConnectionError('No connection!',
+                                             self.check_connection)

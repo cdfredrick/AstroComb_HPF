@@ -8,29 +8,21 @@ Public class:
     StageOne(object)
 
 Public methods:
-    TF = stage_one_startup_sequence()
-    TF = query_lock_status()
+    stage_one_startup_sequence()
+    stage_one_soft_shutdown_sequence()
+    stage_one_hard_shutdown_sequence()
+    query_lock_status()
 """
 #pylint: disable=R0913
-##All the arguments are hard coded, don't care that there's a lot of them
+##All buf first argument is hard coded in this file,
+## don't care that there's a lot of arguments
 
+#Python Imports
+import time
 
 #Astrocomb imports
-import ilx_driver
-import thermocube_driver
-import simple_daq_driver
 import eventlog as log
 import ac_excepts
-
-
-#Constants
-RIO_CARD_NUM = 0 #NEED correct ILX card number of rio laser!!!
-PREAMP_CARD_NUM = 1 #NEED correct ILX card number of preamp!!!
-RIO_PD_CHAN = 3 #NEED Correct analog in channel of monitor photodiode!!!
-RIO_PD_THRESHOLD = 0.5 #NEED correct threshold value in volts!!!
-DC_BIAS_CHAN = 4 #NEED Correct analog in channel of EO Comb DC BIAS!!!
-DC_BIAS_THRESHOLD = 0.5 #NEED correct threshold value in volts!!!
-
 
 def rio_locked_to_connors_laser():
     """A placeholder function, remove later."""
@@ -39,22 +31,15 @@ def rio_locked_to_connors_laser():
 
 class StageOne(object):
     """Holds all of the first stage device objects and startup methods."""
-    def __init__(self, rio_card=RIO_CARD_NUM, preamp_card=PREAMP_CARD_NUM,
-                 pd_chan=RIO_PD_CHAN, pd_threshold=RIO_PD_THRESHOLD,
-                 dc_chan=DC_BIAS_CHAN, dc_threshold=DC_BIAS_THRESHOLD):
+    def __init__(self, s1_dict):
         """Creates python objects for all stage 1 devices."""
-        #NEED correct address put into ilx_driver!!!
-        self.ilx = ilx_driver.ILX()
-        self.rio_laser = ilx_driver.LDControl(self.ilx, rio_card)
-        self.preamp = ilx_driver.LDControl(self.ilx, preamp_card)
-        self.rio_pd_monitor = simple_daq_driver.SimpleDAQ(pd_chan,
-                                                          'Rio laser power',
-                                                          pd_threshold)
-        #NEED correct analog in channels in thermocube_driver!!!
-        self.thermocube = thermocube_driver.ThermoCube()
-        self.eo_comb_dc_bias = simple_daq_driver.SimpleDAQ(dc_chan,
-                                                           'EO Comb voltage',
-                                                           dc_threshold)
+        self.yokogawa = s1_dict['yokogawa']
+        self.ilx = s1_dict['ilx']
+        self.rio_laser = s1_dict['rio_laser']
+        self.preamp = s1_dict['preamp']
+        self.rio_pd_monitor = s1_dict['rio_pd_monitor']
+        self.thermocube = s1_dict['thermocube']
+        self.eo_comb_dc_bias = s1_dict['eo_comb_dc_bias']
 
     @log.log_this()
     def stage_one_startup_sequence(self):
@@ -67,46 +52,57 @@ class StageOne(object):
             self.thermocube.query_alarms()
             self.eo_comb_dc_bias.query_under_threshold()
             #Turn RF Oscillator on
+            self.yokogawa.manual_spectrum_verify()
+            log.log_warn(__name__, 'stage_one_startup_sequence', 'Stage one\
+                         start up completed!', 20)
         except ac_excepts.AstroCombExceptions as err:
             log.log_error(err.method.__module__, err.method.__name__, err)
             raise ac_excepts.StartupError('Stage 1 start up failed',
                                           self.stage_one_startup_sequence)
 
     @log.log_this()
-    def stage_one_soft_shutdown_sequence(self):
+    def stage_one_soft_shutdown(self):
         """Turns off all lasers only, not TECs."""
         try:
             #Turn RF Oscillator off
             self._soft_disable_ilx_device(self.preamp)
             self._soft_disable_ilx_device(self.rio_laser)
+            log.log_warn(__name__, 'stage_one_soft_shutdown', 'Stage\
+                         one soft shutdown completed!', 20)
         except ac_excepts.AstroCombExceptions as err:
             log.log_error(err.method.__module__, err.method.__name__, err)
             raise ac_excepts.StartupError('Stage 1 soft shutdown failed',
-                                          self.stage_one_soft_shutdown_sequence)
+                                          self.stage_one_soft_shutdown)
 
     @log.log_this()
-    def stage_one_hard_shutdown_sequence(self):
-        """Turns off all lasers only, not TECs."""
+    def stage_one_hard_shutdown(self):
+        """Turns off all lasers and TECs, close visa devices."""
         try:
             #Turn RF Oscillator off
             self._hard_disable_ilx_device(self.preamp)
             self._hard_disable_ilx_device(self.rio_laser)
+            self.ilx.close()
+            self.yokogawa.close()
+            log.log_warn(__name__, 'stage_one_hard_shutdown', 'Stage\
+                         one hard shutdown completed!', 20)
         except ac_excepts.AstroCombExceptions as err:
             log.log_error(err.method.__module__, err.method.__name__, err)
             raise ac_excepts.StartupError('Stage 1 hard shutdown failed',
-                                          self.stage_one_soft_shutdown_sequence)
+                                          self.stage_one_hard_shutdown)
 
     @log.log_this()
     def _enable_ilx_device(self, device):
         """Checks that tec is on and then turns on the laser."""
         if not device.query_tec_on():
             device.enable_tec(True)
+            time.sleep(1)
             if not device.query_tec_on():
                 raise ac_excepts.EnableError(
                     '%s TEC will not turn on!' % device.__name__,
                     self._enable_ilx_device)
 
         device.enable_las(True)
+        time.sleep(1)
         if not device.query_las_on():
             raise ac_excepts.EnableError(
                 '%s laser will not turn on!' %device.__name__,

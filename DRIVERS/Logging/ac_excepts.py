@@ -39,6 +39,10 @@ class ConnectionError(AstroCombExceptions):
     """Raise when a device cannot be connected to/loses connection."""
 
 
+class CurrentError(AstroCombExceptions):
+    """Raise when a device is not within correct current range."""
+
+
 class DAQError(AstroCombExceptions):
     """Raise after a PyDAQmx error is caught to stop current process."""
 

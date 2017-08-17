@@ -4,13 +4,16 @@ Created on Fri Aug 11 16:09:38 2017
 
 @author: Wesley Brand
 
+Module: ac_stage_two
+
 Public class:
     StageTwo(object)
 
 Public methods:
-    stage_two_startup_sequence()
-    #stage_two_soft_shutdown_sequence()
-    #stage_two_hard_shutdown_sequence()
+    stage_two_warm_up()
+    stage_two_start_up()
+    stage_two_soft_shutdown()
+    stage_two_hard_shutdown()
 """
 
 #Python imports
@@ -27,9 +30,20 @@ class StageTwo(object):
     def __init__(self, s2_dict):
         self.cybel = s2_dict['cybel']
         self.yokogawa = s2_dict['yokogawa']
-        self.tem_controller = s2_dict['tem_controller']
+        self.tem_controller1 = s2_dict['tem_controller1']
 
-    def stage_two_startup_sequence(self):
+    @log.log_this(20)
+    def stage_two_warm_up(self):
+        """Turns on the TECs."""
+        try:
+            self._cybel_tec_start()
+        except ac_excepts.AstroCombExceptions as err:
+            log.log_error(err.method.__module__, err.method.__name__, err)
+            raise ac_excepts.StartupError('Stage 2 warm up failed',
+                                          self.stage_two_warm_up)
+
+    @log.log_this(20)
+    def stage_two_start_up(self):
         """Runs through start up commands."""
         try:
             self._cybel_tec_start()
@@ -38,38 +52,32 @@ class StageTwo(object):
             self._verify_coupling()
             self._ramp_cybel_power()
             self.yokogawa.manual_spectrum_verify()
-            log.log_warn(__name__, 'stage_two_startup_sequence', 'Stage two\
-                         start up completed!', 20)
         except:
             raise ac_excepts.StartupError('Stage 2 start up failed',
-                                          self.stage_two_startup_sequence)
+                                          self.stage_two_start_up)
 
-    @log.log_this()
+    @log.log_this(20)
     def stage_two_soft_shutdown(self):
         """Turns off cybel pumps, not TECs."""
         try:
             #Turn off TEM fiber controller
             self._soft_disable_cybel_pumps()
-            log.log_warn(__name__, 'stage_two_soft_shutdown', 'Stage\
-                         two soft shutdown completed!', 20)
         except ac_excepts.AstroCombExceptions as err:
             log.log_error(err.method.__module__, err.method.__name__, err)
-            raise ac_excepts.StartupError('Stage 2 soft shutdown failed',
-                                          self.stage_two_soft_shutdown)
+            raise ac_excepts.ShutdownError('Stage 2 soft shutdown failed',
+                                           self.stage_two_soft_shutdown)
 
-    @log.log_this()
+    @log.log_this(20)
     def stage_two_hard_shutdown(self):
-        """Turns off cybel pumps including TECs, closes cybel virtual object."""
+        """Turns off all pumps and TECs, closes cybel virtual object."""
         try:
             #Turn off TEM fiber controller
             self._hard_disable_cybel_pumps()
             self.cybel.close()
-            log.log_warn(__name__, 'stage_two_hard_shutdown', 'Stage\
-                         two hard shutdown completed!', 20)
         except ac_excepts.AstroCombExceptions as err:
             log.log_error(err.method.__module__, err.method.__name__, err)
-            raise ac_excepts.StartupError('Stage 2 hard shutdown failed',
-                                          self.stage_two_hard_shutdown)
+            raise ac_excepts.ShutdownError('Stage 2 hard shutdown failed',
+                                           self.stage_two_hard_shutdown)
 
     @log.log_this()
     def _cybel_tec_start(self):
@@ -139,6 +147,7 @@ class StageTwo(object):
                 raise ac_excepts.TempError(
                     'Cybel temperature not within error range!',
                     self._ramp_cybel_power)
+            self._verify_coupling()
 
     @log.log_this()
     def _soft_disable_cybel_pumps(self):

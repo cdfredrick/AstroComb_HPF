@@ -13,7 +13,7 @@ Public methods:
     stage_four_warm_up()
     stage_four_start_up()
     stage_four_soft_shutdown()
-    stage_four_hard_shutdown()
+    stage_four_full_shutdown()
 """
 
 #Astrocomb imports
@@ -61,12 +61,12 @@ class StageFour(object):
                                            self.stage_four_soft_shutdown)
 
     @log.log_this(20)
-    def stage_four_hard_shutdown(self):
+    def stage_four_full_shutdown(self):
         """Turns off all pumps and TECs, closes cybel virtual object."""
         try:
             #Turn off pulse shaper including TECs if any
             pass
         except ac_excepts.AstroCombExceptions as err:
             log.log_error(err.method.__module__, err.method.__name__, err)
-            raise ac_excepts.ShutdownError('Stage 4 hard shutdown failed',
-                                           self.stage_four_hard_shutdown)
+            raise ac_excepts.ShutdownError('Stage 4 full shutdown failed',
+                                           self.stage_four_full_shutdown)

@@ -11,7 +11,7 @@ Public methods:
     comb_warm_up()
     comb_start_up()
     comb_soft_shutdown()
-    comb_hard_shutdown()
+    comb_full_shutdown()
 """
 #pylint: disable=W0102
 ##As long as the constants are maintained, making them defaults of __init__
@@ -78,7 +78,12 @@ class AstroComb(object):
 
     def __init__(self, s1_names=S1_NAMES, s2_names=S2_NAMES, s3_names=S3_NAMES,
                  s4_names=S4_NAMES):
+
         log.start_logging()
+
+        self.temp_control_on = False
+        self.comb_light_on = False
+        
         try:
             self.device_dict = initiate_virtual_devices.open_all()
             #Keys list: 'yokogawa', 'ilx', 'rio_laser', 'preamp', 'ilx_2',
@@ -113,60 +118,74 @@ class AstroComb(object):
     def comb_warm_up(self):
         """Starts all of the TECs, may be run before startup, but not required."""
         try:
-            self.stage1.stage_one_warm_up()
-            self.stage2.stage_two_warm_up()
-            self.stage3.stage_three_warm_up()
-            self.stage4.stage_four_warm_up()
+            if not self.temp_control_on:
+                self.stage1.stage_one_warm_up()
+                self.stage2.stage_two_warm_up()
+                self.stage3.stage_three_warm_up()
+                self.stage4.stage_four_warm_up()
+                self.device_dict['thermocube'].query_alarms()
+                self.temp_control_on = True
         except ac_excepts.StartupError as err:
             log.log_error(err.method.__module__, err.method.__name__, err)
 
-    def comb_start_up(self):
-        """Starts all of the devices in the comb, while checks if working."""
+    def comb_start_up(self, start=1, stop=4):
+        """Starts all of the devices in specified stages."""
+        if not start in range(1, 4) or not stop in range(1,4) or start > stop:
+            raise ValueError('Invalid choice of stages to turn on.')
+
+        if self.comb_light_on:
+            log.log_warn(__name__, 'comb_start_up',
+                         'Comb light already on', 20)
+            return
+
         try:
-            self.stage1.stage_one_start_up()
-            self.stage2.stage_two_start_up()
-            self.stage3.stage_three_start_up()
-            self.stage4.stage_four_start_up()
+            if start == 1:
+                self.stage1.stage_one_start_up()
+            if start <= 2 and stop >= 2:
+                self.stage2.stage_two_start_up()
+            if start <= 3 and stop >= 3:
+                self.stage3.stage_three_start_up()
+            if start <= 4 and stop == 4:
+                self.stage4.stage_four_start_up()
+                self.temp_control_on = True
+                self.comb_light_on = True
+
         except ac_excepts.StartupError as err:
             log.log_error(err.method.__module__, err.method.__name__, err)
-            #Don't try anything else
+            raise ac_excepts.StartupError('Comb start up failed!',
+                                           self.comb_start_up)
 
-    def comb_soft_shutdown(self, stop):
-        """Soft shutdown on stages 4 to 'stop'.
-
-        i.e. stop=4 turns off stage 4 or if stop=2 turns off stages 4, 3,
-            and 2."""
-        if not stop in range(1, 4):
+    def comb_soft_shutdown(self, start=4, stop=1):
+        """Turns off lasers in stages start to stop, start=stop ok."""
+        if not start in range(1, 4) or not stop in range(1, 4) or start < stop:
             raise ValueError('Invalid choice of stages to turn off.')
+
         try:
-            self.stage4.stage_four_soft_shutdown()
-            if stop <= 3:
+            if start == 4:
+                self.stage4.stage_four_soft_shutdown()
+            if start >= 3 and stop <= 3:
                 self.stage3.stage_three_soft_shutdown()
-            if stop <= 2:
+            if start >= 2 and stop <= 2:
                 self.stage2.stage_two_soft_shutdown()
-            if stop == 1:
+            if start >= 1 and stop == 1:
                 self.stage1.stage_one_soft_shutdown()
+            self.comb_light_on = False
         except ac_excepts.ShutdownError as err:
             log.log_error(err.method.__module__, err.method.__name__, err)
             raise ac_excepts.ShutdownError('Soft shutdown failed!',
                                            self.comb_soft_shutdown)
 
-    def comb_hard_shutdown(self, stop):
-        """Hard shutdown on stages 4 to 'stop'.
-
-        i.e. stop=4 turns off stage 4 or if stop=2 turns off stages 4, 3,
-            and 2."""
-        if not stop in range(1, 4):
-            raise ValueError('Invalid choice of stages to turn off.')
+    def comb_full_shutdown(self):
+        """Shuts down everything, closes connections, ends program."""
         try:
-            self.stage4.stage_four_hard_shutdown()
-            if stop <= 3:
-                self.stage3.stage_three_hard_shutdown()
-            if stop <= 2:
-                self.stage2.stage_two_hard_shutdown()
-            if stop == 1:
-                self.stage1.stage_one_hard_shutdown()
+            self.stage4.stage_four_full_shutdown()
+            self.stage3.stage_three_full_shutdown()
+            self.stage2.stage_two_full_shutdown()
+            self.stage1.stage_one_full_shutdown()
+            quit()
+
         except ac_excepts.ShutdownError as err:
             log.log_error(err.method.__module__, err.method.__name__, err)
-            raise ac_excepts.ShutdownError('Hard shutdown failed!',
-                                           self.comb_hard_shutdown)
+            raise ac_excepts.ShutdownError('full shutdown failed!',
+                                           self.comb_full_shutdown)
+

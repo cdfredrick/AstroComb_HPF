@@ -11,7 +11,7 @@ Public methods:
     stage_four_warm_up()
     stage_one_start_up()
     stage_one_soft_shutdown()
-    stage_one_hard_shutdown()
+    stage_one_full_shutdown()
 """
 
 #Python Imports
@@ -81,18 +81,18 @@ class StageOne(object):
                                            self.stage_one_soft_shutdown)
 
     @log.log_this(20)
-    def stage_one_hard_shutdown(self):
+    def stage_one_full_shutdown(self):
         """Turns off all lasers and TECs, close visa devices."""
         try:
             #Turn RF Oscillator off
-            self._hard_disable_ilx_device(self.preamp)
-            self._hard_disable_ilx_device(self.rio_laser)
+            self._full_disable_ilx_device(self.preamp)
+            self._full_disable_ilx_device(self.rio_laser)
             self.ilx.close()
             self.yokogawa.close()
         except ac_excepts.AstroCombExceptions as err:
             log.log_error(err.method.__module__, err.method.__name__, err)
-            raise ac_excepts.ShutdownError('Stage 1 hard shutdown failed',
-                                           self.stage_one_hard_shutdown)
+            raise ac_excepts.ShutdownError('Stage 1 full shutdown failed',
+                                           self.stage_one_full_shutdown)
 
     @log.log_this()
     def _enable_ilx_tec(self, device):
@@ -125,14 +125,14 @@ class StageOne(object):
                 self._soft_disable_ilx_device)
 
     @log.log_this()
-    def _hard_disable_ilx_device(self, device):
+    def _full_disable_ilx_device(self, device):
         """Turns off device laser and TEC."""
         self._soft_disable_ilx_device(device)
         device.enable_tec(False)
         if device.query_tec_on():
             raise ac_excepts.EnableError(
                 '%s TEC will not turn off!' % device.__name__,
-                self._hard_disable_ilx_device)
+                self._full_disable_ilx_device)
 
     @log.log_this()
     def _query_lock_status(self):

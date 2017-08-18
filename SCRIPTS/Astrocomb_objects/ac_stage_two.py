@@ -13,7 +13,7 @@ Public methods:
     stage_two_warm_up()
     stage_two_start_up()
     stage_two_soft_shutdown()
-    stage_two_hard_shutdown()
+    stage_two_full_shutdown()
 """
 
 #Python imports
@@ -36,7 +36,7 @@ class StageTwo(object):
     def stage_two_warm_up(self):
         """Turns on the TECs."""
         try:
-            self._cybel_tec_start()
+            self._cybel_tec_start(False)
         except ac_excepts.AstroCombExceptions as err:
             log.log_error(err.method.__module__, err.method.__name__, err)
             raise ac_excepts.StartupError('Stage 2 warm up failed',
@@ -68,19 +68,19 @@ class StageTwo(object):
                                            self.stage_two_soft_shutdown)
 
     @log.log_this(20)
-    def stage_two_hard_shutdown(self):
+    def stage_two_full_shutdown(self):
         """Turns off all pumps and TECs, closes cybel virtual object."""
         try:
             #Turn off TEM fiber controller
-            self._hard_disable_cybel_pumps()
+            self._full_disable_cybel_pumps()
             self.cybel.close()
         except ac_excepts.AstroCombExceptions as err:
             log.log_error(err.method.__module__, err.method.__name__, err)
-            raise ac_excepts.ShutdownError('Stage 2 hard shutdown failed',
-                                           self.stage_two_hard_shutdown)
+            raise ac_excepts.ShutdownError('Stage 2 full shutdown failed',
+                                           self.stage_two_full_shutdown)
 
     @log.log_this()
-    def _cybel_tec_start(self):
+    def _cybel_tec_start(self, force_temp_in_error_range=True):
         """Starts and checks the Cybel TECs."""
         for i in [2, 3]:
             if not self.cybel.query_tec_status(i):
@@ -91,7 +91,7 @@ class StageTwo(object):
                         'Cybel TEC %s did not turn on!' % i,
                         self._cybel_tec_start)
         time_len = 20
-        while True:
+        while force_temp_in_error_range: #while is effectively an if here
             time.sleep(time_len)
             if self.cybel.query_temp_error == (True, True):
                 break
@@ -168,7 +168,7 @@ class StageTwo(object):
                     self._soft_disable_cybel_pumps)
 
     @log.log_this()
-    def _hard_disable_cybel_pumps(self):
+    def _full_disable_cybel_pumps(self):
         """Turns off pumps completely including TECs."""
         self._soft_disable_cybel_pumps()
         for i in [2, 3]:
@@ -177,4 +177,4 @@ class StageTwo(object):
             if self.cybel.query_tec_status(i):
                 raise ac_excepts.EnableError(
                     'Cybel TEC %s did not turn off!' % i,
-                    self._hard_disable_cybel_pumps)
+                    self._full_disable_cybel_pumps)

@@ -13,7 +13,7 @@ Public methods:
     stage_three_warm_up()
     stage_three_start_up()
     stage_three_soft_shutdown()
-    stage_three_hard_shutdown()
+    stage_three_full_shutdown()
 """
 
 #Astrocomb imports
@@ -45,8 +45,9 @@ class StageThree(object):
     def stage_three_start_up(self):
         """Runs through start up commands."""
         try:
-            #Turn on Finisar
-            #Check CW power
+            self.finisar.enable_waveshaper()
+            self.finisar.set_waveshape() #NEED VALUES for amp, phase, port, dim
+            #Check CW power?
             #Turn on NuFern amp TECs
             #Turn on NuFern amp pumps
             #Turn on TEM controller2
@@ -64,7 +65,6 @@ class StageThree(object):
             #Turn NuFern pump current to zero
             #Turn off NuFern pumps
             #Turn off TEM controller 2
-            #Turn off Finisar?
             pass
         except ac_excepts.AstroCombExceptions as err:
             log.log_error(err.method.__module__, err.method.__name__, err)
@@ -72,19 +72,18 @@ class StageThree(object):
                                            self.stage_three_soft_shutdown)
 
     @log.log_this(20)
-    def stage_three_hard_shutdown(self):
+    def stage_three_full_shutdown(self):
         """Turns off all pumps and TECs, closes cybel virtual object."""
         try:
             #Turn NuFern pump current to zero
             #Turn off NuFern pumps
             #Turn off TEM controller 2
             #Turn off NuFern TECs
-            #Turn off Finisar
-            pass
+            self.finisar.disable_waveshaper()
         except ac_excepts.AstroCombExceptions as err:
             log.log_error(err.method.__module__, err.method.__name__, err)
-            raise ac_excepts.ShutdownError('Stage 3 hard shutdown failed',
-                                           self.stage_three_hard_shutdown)
+            raise ac_excepts.ShutdownError('Stage 3 full shutdown failed',
+                                           self.stage_three_full_shutdown)
 
     @log.log_this()
     def _verify_coupling(self):

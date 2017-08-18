@@ -24,18 +24,22 @@ Public functions:
 
 #Python imports
 import logging
+import logging.config
 from functools import wraps
 
 
+#Constants
+CONFIG_FILE_NAME = 'log_config.conf'
+
 #Public functions
-def start_logging():
+def start_logging(config_file_name=CONFIG_FILE_NAME):
     """Must be called by external module to begin logging.
 
     logs to astroComb.log
-    see logging.conf for format details"""
-    logging.config.fileConfig('logging.conf')
+    see log_config.conf for format details"""
+    logging.config.fileConfig(config_file_name)
     # If you get a "cannot find formatters section" error include
-    #   the full file path for logging.conf, python is actually
+    #   the full file path for log_config.conf, python is actually
     #   not finding the file itself
     logger = logging.getLogger('astroComb')
     logger.info('Logging started!')

@@ -9,9 +9,11 @@ Public classes:
 
     Subclasses:
         ConnectionError
+        CurrentError
         DAQError
         EnableError
         LaserLockError
+        ShutdownError
         StartupError
         TempError
         ThresholdError
@@ -53,6 +55,10 @@ class EnableError(AstroCombExceptions):
 
 class LaserLockError(AstroCombExceptions):
     """Raise if Rio laser not locked."""
+
+
+class ShutdownError(AstroCombExceptions):
+    """Raise when a startup sequence cannot be completed."""
 
 
 class StartupError(AstroCombExceptions):

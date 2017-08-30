@@ -41,6 +41,10 @@ class ConnectionError(AstroCombExceptions):
     """Raise when a device cannot be connected to/loses connection."""
 
 
+class CouplingError(AstroCombExceptions):
+    """Raise when optical coupling is not occuring."""
+    
+
 class CurrentError(AstroCombExceptions):
     """Raise when a device is not within correct current range."""
 

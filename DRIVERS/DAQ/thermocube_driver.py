@@ -10,7 +10,7 @@ Public class:
     ThermoCube(daq_object.DAQAnalogIn)
 
 Public method:
-    TF = query_alarms()
+    query_alarms() #Raise error if either alarm on, otherwise nothing
 
 """
 
@@ -73,34 +73,3 @@ class ThermoCube(do.DAQAnalogIn):
                     'Thermocube %s alarm is out of voltage range!' % channel,
                     self.query_alarms)
             attempts += 1
-
-
-#Old code
-#def data_loop(daq1, daq2, loops):
-#    """Takes some data from the DAQ"""
-#    tempdata = []
-#    systemdata = []
-#    for i in np.arange(loops):
-#        tempdata.append(point_measure(daq1))
-#        systemdata.append(point_measure(daq2))
-#        if tempdata[i] > 4.3:
-#            print 'Temp Normal'
-#        elif tempdata[i] < 0.7:
-#            print 'Temp Alarm!'
-#        else:
-#            print 'Temp Alert'
-#        if systemdata[i] > 4.3:
-#            print 'System Normal'
-#        elif systemdata[i] < 0.7:
-#            print 'System Alarm!'
-#        else:
-#            print 'System Alert'
-#    plt.plot(systemdata)
-#    plt.show()
-#    plt.plot(tempdata)
-#
-#log.start_logging()
-#
-#TEMPALARM = daq.DAQ(0)
-#SYSTEMALARM = daq.DAQ(1)
-#data_loop(TEMPALARM, SYSTEMALARM, 100)

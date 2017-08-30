@@ -11,7 +11,8 @@ Public class:
 
 Public methods:
     float = query_analog #Volts
-    TF = query_threshold
+    query_over_threshold() #Raise error if not, otherwise nothing
+    query_under_threshold() #Raise error if not, otherwise nothing
 """
 
 
@@ -28,6 +29,8 @@ class SimpleDAQ(do.DAQAnalogIn):
         self.threshold = threshold
         self.error_text = error_text # Says what quantity the channel is
                                      # monitoring i.e. 'Laser power'
+
+#Query methods
 
     def query_analog(self):
         """Returns analog measurement in volts."""

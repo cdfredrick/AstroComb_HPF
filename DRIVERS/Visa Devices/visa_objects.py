@@ -73,8 +73,7 @@ class Visa(object):
     """Defines the basic visa operations for all visa controlled devices"""
 
     @log.log_this()
-    def __init__(self, res_name, res_address):
-        self.name = res_name
+    def __init__(self, res_address):
         self.address = res_address
         self.connected = None
 

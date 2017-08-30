@@ -5,7 +5,6 @@ Created on Tue Jun 20 07:26:32 2017
 @authors: AJ Metcalf and Wesley Brand
 
 Module: osa_driver
-    import osa_driver as yok
 
 Requires:
     eventlog.py
@@ -35,6 +34,10 @@ with Public Methods:
 
     set_sweep_parameters(center_wl=1064,
                          span_wl=200, res_wl=2, sensitivity=1) #nm
+    
+    Manual:
+    
+    manual_spectrum_verify()
 
 """
 
@@ -53,8 +56,7 @@ import ac_excepts
 
 
 #Constants
-OSA_NAME = 'OSA'
-OSA_ADDRESS = u'GPIB0::28::INSTR'
+OSA_ADDRESS = u'GPIB0::28::INSTR' #Make sure I'm right
 EXT = '.txt'
 
 
@@ -101,8 +103,8 @@ class OSA(vo.Visa):
 #General Methods
 
     @log.log_this(20)
-    def __init__(self, res_name, res_address):
-        super(OSA, self).__init__(res_name, res_address)
+    def __init__(self, res_address=OSA_ADDRESS):
+        super(OSA, self).__init__(res_address)
         self.res = super(OSA, self).open_resource()
         if self.res is None:
             raise ac_excepts.VirtualDeviceError(
@@ -172,13 +174,8 @@ class OSA(vo.Visa):
         x_trace = self.res.query(':TRAC:DATA:X? TRA')
         wavelengths = np.fromstring(x_trace, sep=',')*10.**9
         powers = np.fromstring(y_trace, sep=',')
-        #lambdas = lambdas[1:]
-        #levels = levels[1:]
         data = np.array([wavelengths, powers]).T
         return data
-        #startWL = float(osa.query("STAWL?")[0:-2])
-        #stopWL  = float(osa.query("STPWL?")[0:-2])
-        #self.lambdas = np.linspace(startWL,stopWL,nPoints)
 
 #Set Methods
 
@@ -198,3 +195,38 @@ class OSA(vo.Visa):
         self.res.write(':SENS:BAND:RES %snm' %res_wl)
         self.res.write(':SENS:SENS %s' %sensitivity)
         return
+
+#Manual control method
+
+    def manual_spectrum_verify(self):
+        """Let's user decide if the comb has the correct spectrum."""
+        self.get_spectrum(graph=True)
+        while True:
+            command = input('Is the spectrum correct? y=yes, s=set sweep \
+                            parameters, r=restore default sweep parameters, \
+                            a=abort')
+            if command == 'y':
+                return
+            elif command == 's':
+                while True:
+                    center_wl = input('Set center wavelength in nm, default \
+                                  is 1064')
+                    span_wl = input('Set sweep span in nm, default is 600')
+                    res_wl = input('Set sweep resolution in nm, default is 2')
+                    sens = input('Set sweep sensitivity (0-6), default is 1')
+                    if center_wl.is_integer() and span_wl.is_integer and\
+                        res_wl.is_integer() and sens.is_integer():
+                            #Might want more coding here to prevent entering 
+                            # bad values
+                        break
+                    else:
+                        print 'Values must be integers!'
+                self.set_sweep_parameters(center_wl, span_wl,
+                                                   res_wl, sens)
+            elif command == 'r':
+                self.set_sweep_parameters()
+            elif command == 'a':
+                raise ac_excepts.StartupError('Aborted spectrum verification!',
+                                              self.manual_spectrum_verify)
+            else:
+                print "Input must be either be 'y', 's', 'r', or 'a'" 

@@ -59,15 +59,14 @@ import ac_excepts
 
 #Constants
 _MARKER = object()  #To check errors in LDControl class inheritance
-ILX_NAME = 'ILX Laser Diode Control Housing'
 ILX_ADDRESS = '' #ADD ME!!!
 
 
 class ILX(vo.Visa):
     """Holds commands for ILX chassis and passes commands for components."""
     @log.log_this()
-    def __init__(self, res_name=ILX_NAME, res_address=ILX_ADDRESS):
-        self.res = super(ILX, self).__init__(res_name, res_address)
+    def __init__(self, res_address=ILX_ADDRESS):
+        self.res = super(ILX, self).__init__(res_address)
         if self.res is None:
             raise ac_excepts.VirtualDeviceError(
                 'Could not create ILX instrument!', self.__init__)
@@ -92,6 +91,10 @@ class ILX(vo.Visa):
             self.res.write('LAS:CHAN %d' % chan_num)
             self.tec_chan = chan_num
 
+    @log.log_this()
+    def close(self):
+        """Ends device session."""
+        self.res.close()
 
 class LDControl(ILX):
     """Holds commands for laser control cards inside ILX.

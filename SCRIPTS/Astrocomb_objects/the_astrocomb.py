@@ -38,10 +38,10 @@ import ac_stage_four
 #Constants
 ##Keys of devices in device dictionary
 S1_NAMES = ['yokogawa', 'ilx', 'rio_laser', 'preamp', 'rio_pd_monitor',
-            'thermocube', 'eo_comb_dc_bias']
-S2_NAMES = ['yokogawa', 'cybel', 'tem_controller1']
-S3_NAMES = ['yokogawa', 'finisar', 'nufern', 'tem_controller2']
-S4_NAMES = ['yokogawa', 'pulse_shaper']
+            'thermocube', 'eo_comb_dc_bias'] #rf_oscillator
+S2_NAMES = ['yokogawa', 'cybel', 'tem_fiberlock1']
+S3_NAMES = ['yokogawa', 'finisar', 'tem_fiberlock2'] #nufern
+S4_NAMES = ['yokogawa'] #pulse_shaper
 
 
 #This function is currently not working, probably due to NIST firewall/proxy
@@ -83,12 +83,12 @@ class AstroComb(object):
 
         self.temp_control_on = False
         self.comb_light_on = False
-        
+
         try:
             self.device_dict = initiate_virtual_devices.open_all()
             #Keys list: 'yokogawa', 'ilx', 'rio_laser', 'preamp', 'ilx_2',
             #    'ilx_3', 'cybel', 'thermocube', 'rio_pd_monitor',
-            #    'eo_comb_dc_bias'
+            #    'eo_comb_dc_bias', 'tem_fiberlock1', 'tem_fiberlock2'
         except ac_excepts.VirtualDeviceError as err:
             log.log_error(err.method.__module__, err.method.__name__, err)
             raise ac_excepts.StartupError('Could not initiate devices!',
@@ -130,7 +130,7 @@ class AstroComb(object):
 
     def comb_start_up(self, start=1, stop=4):
         """Starts all of the devices in specified stages."""
-        if not start in range(1, 4) or not stop in range(1,4) or start > stop:
+        if not start in range(1, 4) or not stop in range(1, 4) or start > stop:
             raise ValueError('Invalid choice of stages to turn on.')
 
         if self.comb_light_on:
@@ -153,7 +153,7 @@ class AstroComb(object):
         except ac_excepts.StartupError as err:
             log.log_error(err.method.__module__, err.method.__name__, err)
             raise ac_excepts.StartupError('Comb start up failed!',
-                                           self.comb_start_up)
+                                          self.comb_start_up)
 
     def comb_soft_shutdown(self, start=4, stop=1):
         """Turns off lasers in stages start to stop, start=stop ok."""
@@ -188,4 +188,3 @@ class AstroComb(object):
             log.log_error(err.method.__module__, err.method.__name__, err)
             raise ac_excepts.ShutdownError('full shutdown failed!',
                                            self.comb_full_shutdown)
-

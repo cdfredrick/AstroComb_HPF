@@ -46,6 +46,7 @@ class FiberLock(vo.Visa):
 
 #Enable Methods
 
+    @vo.handle_timeout
     @log.log_this()
     def enable_lock(self, lock_on=True):
         """Searches for lock position and locks there, or turns off."""
@@ -61,6 +62,7 @@ class FiberLock(vo.Visa):
         if not lock_on:
             self.res.write('ScanM_Mode=0') #Off
 
+    @vo.handle_timeout
     @log.log_this()
     def enable_noise_eater_mode(self, noise_eater_on):
         """Turns on constant intensity mode."""
@@ -76,6 +78,7 @@ class FiberLock(vo.Visa):
 
 #Query methods
 
+    @vo.handle_timeout
     @log.log_this()
     def query_lock_status(self):
         """Checks the intensity and compares to threshold, returns T/F."""

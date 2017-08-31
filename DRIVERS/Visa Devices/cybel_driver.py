@@ -4,8 +4,11 @@ Created on Mon Jun 05 13:54:03 2017
 
 @author: Wesley Brand
 
+-------------------------------
+When merging with the tested version of the driver on the laptop, the main
+things that need to be pulled from the tested version are fixed string slicing
 
-Depends on visa_objects.py
+
 
 
 The functions in this module are all private
@@ -65,10 +68,10 @@ import numpy as np
 #Astrocomb imports
 import visa_objects as vo
 import eventlog as log
+import ac_excepts
 
 
 #Constants
-CYBEL_NAME = 'Cybel Amplifier'
 CYBEL_ADDRESS = '' #ADD ME!!!!
 
 
@@ -77,27 +80,36 @@ def _dict_assign(dictionary, keys, values):
     """Assigns multiple values to dictionary at once."""
     dictionary.update(zip(keys, values))
 
-def _compute_tec_temp(raw_val):
+def _compute_tec_temp(raw_vals):
     """Returns temperature from raw device reading."""
-    return 40.*(raw_val/1638.-1.25)+25.
+    return [40.*(x/1638.-1.25)+25. for x in raw_vals]
 
-def _compute_input_current(raw_val, pccr):
+def _compute_input_current(raw_vals, pccr):
     """Returns pump input current from raw device reading."""
-    return raw_val*pccr/4095000.
+    currents = []
+    for i in np.arange(len(raw_vals)):
+        currents.append(raw_vals[i]*pccr[i]/4095000.)
+    return currents
 
-def _compute_output_current(raw_val, pccw, pump_num):
+def _compute_output_current(raw_vals, pccw):
     """Returns pump output current from raw device reading."""
+    currents = []
     constants_list = [1470, 235, 147]
-    return raw_val*pccw/4095000./constants_list[pump_num-1]
+    for i in np.arange(3):
+        currents.append(raw_vals[i]*pccw[i]/4095000./constants_list[i])
+    return currents
 
-def _compute_pd_power(raw_val, pd_num):
+def _compute_pd_power(raw_vals):
     """Returns photodiode power from raw device reading."""
+    pd_powers = []
     constants_list = [0.202, 3.912]
-    return raw_val/1638.*constants_list[pd_num-1]
+    for i in [0, 1]:
+        pd_powers.append(raw_vals[i]/1638.*constants_list[i])
+    return pd_powers
 
-def _compute_analog_temp(raw_val):
+def _compute_analog_temp(raw_vals):
     """Returns sensor temperature from raw device reading."""
-    return 100.*(raw_val/1638. - 0.5)
+    return [100.*(x/1638. - 0.5) for x in raw_vals]
 
 def _form_temp_command(temp):
     """Makes set temperature into machine-readable format."""
@@ -131,18 +143,17 @@ class Cybel(vo.Visa):
 #General methods
 
     @log.log_this()
-    def __init__(self, res_name, res_address):
-        super(Cybel, self).__init__(res_name, res_address)
+    def __init__(self, res_address=CYBEL_ADDRESS):
+        super(Cybel, self).__init__(res_address)
         self.res = super(Cybel, self).open_resource()
         if self.res is None:
-            log.log_warn(__name__, '__init__',
-                         'Could not create Cybel instrument!')
-            return
+            raise ac_excepts.VirtualDeviceError(
+                'Could not create Cybel instrument!', self.__init__)
         self.res.term_chars = 'CR+LF'
-        self.res.timeout = 3
+        self.res.timeout = 20
         self.res.baud_rate = 57600
         self.res.data_bits = 8
-        self.res.stop_bits = vo.SB_ONE
+        self.res.stop_bits = vo.SB_ONE #One stop bit, requires special object
         self.__disable_echo()
         self.pccr_list = [] #Pump read constants, length 3
         self.query_pump_read_constants()
@@ -151,7 +162,7 @@ class Cybel(vo.Visa):
         self.pcl_list = [] #Pump current limits, length 4 (includes seed)
         self.query_pump_current_limits()
 
-    @log.log_this(20)
+    @log.log_this()
     def close(self):
         """Ends device session."""
         self.res.close()
@@ -194,11 +205,12 @@ class Cybel(vo.Visa):
             tec_num = 'S'
         self.res.write('TEC%d%d' % (tec_num, vo.tf_toggle(tec_on)))
 
-    @vo.handle_timeout
-    @log.log_this()
-    def enable_keep_on(self, keep_on):
-        """Enables keeping laser on when connection ends if True"""
-        self.res.write('KP%d' % vo.tf_toggle(keep_on))
+#    Always produced an error on Cybel instrument
+#    @vo.handle_timeout
+#    @log.log_this()
+#    def enable_keep_on(self, keep_on):
+#        """Enables keeping laser on when connection ends if True"""
+#        self.res.write('KP%d' % vo.tf_toggle(keep_on))
 
 #Query Methods
 
@@ -207,8 +219,8 @@ class Cybel(vo.Visa):
     def query_serial_n_firmware(self):
         """Returns 8 character SN and 4 character ucontroller firmware #."""
         raw_sn_and_fw = self.res.query('CO')
-        serial = raw_sn_and_fw[:8]
-        firmware = raw_sn_and_fw[:10]
+        serial = str(raw_sn_and_fw[0:8])
+        firmware = str(raw_sn_and_fw[9:13])
         return serial, firmware
 
     @vo.handle_timeout
@@ -234,15 +246,17 @@ class Cybel(vo.Visa):
     def query_temp_error(self):
         """Returns True for each TEC within error, False if not."""
         temp_error = self.res.query('FB?')
-        seed_temp = pump1_temp = pump2_temp = pump3_temp = True
-        if temp_error[2] == '0':
-            log.log_warn(__name__, 'query_temp_error',
-                         'Seed temperature outsde error limit!')
-            seed_temp = False
-        if temp_error[3] == '0':
-            log.log_warn(__name__, 'query_temp_error',
-                         'Pump 1 temperature outsde error limit!')
-            pump1_temp = False
+# This model does not have seed or pump 1 lasers installed
+#        seed_temp = pump1_temp = True
+        pump2_temp = pump3_temp = True
+#        if temp_error[2] == '0':
+#            log.log_warn(__name__, 'query_temp_error',
+#                         'Seed temperature outsde error limit!')
+#            seed_temp = False
+#        if temp_error[3] == '0':
+#            log.log_warn(__name__, 'query_temp_error',
+#                         'Pump 1 temperature outsde error limit!')
+#            pump1_temp = False
         if temp_error[4] == '0':
             log.log_warn(__name__, 'query_temp_error',
                          'Pump 2 temperature outsde error limit!')
@@ -251,23 +265,25 @@ class Cybel(vo.Visa):
             log.log_warn(__name__, 'query_temp_error',
                          'Pump 3 temperature outsde error limit!')
             pump3_temp = False
-        return seed_temp, pump1_temp, pump2_temp, pump3_temp
+        return pump2_temp, pump3_temp
 
     @vo.handle_timeout
     @log.log_this()
     def  query_trigger_n_laser_status(self):
         """Returns True's if trigger is correct and laser is emitting."""
         tl_status = self.res.query('TS?')
-        trigger_match = laser_on = True
-        if tl_status[2] == '0':
-            log.log_warn(__name__, 'query_trigger_n_laser_status',
-                         'External trigger does not match requirement!')
-            trigger_match = False
+# This model does not have an external trigger
+#       trigger_match = True 
+        laser_on = True
+#        if tl_status[2] == '0':
+#            log.log_warn(__name__, 'query_trigger_n_laser_status',
+#                         'External trigger does not match requirement!')
+#            trigger_match = False
         if tl_status[3] == '0':
             log.log_warn(__name__, 'query_trigger_n_laser_status',
                          'Laser not emitting!')
             laser_on = False
-        return trigger_match, laser_on
+        return laser_on
 
     @vo.handle_timeout
     @log.log_this()
@@ -287,10 +303,10 @@ class Cybel(vo.Visa):
     def query_pump_read_constants(self):
         """Saves pump current read multiplying factors in Cybel object."""
         raw_constants = self.res.query('PCCR?')
-        start = np.arange(0, 2*5, 5)
+        start = np.arange(0, 2*5+1, 5) #beginning of each value string
         new_pccr_list = []
         for i in start:
-            new_pccr_list.append(float(raw_constants[start[i]:(start[i]+4)]))
+            new_pccr_list.append(float(raw_constants[i:(i+4)]))
         self.pccr_list = new_pccr_list
 
     @vo.handle_timeout
@@ -298,10 +314,8 @@ class Cybel(vo.Visa):
     def query_pump_write_constants(self):
         """Saves pump current write multiplying factors in Cybel object."""
         raw_constants = self.res.query('PCCW?')
-        start = np.arange(0, 2*5, 5)
-        new_pccw_list = []
-        for i in start:
-            new_pccw_list.append(float(raw_constants[start[i]:(start[i]+4)]))
+        start = np.arange(0, 2*5+1, 5) #beginning of each value string
+        new_pccw_list = [float(raw_constants[i:(i+4)]) for i in start]
         self.pccw_list = new_pccw_list
 
     @vo.handle_timeout
@@ -309,12 +323,10 @@ class Cybel(vo.Visa):
     def query_pump_current_limits(self):
         """Saves pump current limits in Cybel object."""
         raw_limits = self.res.query('AOL?')
-        start = np.arange(0, 2*5, 5)
-        new_pcl_list = [2.5]
-        for i in start:
-            raw_val = float(raw_limits[start[i]:(start[i]+4)])
-            pcl = _compute_output_current(raw_val, self.pccw_list[i], i)
-            new_pcl_list.append(pcl)
+        start = np.arange(0, 2*5+1, 5) #beginning of each value string
+        raw_vals = [float(raw_limits[i:(i+4)]) for i in start]
+        new_pcl_list = [2.5] #Seed current limit would be 2.5A, not that it matters
+        new_pcl_list.append(_compute_output_current(raw_vals, self.pccw_list))
         self.pcl_list = new_pcl_list
 
     @vo.handle_timeout
@@ -337,27 +349,27 @@ class Cybel(vo.Visa):
         start = np.arange(0, 16*5, 5)
         for i in start:
             val_list.append(float(analog_raw[start[i]:(start[i]+4)]))
-        #Seed and 3 pump TEC temperatures in Celsius
+       #Seed and 3 pump TEC temperatures in Celsius
         _dict_assign(ai_vals, ('seed_temp', 'pump1_temp', 'pump2_temp',
                                'pump3_temp'),
-                     _compute_tec_temp(val_list[0:3]))
+                     _compute_tec_temp(val_list[0:4]))
         #Pump currents in amps
         _dict_assign(ai_vals, ('pump1_amps', 'pump2_amps', 'pump3_amps'),
-                     _compute_input_current(val_list[4:6],
-                                            self.pccr_list[0:2]))
+                     _compute_input_current(val_list[4:7],
+                                            self.pccr_list))
         #Pumps 1 and 2 photodiode powers in watts
         _dict_assign(ai_vals, ('pump1_pd_power', 'pump2_pd_power'),
-                     _compute_pd_power(val_list[7:8], [1, 2]))
+                     _compute_pd_power(val_list[7:9]))
         #Seed bias voltage
         ai_vals['seed_bias_volts'] = val_list[9]/1638.
         #Analog temperature sensors in celsius
         _dict_assign(ai_vals, ('anlg_temp_sens1', 'anlg_temp_sens2'),
-                     _compute_analog_temp(val_list[10:11]))
+                     _compute_analog_temp(val_list[10:12]))
         #Voltage tests: 5V, 1.8V, and 28V in volts
         #And Monitor photodiodes 1 and 2 in volts
         _dict_assign(ai_vals, ('test_5volt', 'test_1_8volt', 'test_28volt',
                                'monitor_pd1', 'monitor_pd2'),
-                     val_list[12:16]/1638.)
+                     [x/1638. for x in val_list[12:]])
         return ai_vals
 
     @vo.handle_timeout
@@ -373,44 +385,52 @@ class Cybel(vo.Visa):
         analog_raw = self.res.query('AO?')
         val_list = []
         ao_vals = {}
-        start = np.arange(0, 8*5, 5)
+        start = np.arange(0, 8*5+1, 5)
         for i in start:
-            val_list.append(float(analog_raw[start[i]:(start[i]+4)]))
+            val_list.append(float(analog_raw[i:(i+4)]))
         #Seed and 3 pump TEC temperatures in Celsius
         _dict_assign(ao_vals, ('seed_temp', 'pump1_temp', 'pump2_temp',
                                'pump3_temp'),
-                     _compute_tec_temp(val_list[0:3]))
+                     _compute_tec_temp(val_list[0:4]))
         #Seed current in amps
         ao_vals['seed_amps'] = val_list[4]/1638.
-        ao_vals[4] = val_list[4]/1638.
         #Pump currents in amps
         _dict_assign(ao_vals, ('pump1_amps', 'pump2_amps', 'pump3_amps'),
-                     _compute_output_current(val_list[5:7],
-                                             self.pccw_list[0:2],
-                                             np.arange(3)))
+                     _compute_output_current(val_list[5:8],
+                                             self.pccw_list))
         #Seed bias voltage in volts
         ao_vals['seed_bias_volts'] = val_list[8]/1638.
         return ao_vals
 
-    @vo.handle_timeout
-    @log.log_this()
-    def query_trigger_timeout(self):
-        """Returns the minimum trigger value in Hz"""
-        trig_raw = self.res.query('TRTO?')
-        trig_val = float(trig_raw[4:8])
-        trig_freq = 75000./trig_val
-        return trig_freq
-
-    @vo.handle_timeout
-    @log.log_this()
-    def query_pulse_width(self):
-        """Returns pulse width in ns"""
-        pw_raw = self.res.query('PWA?')
-        pw_val = int(pw_raw[3])
-        #          | 0 |  1 |  2 |  3 |  4 |  5 |  6 |  7 |  8 |  9 |
-        pw_table = [2.7, 3.4, 3.8, 3.9, 4.6, 4.9, 5.2, 5.7, 6.8, 7.7]
-        width = pw_table[pw_val]
-        return width
+# This model does not have an external trigger
+#    @vo.handle_timeout
+#    @log.log_this()
+#    def query_trigger_timeout(self):
+#        """Returns the minimum trigger value in Hz"""
+#        trig_raw = self.res.query('TRTO?')
+#        trig_val = float(trig_raw[4:8])
+#        trig_freq = 75000./trig_val
+#        return trig_freq
+#
+#    @vo.handle_timeout
+#    @log.log_this()
+#    def query_pulse_width(self):
+#        """Returns pulse width in ns"""
+#        pw_raw = self.res.query('PWA?')
+#        pw_val = int(pw_raw[3])
+#        #          | 0 |  1 |  2 |  3 |  4 |  5 |  6 |  7 |  8 |  9 |
+#        pw_table = [2.7, 3.4, 3.8, 3.9, 4.6, 4.9, 5.2, 5.7, 6.8, 7.7]
+#        width = pw_table[pw_val]
+#        return width
+#
+#    @vo.handle_timeout
+#    @log.log_this()
+#    def query_pulse_rep_rate(self):
+#        """Returns pulse repetition rate in kHz"""
+#        raw_prr = self.res.query('PR?')
+#        prr_val = float(raw_prr[2:6])
+#        rep_rate = prr_val/75000.+0.5
+#        return rep_rate
 
     @vo.handle_timeout
     @log.log_this()
@@ -418,24 +438,16 @@ class Cybel(vo.Visa):
         """Returns temperature from two digital sensors in Celsius"""
         raw_temps = self.res.query('TEMP?')
         temp1 = float(raw_temps[4:8])/16.
-        temp2 = float(raw_temps[10:14])/16.
+        temp2 = float(raw_temps[9:])/16.
         return temp1, temp2
 
-    @vo.handle_timeout
-    @log.log_this()
-    def query_pulse_rep_rate(self):
-        """Returns pulse repetition rate in kHz"""
-        raw_prr = self.res.query('PR?')
-        prr_val = float(raw_prr[2:6])
-        rep_rate = prr_val/75000.+0.5
-        return rep_rate
-
-    @vo.handle_timeout
-    @log.log_this()
-    def query_keep_on(self):
-        """Returns True if laser is set to 'Keep ON'"""
-        keep_on = int(self.res.query('KP?'))
-        return bool(keep_on)
+# Cannot use keep on
+#    @vo.handle_timeout
+#    @log.log_this()
+#    def query_keep_on(self):
+#        """Returns True if laser is set to 'Keep ON'"""
+#        keep_on = int(self.res.query('KP?'))
+#        return bool(keep_on)
 
     @vo.handle_timeout
     @log.log_this()
@@ -493,7 +505,7 @@ class Cybel(vo.Visa):
     @log.log_this()
     def set_pump_current(self, pump_num, current):
         """
-        !!!! Manual gives units of seed current in volts?!?!
+        ! Manual gives units of seed current in volts?!
 
         pump_num=0 for seed, ={1,2,3} for corresponding pumps,
         sets current in amps"""
@@ -509,38 +521,40 @@ class Cybel(vo.Visa):
         current_str = _form_current_command(pump_num, current, self.pccw_list)
         self.__set_analog_output_values(item_str, current_str)
 
-    @log.log_this()
-    def set_seed_bias_voltage(self, voltage):
-        """Sets the voltage in volts"""
-        item_str = '08'
-        volt_val = int(np.floor(voltage*1638.))
-        if volt_val > 4095 or volt_val < 0:
-            log.log_warn(__name__, 'set_seed_bia_voltage',
-                         'Seed bias voltage to be set is out of bounds!')
-            return
-        volt_str = str(volt_val).zfill(4)
-        self.__set_analog_output_values(item_str, volt_str)
-
-    @vo.handle_timeout
-    @log.log_this()
-    def set_trigger_timeout(self, frequency):
-        """Sets the trigger timeout in Hz"""
-        trig_val = int(np.floor(frequency/75000.))
-        if trig_val < 751 or trig_val > 8190:
-            log.log_warn(__name__, 'set_trigger_timeout',
-                         'Trigger timeout to be set is out of bounds!')
-            return
-        trig_str = str(trig_val).zfill(4)
-        self.res.write('TRTO%s' % trig_str)
-
-    @vo.handle_timeout
-    @log.log_this()
-    def set_pulse_width(self, pw_val):
-        """Sets the pulse width in ns, use table below for correct pw_val
-
-        pw_val =      | 0 |  1 |  2 |  3 |  4 |  5 |  6 |  7 |  8 |  9 |
-        pulse in ns = |2.7| 3.4| 3.8| 3.9| 4.6| 4.9| 5.2| 5.7| 6.8| 7.7|"""
-        self.res.write('PWA%d' % pw_val)
+# This model does not have a seed laser
+#    @log.log_this()
+#    def set_seed_bias_voltage(self, voltage):
+#        """Sets the voltage in volts"""
+#        item_str = '08'
+#        volt_val = int(np.floor(voltage*1638.))
+#        if volt_val > 4095 or volt_val < 0:
+#            log.log_warn(__name__, 'set_seed_bia_voltage',
+#                         'Seed bias voltage to be set is out of bounds!')
+#            return
+#        volt_str = str(volt_val).zfill(4)
+#        self.__set_analog_output_values(item_str, volt_str)
+#
+# This model does not have an external trigger
+#    @vo.handle_timeout
+#    @log.log_this()
+#    def set_trigger_timeout(self, frequency):
+#        """Sets the trigger timeout in Hz"""
+#        trig_val = int(np.floor(frequency/75000.))
+#        if trig_val < 751 or trig_val > 8190:
+#            log.log_warn(__name__, 'set_trigger_timeout',
+#                         'Trigger timeout to be set is out of bounds!')
+#            return
+#        trig_str = str(trig_val).zfill(4)
+#        self.res.write('TRTO%s' % trig_str)
+#
+#    @vo.handle_timeout
+#    @log.log_this()
+#    def set_pulse_width(self, pw_val):
+#        """Sets the pulse width in ns, use table below for correct pw_val
+#
+#        pw_val =      | 0 |  1 |  2 |  3 |  4 |  5 |  6 |  7 |  8 |  9 |
+#        pulse in ns = |2.7| 3.4| 3.8| 3.9| 4.6| 4.9| 5.2| 5.7| 6.8| 7.7|"""
+#        self.res.write('PWA%d' % pw_val)
 
     @vo.handle_timeout
     @log.log_this()

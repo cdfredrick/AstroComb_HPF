@@ -7,6 +7,7 @@ Created on Sun Nov 12 12:00:00 2017
 # %% Packages
 import pymongo
 import datetime
+import logging
 
 # %% MongoClient
 class MongoClient:
@@ -103,7 +104,7 @@ class DatabaseMaster:
     # Cursor
         return self.buffer.find(limit=number_of_documents, cursor_type=cursor, sort=sort_order)
 
-    def read_log(self, start, stop, log_level=10, sort_ascending=True, ):
+    def read_log(self, start, stop, log_level=logging.INFO, sort_ascending=True, ):
         '''
         Returns an iterable cursor object containing documents from the log.
         The start and stop times are given as datetime.datetime objects. These
@@ -114,6 +115,7 @@ class DatabaseMaster:
             objects. All times should be given in UTC.
         With the timestamp ordering, ascending order gives the oldest documents
             first, while descending gives the newest documents first.
+        The recommended log levels are as those in the logging package.
         Levels  |   10  |  20  |   30    |   40  |    50    |
                 | debug | info | warning | error | critical |
         
@@ -189,6 +191,7 @@ class DatabaseMaster:
         Writes an entry into the log. An entry into the log can be of any type,
             but is ideally a text based description of the current state of, or
             an action taken within, the system as it relates to this database.
+        The recommended log levels are as those in the logging package.
         Levels  |   10  |  20  |   30    |   40  |    50    |
                 | debug | info | warning | error | critical |
         
@@ -267,7 +270,7 @@ class DatabaseReadWrite:
     # Cursor
         return self.buffer.find(limit=number_of_documents, cursor_type=cursor, sort=sort_order)
 
-    def read_log(self, start, stop, log_level=10, sort_ascending=True, ):
+    def read_log(self, start, stop, log_level=logging.INFO, sort_ascending=True, ):
         '''
         Returns an iterable cursor object containing documents from the log.
         The start and stop times are given as datetime.datetime objects. These
@@ -278,6 +281,7 @@ class DatabaseReadWrite:
             objects. All times should be given in UTC.
         With the timestamp ordering, ascending order gives the oldest documents
             first, while descending gives the newest documents first.
+        The recommended log levels are as those in the logging package.
         Levels  |   10  |  20  |   30    |   40  |    50    |
                 | debug | info | warning | error | critical |
         
@@ -353,6 +357,7 @@ class DatabaseReadWrite:
         Writes an entry into the log. An entry into the log can be of any type,
             but is ideally a text based description of the current state of, or
             an action taken within, the system as it relates to this database.
+        The recommended log levels are as those in the logging package.
         Levels  |   10  |  20  |   30    |   40  |    50    |
                 | debug | info | warning | error | critical |
         
@@ -432,7 +437,7 @@ class DatabaseRead:
     # Cursor
         return self.buffer.find(limit=number_of_documents, cursor_type=cursor, sort=sort_order)
 
-    def read_log(self, start, stop, log_level=10, sort_ascending=True, ):
+    def read_log(self, start, stop, log_level=logging.INFO, sort_ascending=True, ):
         '''
         Returns an iterable cursor object containing documents from the log.
         The start and stop times are given as datetime.datetime objects. These
@@ -443,6 +448,7 @@ class DatabaseRead:
             objects. All times should be given in UTC.
         With the timestamp ordering, ascending order gives the oldest documents
             first, while descending gives the newest documents first.
+        The recommended log levels are as those in the logging package.
         Levels  |   10  |  20  |   30    |   40  |    50    |
                 | debug | info | warning | error | critical |
         
@@ -491,11 +497,41 @@ class DatabaseRead:
         ranged_filter = {'timestamp':{'$gte':start, '$lte':stop}}
         return self.record.find(ranged_filter, sort=sort_order)
 
-# %% Testing
+# %% Logging Handler
+
+class LoggingHandler(logging.Handler):
+    """
+    A handler class which writes logging records, appropriately formatted,
+        to the a specified database's log. This is used to automate the log 
+        generation process with the python "logging" package.
+    """
+    def __init__(self, database):
+        """
+        A DatabaseMaster or DatabaseReadWrite object must be specified.
+        """
+        logging.Handler.__init__(self)
+        if database is None:
+            raise Exception
+        self.database = database
+        
+    def emit(self, record):
+        """
+        If a formatter is specified, it is used to format the record. The record
+            is then written to the log.
+        """
+        try:
+            msg = self.format(record)
+            log_level = record.levelno
+            self.database.write_log(msg, log_level)
+        except Exception:
+            self.handleError(record)
+
+
+# %% Testing and Examples
 if __name__ == '__main__':
     mongo_client = MongoClient()
 # Master
-    print('\n Testing the Maser connection ==================================')
+    print('\n Testing the Master connection ==================================')
     test_database = DatabaseMaster(mongo_client, 'test_database')
     # Read and write to buffer
     print('\n Read and write to the buffer ----------------------------------')
@@ -601,3 +637,28 @@ if __name__ == '__main__':
     print('\n Read log: sort ascending, log_level')
     for doc in test_database.read_log(start, stop, log_level=15):
         print(doc)
+        # Write with logger
+    print('\n Write with logger')
+            # create logger
+    logger = logging.getLogger('simple_example')
+    logger.setLevel(logging.DEBUG)
+            # create console handler and set level to debug
+    ch = LoggingHandler(test_database)
+    ch.setLevel(logging.DEBUG)
+            # create formatter
+    #formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            # add formatter to ch
+    #ch.setFormatter(formatter)
+            # add ch to logger
+    logger.addHandler(ch)
+            # 'application' code
+    logger.debug('debug message')
+    logger.info('info message')
+    logger.warning('warn message')
+    logger.error('error message')
+    logger.critical('critical message')
+    for doc in test_database.read_log(start, datetime.datetime.utcnow()):
+        pass
+    print(doc)
+# Close the connection to the database
+    mongo_client.close()

@@ -50,7 +50,8 @@ class DatabaseMaster:
     # Get the MongoDB client
         self.client = mongo_client.client
     # Get the requested database
-        self.database = self.client[database]
+        self.database_name = database
+        self.database = self.client[self.database_name]
     # Get the record
         self.record = self.database['record']
         # Create a descending index for documents with timestamps in the record
@@ -104,7 +105,7 @@ class DatabaseMaster:
     # Cursor
         return self.buffer.find(limit=number_of_documents, cursor_type=cursor, sort=sort_order)
 
-    def read_log(self, start, stop, log_level=logging.INFO, sort_ascending=True, ):
+    def read_log(self, start, stop, number_of_documents=0, log_level=logging.INFO, sort_ascending=True, ):
         '''
         Returns an iterable cursor object containing documents from the log.
         The start and stop times are given as datetime.datetime objects. These
@@ -124,6 +125,8 @@ class DatabaseMaster:
         stop: a datetime.datetime instance marking the end of the query period.
         
         **kwargs
+        number_of_documents: int, maximum number of documents collected into the
+            cursor. A maximum number of "0" is equivalent to an unlimited amount.
         log_level: int, selects the minimum log level returned.
         sort_ascending: bool, selects to sort the cursor either by ascending or
             descending order. 
@@ -133,10 +136,12 @@ class DatabaseMaster:
             sort_order = [('timestamp', pymongo.ASCENDING)]
         else:
             sort_order = [('timestamp', pymongo.DESCENDING)]
+    # Ranged filter
         ranged_filter = {'timestamp':{'$gte':start, '$lte':stop}, 'log_level':{'$gte':log_level}}
-        return self.log.find(ranged_filter, sort=sort_order)
+    # Cursor
+        return self.log.find(ranged_filter, limit=number_of_documents, sort=sort_order)
 
-    def read_record(self, start, stop, sort_ascending=True):
+    def read_record(self, start, stop, number_of_documents=0, sort_ascending=True):
         '''
         Returns an iterable cursor object containing documents from the record.
         The start and stop times are given as datetime.datetime objects. These
@@ -153,6 +158,8 @@ class DatabaseMaster:
         stop: a datetime.datetime instance marking the end of the query period.
         
         **kwargs
+        number_of_documents: int, maximum number of documents collected into the
+            cursor. A maximum number of "0" is equivalent to an unlimited amount.
         sort_ascending: bool, selects to sort the cursor either by ascending or
             descending order. 
         '''
@@ -161,8 +168,10 @@ class DatabaseMaster:
             sort_order = [('timestamp', pymongo.ASCENDING)]
         else:
             sort_order = [('timestamp', pymongo.DESCENDING)]
+    # Ranged filter
         ranged_filter = {'timestamp':{'$gte':start, '$lte':stop}}
-        return self.record.find(ranged_filter, sort=sort_order)
+    # Cursor
+        return self.record.find(ranged_filter, limit=number_of_documents, sort=sort_order)
 
     def write_document_to_record(self, document):
         '''
@@ -230,7 +239,8 @@ class DatabaseReadWrite:
     # Get the MongoDB client
         self.client = mongo_client.client
     # Get the requested database
-        self.database = self.client[database]
+        self.database_name = database
+        self.database = self.client[self.database_name]
     # Get the record
         self.record = self.database['record']
     # Get the buffer
@@ -270,7 +280,7 @@ class DatabaseReadWrite:
     # Cursor
         return self.buffer.find(limit=number_of_documents, cursor_type=cursor, sort=sort_order)
 
-    def read_log(self, start, stop, log_level=logging.INFO, sort_ascending=True, ):
+    def read_log(self, start, stop, number_of_documents=0, log_level=logging.INFO, sort_ascending=True, ):
         '''
         Returns an iterable cursor object containing documents from the log.
         The start and stop times are given as datetime.datetime objects. These
@@ -290,6 +300,8 @@ class DatabaseReadWrite:
         stop: a datetime.datetime instance marking the end of the query period.
         
         **kwargs
+        number_of_documents: int, maximum number of documents collected into the
+            cursor. A maximum number of "0" is equivalent to an unlimited amount.
         log_level: int, selects the minimum log level returned.
         sort_ascending: bool, selects to sort the cursor either by ascending or
             descending order. 
@@ -299,10 +311,12 @@ class DatabaseReadWrite:
             sort_order = [('timestamp', pymongo.ASCENDING)]
         else:
             sort_order = [('timestamp', pymongo.DESCENDING)]
+    # Ranged filter
         ranged_filter = {'timestamp':{'$gte':start, '$lte':stop}, 'log_level':{'$gte':log_level}}
-        return self.log.find(ranged_filter, sort=sort_order)
+    # Cursor
+        return self.log.find(ranged_filter, limit=number_of_documents, sort=sort_order)
 
-    def read_record(self, start, stop, sort_ascending=True):
+    def read_record(self, start, stop, number_of_documents=0, sort_ascending=True):
         '''
         Returns an iterable cursor object containing documents from the record.
         The start and stop times are given as datetime.datetime objects. These
@@ -319,6 +333,8 @@ class DatabaseReadWrite:
         stop: a datetime.datetime instance marking the end of the query period.
         
         **kwargs
+        number_of_documents: int, maximum number of documents collected into the
+            cursor. A maximum number of "0" is equivalent to an unlimited amount.
         sort_ascending: bool, selects to sort the cursor either by ascending or
             descending order. 
         '''
@@ -327,8 +343,10 @@ class DatabaseReadWrite:
             sort_order = [('timestamp', pymongo.ASCENDING)]
         else:
             sort_order = [('timestamp', pymongo.DESCENDING)]
+    # Ranged filter
         ranged_filter = {'timestamp':{'$gte':start, '$lte':stop}}
-        return self.record.find(ranged_filter, sort=sort_order)
+    # Cursor
+        return self.record.find(ranged_filter, limit=number_of_documents, sort=sort_order)
 
     def write_document_to_record(self, document):
         '''
@@ -397,7 +415,8 @@ class DatabaseRead:
     # Get the MongoDB client
         self.client = mongo_client.client
     # Get the requested database
-        self.database = self.client[database]
+        self.database_name = database
+        self.database = self.client[self.database_name]
     # Get the record
         self.record = self.database['record']
     # Get the buffer
@@ -437,7 +456,7 @@ class DatabaseRead:
     # Cursor
         return self.buffer.find(limit=number_of_documents, cursor_type=cursor, sort=sort_order)
 
-    def read_log(self, start, stop, log_level=logging.INFO, sort_ascending=True, ):
+    def read_log(self, start, stop, number_of_documents=0, log_level=logging.INFO, sort_ascending=True, ):
         '''
         Returns an iterable cursor object containing documents from the log.
         The start and stop times are given as datetime.datetime objects. These
@@ -457,6 +476,8 @@ class DatabaseRead:
         stop: a datetime.datetime instance marking the end of the query period.
         
         **kwargs
+        number_of_documents: int, maximum number of documents collected into the
+            cursor. A maximum number of "0" is equivalent to an unlimited amount.
         log_level: int, selects the minimum log level returned.
         sort_ascending: bool, selects to sort the cursor either by ascending or
             descending order. 
@@ -466,10 +487,12 @@ class DatabaseRead:
             sort_order = [('timestamp', pymongo.ASCENDING)]
         else:
             sort_order = [('timestamp', pymongo.DESCENDING)]
+    # Ranged filter
         ranged_filter = {'timestamp':{'$gte':start, '$lte':stop}, 'log_level':{'$gte':log_level}}
-        return self.log.find(ranged_filter, sort=sort_order)
+    # Cursor
+        return self.log.find(ranged_filter, limit=number_of_documents, sort=sort_order)
 
-    def read_record(self, start, stop, sort_ascending=True):
+    def read_record(self, start, stop, number_of_documents=0, sort_ascending=True):
         '''
         Returns an iterable cursor object containing documents from the record.
         The start and stop times are given as datetime.datetime objects. These
@@ -486,6 +509,8 @@ class DatabaseRead:
         stop: a datetime.datetime instance marking the end of the query period.
         
         **kwargs
+        number_of_documents: int, maximum number of documents collected into the
+            cursor. A maximum number of "0" is equivalent to an unlimited amount.
         sort_ascending: bool, selects to sort the cursor either by ascending or
             descending order. 
         '''
@@ -494,8 +519,10 @@ class DatabaseRead:
             sort_order = [('timestamp', pymongo.ASCENDING)]
         else:
             sort_order = [('timestamp', pymongo.DESCENDING)]
+    # Ranged filter
         ranged_filter = {'timestamp':{'$gte':start, '$lte':stop}}
-        return self.record.find(ranged_filter, sort=sort_order)
+    # Cursor
+        return self.record.find(ranged_filter, limit=number_of_documents, sort=sort_order)
 
 # %% Logging Handler
 
@@ -508,11 +535,12 @@ class LoggingHandler(logging.Handler):
     def __init__(self, database):
         """
         A DatabaseMaster or DatabaseReadWrite object must be specified.
+        The resulting handler object will have a 'database_name' attribute that
+            can be used to identify the handler's destination.
         """
         logging.Handler.__init__(self)
-        if database is None:
-            raise Exception
-        self.database = database
+        self.database_name = database.database_name
+        self.write_log = database.write_log
         
     def emit(self, record):
         """
@@ -522,7 +550,7 @@ class LoggingHandler(logging.Handler):
         try:
             msg = self.format(record)
             log_level = record.levelno
-            self.database.write_log(msg, log_level)
+            self.write_log(msg, log_level)
         except Exception:
             self.handleError(record)
 
@@ -602,20 +630,29 @@ if __name__ == '__main__':
     for doc in test_database.read_record(start, stop):
         pass
     print(doc)
+        # Read record (document limit)
+    print('\n Read record: sort ascending, document limit')
+    stop = datetime.datetime.utcnow()
+    start = stop - datetime.timedelta(days=1)
+    for doc in test_database.read_record(start, stop, number_of_documents=3):
+        print(doc)
         # Read record (sort descending)
     print('\n Read buffer: sort descending')
     for doc in test_database.read_record(start, stop, sort_ascending=False):
         pass
     print(doc)
+        # Read record (sort descending, document limit)
+    print('\n Read buffer: sort descending, document limit')
+    for doc in test_database.read_record(start, stop, sort_ascending=False, number_of_documents=3):
+        print(doc)
         # Write documents from the buffer
     print('\n Write documents from buffer')
-    for x in range(20):
+    for x in range(5):
         test_database.write_buffer(x**2.)
-    for doc in test_database.read_buffer(number_of_documents=20, sort_ascending=False):
+    for doc in test_database.read_buffer(number_of_documents=5, sort_ascending=False):
         test_database.write_document_to_record(doc)
-    for doc in test_database.read_record(start, datetime.datetime.utcnow()):
-        pass
-    print(doc)
+    for doc in test_database.read_record(start, datetime.datetime.utcnow(), number_of_documents=5, sort_ascending=False):
+        print(doc)
     
     # Read and write to the log
     print('\n Read and write to the log -------------------------------------')
@@ -636,6 +673,11 @@ if __name__ == '__main__':
         # Read log (log_level)
     print('\n Read log: sort ascending, log_level')
     for doc in test_database.read_log(start, stop, log_level=15):
+        pass
+    print(doc)
+        # Read log (log_level, document limit)
+    print('\n Read log: sort ascending, log_level, document limit')
+    for doc in test_database.read_log(start, stop, log_level=15, number_of_documents=3):
         print(doc)
         # Write with logger
     print('\n Write with logger')
@@ -650,6 +692,9 @@ if __name__ == '__main__':
             # add formatter to ch
     #ch.setFormatter(formatter)
             # add ch to logger
+    old_handlers = logger.handlers
+    for handler in old_handlers:
+        logger.removeHandler(handler)
     logger.addHandler(ch)
             # 'application' code
     logger.debug('debug message')
@@ -657,8 +702,8 @@ if __name__ == '__main__':
     logger.warning('warn message')
     logger.error('error message')
     logger.critical('critical message')
-    for doc in test_database.read_log(start, datetime.datetime.utcnow()):
-        pass
-    print(doc)
+    for doc in test_database.read_log(start, datetime.datetime.utcnow(), number_of_documents=5, sort_ascending=False, log_level=logging.DEBUG):
+        print(doc)
+    logging.shutdown()
 # Close the connection to the database
     mongo_client.close()

@@ -197,7 +197,7 @@ class DatabaseMaster:
     # log filter
         log_filter = {'log_level':{'$gte':log_level}}
     # Cursor
-        return self.buffer.find(log_filter, limit=number_of_documents, cursor_type=cursor, sort=sort_order)
+        return self.log_buffer.find(log_filter, limit=number_of_documents, cursor_type=cursor, sort=sort_order)
 
     def read_record(self, start, stop, number_of_documents=0, sort_ascending=True):
         '''
@@ -242,7 +242,7 @@ class DatabaseMaster:
         document: a document in the format as given by the read_log function.
         '''
         document.pop('_id')
-        self.record.insert_one(document)
+        self.log.insert_one(document)
 
     def write_document_to_record(self, document):
         '''
@@ -327,7 +327,7 @@ class DatabaseReadWrite(DatabaseMaster):
         '''
     # Initialize
         self.get_databases(mongo_client, database)
-    # Remove methods
+    # Disable methods from the master class
         self.ensure_compliance = None
 
 # %% DatabaseRead
@@ -345,7 +345,7 @@ class DatabaseRead(DatabaseMaster):
         '''
     # Initialize
         self.get_databases(mongo_client, database)
-    # Remove methods
+    # Disable methods from the master class
         self.ensure_compliance = None
         self.write_document_to_log = None
         self.write_document_to_record = None
@@ -385,6 +385,56 @@ class LoggingHandler(logging.Handler):
         except Exception:
             self.handleError(record)
 
+def mongo_logger(database, name=None, logger_level=logging.DEBUG, handler_level=logging.DEBUG, format_str=None):
+    '''
+    Returns a logger instance whose handler writes to the given database's log
+        buffer. This is a helper function used to simplify logger setup.
+    The name specifies the logger's place in the logging hierarchy. Every
+        logger called by the same name is the same logger instance, so only one
+        call to this function is needed per database and Python interpreter 
+        process. Other pointers to this logger instance can be created by calling 
+        logging.getLogger(name). Child loggers, which inherit the properties and
+        handlers from their parents can be automatically created by calling the
+        getLogger method with the name specified in the dot separated format, 
+        i.e. "name.child.grandchild".
+    The logger_level and handler_level respectively specify the minimum log 
+        level sent to the handler from the logger and from the handler to the 
+        database.
+    See the logging documentation for details on the format string.
+    
+    *args
+    database: a DatabaseMaster or DatabaseReadWrite object
+    
+    *kwargs
+    name: str, the name of the logger instance
+    logger_level: int, minimum logging level that the logger will pass to the
+        handler
+    handler_level: int, minimum logging level that the handler will log
+    format_str: str, used to specify custom message formating
+    '''
+# Create logger
+    logger = logging.getLogger(name)
+    logger.setLevel(logger_level)
+# Create the mongoDB handler and set level
+    mongo_handler = LoggingHandler(database)
+    mongo_handler.setLevel(handler_level)
+# Create formatter
+    if format_str is not None:
+        formatter = logging.Formatter(format_str)
+    # Add formatter to ch
+        mongo_handler.setFormatter(formatter)
+# Remove redundant handlers
+    old_handlers = logger.handlers
+    for handler in old_handlers:
+        try:
+            if handler.database_name == database.database_name:
+                logger.removeHandler(handler)
+        except:
+            pass
+# Add handler to logger
+    logger.addHandler(mongo_handler)
+# Return logger object
+    return logger
 
 # %% Testing and Examples
 if __name__ == '__main__':
@@ -511,22 +561,9 @@ if __name__ == '__main__':
     for doc in test_database.read_log_buffer(log_level=15, number_of_documents=3):
         print(doc)
         # Write with logger
-    print('\n Write with logger')
+    print('\n \t Write with logger')
             # create logger
-    logger = logging.getLogger('simple_example')
-    logger.setLevel(logging.DEBUG)
-            # create console handler and set level to debug
-    ch = LoggingHandler(test_database)
-    ch.setLevel(logging.DEBUG)
-            # create formatter
-    #formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-            # add formatter to ch
-    #ch.setFormatter(formatter)
-            # add ch to logger
-    old_handlers = logger.handlers
-    for handler in old_handlers:
-        logger.removeHandler(handler)
-    logger.addHandler(ch)
+    logger = mongo_logger(test_database)
             # 'application' code
     logger.debug('debug message')
     logger.info('info message')

@@ -391,9 +391,9 @@ if __name__ == '__main__':
     mongo_client = MongoClient()
 # Testing
     print('\n Testing the connection ========================================')
-    #test_database = DatabaseMaster(mongo_client, 'test_database')
+    test_database = DatabaseMaster(mongo_client, 'test_database')
     #test_database = DatabaseReadWrite(mongo_client, 'test_database')
-    test_database = DatabaseRead(mongo_client, 'test_database')
+    #test_database = DatabaseRead(mongo_client, 'test_database')
     # Read and write to buffer
     print('\n Read and write to the buffer ----------------------------------')
     for x in range(int(2e4)):

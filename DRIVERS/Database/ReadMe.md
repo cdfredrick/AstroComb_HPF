@@ -7,3 +7,5 @@ There are three classes for accessing databases, DatabaseMaster, DatabaseReadWri
 Also included is a handler for use with the built-in "logging" python library. An example is given at the end of the document.
 
 Each database is structured so that it contains both a rolling buffer and a permanent collection to store data records, as well as permanent and rolling buffers to store log entries. With their faster read and write access and limited size scripts should primarily use the buffers to write and read to disk. The buffers automatically overwrite the oldest entries when full. Data or logs from important events should be transfered from the buffer to permanent storage on demand.
+
+Coded with MongoDB 3.4 and PyMongo 3.5

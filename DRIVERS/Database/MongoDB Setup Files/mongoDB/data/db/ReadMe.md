@@ -1,1 +1,1 @@
-This is where all of the database values are stored
+This is where all of the individual databases are stored

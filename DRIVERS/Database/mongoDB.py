@@ -385,7 +385,7 @@ class LoggingHandler(logging.Handler):
         except Exception:
             self.handleError(record)
 
-def mongo_logger(database, name=None, logger_level=logging.DEBUG, handler_level=logging.DEBUG, format_str=None):
+def mongo_logger(database, name=None, logger_level=logging.DEBUG, handler_level=logging.DEBUG, format_str=None, remove_old_handlers=True):
     '''
     Returns a logger instance whose handler writes to the given database's log
         buffer. This is a helper function used to simplify logger setup.
@@ -411,6 +411,7 @@ def mongo_logger(database, name=None, logger_level=logging.DEBUG, handler_level=
         handler
     handler_level: int, minimum logging level that the handler will log
     format_str: str, used to specify custom message formating
+    remove_old_handlers: bool, remove all handlers before adding the new one
     '''
 # Create logger
     logger = logging.getLogger(name)
@@ -423,14 +424,17 @@ def mongo_logger(database, name=None, logger_level=logging.DEBUG, handler_level=
         formatter = logging.Formatter(format_str)
     # Add formatter to ch
         mongo_handler.setFormatter(formatter)
-# Remove redundant handlers
+# Remove redundant or old handlers
     old_handlers = logger.handlers
     for handler in old_handlers:
-        try:
-            if handler.database_name == database.database_name:
-                logger.removeHandler(handler)
-        except:
-            pass
+        if remove_old_handlers:
+            logger.removeHandler(handler)
+        else:
+            try:
+                if handler.database_name == database.database_name:
+                    logger.removeHandler(handler)
+            except:
+                pass
 # Add handler to logger
     logger.addHandler(mongo_handler)
 # Return logger object
@@ -564,6 +568,9 @@ if __name__ == '__main__':
     print('\n \t Write with logger')
             # create logger
     logger = mongo_logger(test_database)
+    #from DRIVERS.Logging.eventlog import start_logging
+    #logger = start_logging(test_database)
+    #logger = start_logging()
             # 'application' code
     logger.debug('debug message')
     logger.info('info message')

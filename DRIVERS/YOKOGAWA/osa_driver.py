@@ -91,8 +91,7 @@ class OSA(vo.Visa):
     @log.log_this(20)
     def __init__(self, res_name, res_address):
         super(OSA, self).__init__(res_name, res_address)
-        self.res = super(OSA, self).open_resource()
-        if self.res is None:
+        if self.resource is None:
             log.log_warn(__name__, '__init__',
                          'Could not create OSA instrument!')
             return
@@ -104,25 +103,25 @@ class OSA(vo.Visa):
     @log.log_this()
     def close(self):
         """Ends device session"""
-        self.res.close()
+        self.close_resource()
 
-    @vo.handle_timeout
+    
     @log.log_this(20)
     def reset(self):
         """Stops current machine operation and returns OSA to default values"""
-        self.res.write('*RST')
+        self.write('*RST')
         self.__set_command_format()
 
 #Query Methods
 
-    @vo.handle_timeout
+    
     @log.log_this()
     def query_identity(self):
         """Queries OSA's identity"""
-        ident = self.res.query('*IDN?')
+        ident = self.query('*IDN?')
         return ident
 
-    @vo.handle_timeout
+    
     @log.log_this()
     def query_sweep_parameters(self):
         """Returns sweep parameters as a dictionary
@@ -136,10 +135,10 @@ class OSA(vo.Visa):
         """
         pdict = {}
         nano = 10.**9
-        pdict['center_wl'] = float(self.res.query(':SENS:WAV:CENT?'))*nano
-        pdict['span_wl'] = float(self.res.query(':SENS:WAV:SPAN?'))*nano
-        pdict['res_wl'] = float(self.res.query(':SENS:BAND:RES?'))*nano
-        pdict['sensitivity'] = int(self.res.query(':SENS:SENS?'))
+        pdict['center_wl'] = float(self.query(':SENS:WAV:CENT?'))*nano
+        pdict['span_wl'] = float(self.query(':SENS:WAV:SPAN?'))*nano
+        pdict['res_wl'] = float(self.query(':SENS:BAND:RES?'))*nano
+        pdict['sensitivity'] = int(self.query(':SENS:SENS?'))
         return pdict
 
     @log.log_this()
@@ -153,12 +152,12 @@ class OSA(vo.Visa):
             spectrum = plot_spectrum(data)
             plt.show(spectrum)
 
-    @vo.handle_timeout
+    
     @log.log_this()
     def _query_spectrum(self):
         """Sweepss OSA's spectrum"""
-        y_trace = self.res.query(':TRAC:DATA:Y? TRA')
-        x_trace = self.res.query(':TRAC:DATA:X? TRA')
+        y_trace = self.query(':TRAC:DATA:Y? TRA')
+        x_trace = self.query(':TRAC:DATA:X? TRA')
         wavelengths = np.fromstring(x_trace, sep=',')*10.**9
         powers = np.fromstring(y_trace, sep=',')
         #lambdas = lambdas[1:]
@@ -171,19 +170,19 @@ class OSA(vo.Visa):
 
 #Set Methods
 
-    @vo.handle_timeout
+    
     @log.log_this()
     def __set_command_format(self):
         """Sets the OSA's formatting to AQ6370 style, should always be 1"""
-        self.res.write('CFORM1')
+        self.write('CFORM1')
 
-    @vo.handle_timeout
+    
     @log.log_this()
     def set_sweep_parameters(self, center_wl=1064, span_wl=600,
                              res_wl=2, sensitivity=1):
         """Sets OSA sweep region"""
-        self.res.write(':SENS:WAV:CENT %snm' % center_wl)
-        self.res.write(':SENS:WAV:SPAN %snm' %span_wl)
-        self.res.write(':SENS:BAND:RES %snm' %res_wl)
-        self.res.write(':SENS:SENS %s' %sensitivity)
+        self.write(':SENS:WAV:CENT %snm' % center_wl)
+        self.write(':SENS:WAV:SPAN %snm' %span_wl)
+        self.write(':SENS:BAND:RES %snm' %res_wl)
+        self.write(':SENS:SENS %s' %sensitivity)
         return

@@ -37,7 +37,7 @@ class AstroCombExceptions(Exception):
 #Keep the following classes alphabetized
 
 
-class ConnectionError(AstroCombExceptions):
+class VisaConnectionError(AstroCombExceptions):
     """Raise when a device cannot be connected to/loses connection."""
 
 

@@ -25,23 +25,43 @@ Public functions:
 #Python imports
 import logging
 import logging.config
+import sys
 from functools import wraps
-
-
-#Constants
-CONFIG_FILE_NAME = 'log_config.conf'
+from DRIVERS.Database.mongoDB import mongo_logger
 
 #Public functions
-def start_logging(config_file_name=CONFIG_FILE_NAME):
-    """Must be called by external module to begin logging.
-
-    logs to astroComb.log
-    see log_config.conf for format details"""
-    logging.config.fileConfig(config_file_name)
-    # If you get a "cannot find formatters section" error include
-    #   the full file path for log_config.conf, python is actually
-    #   not finding the file itself
-    logger = logging.getLogger('astroComb')
+def start_logging(database=None, logger_level=logging.DEBUG, handler_level=logging.DEBUG, format_str=None, remove_old_handlers=True):
+    """
+    Must be called by external module to begin logging. Initializes a logger to
+        the specified database or to the console stream. Use the keyword arguments
+        to specify the target database, logger and handler levels, and format 
+        string.
+    If no database is specified then logs are sent to a default stream handler.
+        All old handlers are removed by default.
+    Default logging levels are set to debug.
+    If no format str is specified then a default is provided, which includes the
+        hierarchical name of the logger and the log message.
+    """
+    if database is not None:
+    # If a database is specified, initialize the mongo logger
+        if format_str is None:
+            format_str = '%(name)s: %(message)s'
+        logger = mongo_logger(database, name='astroComb', logger_level=logger_level, handler_level=handler_level, format_str=format_str, remove_old_handlers=remove_old_handlers)
+    else:
+    # If no database is specified, setup a simple stream handler
+        if format_str is None:
+            format_str='%(asctime)s [%(levelname)s] %(name)s: %(message)s'
+        logger = logging.getLogger('astroComb')
+        logger.setLevel(logger_level)
+        stream_handler = logging.StreamHandler(sys.stdout)
+        stream_handler.setLevel(handler_level)
+        formatter = logging.Formatter(format_str)
+        stream_handler.setFormatter(formatter)
+        old_handlers = logger.handlers
+        for handler in old_handlers:
+            if remove_old_handlers:
+                logger.removeHandler(handler)
+        logger.addHandler(stream_handler)
     logger.info('Logging started!')
     return logger
 

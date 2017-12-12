@@ -20,6 +20,7 @@ Public methods:
 
 #Python imports
 from functools import wraps
+import time
 
 #3rd party imports
 import numpy as np
@@ -40,7 +41,7 @@ def _handle_daq_error(func):
             return result
         except pydaq.DAQError as err:
             log.log_error(func.__module__, func.__name__, err)
-            self.end_task() #May be problematic if err raised while ending task
+            self.clear_task() #May be problematic if err raised while ending task
             raise ac_excepts.DAQError('See previous error', _handle_daq_error)
     return attempt_func
 
@@ -48,8 +49,9 @@ def _handle_daq_error(func):
 class DAQAnalogIn(object):
     """Defines basic DAQ actions."""
     @log.log_this()
-    def __init__(self, chan_num):
+    def __init__(self, device_address, chan_num):
         """Initializes attributes."""
+        self.address = device_address
         self.chan_num = chan_num
         self.params = {}
         self.task_handle = None
@@ -63,7 +65,7 @@ class DAQAnalogIn(object):
         self.params['rate'] = log_rate
         self.params['max_v'] = max_v
         self.params['min_v'] = min_v
-        self.chan_name = 'Dev1/ai%s' % self.chan_num
+        self.chan_name = '{0:}/ai{1:}'.format(self.address, self.chan_num)
         self.task_handle = pydaq.TaskHandle()
 
         pydaq.DAQmxCreateTask('', pydaq.byref(self.task_handle))
@@ -86,26 +88,52 @@ class DAQAnalogIn(object):
         """Reads from analog input channel that has a task handler."""
         read = pydaq.int32()
         data = np.zeros((self.params['samples'],), dtype=pydaq.float64)
-        pydaq.DAQmxStartTask(self.task_handle)
-
+        self.start_task()
         pydaq.DAQmxReadAnalogF64(self.task_handle, self.params['samples'],
                                  self.params['max_v'],
                                  pydaq.DAQmx_Val_GroupByChannel, data,
                                  self.params['samples'],
                                  pydaq.byref(read), None)
+        self.stop_task()
         return data
 
     @_handle_daq_error
     @log.log_this()
-    def end_task(self):
-        """Stops DAQ"""
+    def start_task(self, timeout=5):
+        started = False
+        start_time = time.time()
+        while (not started) and (time.time()-start_time < timeout):
+            try:
+                pydaq.DAQmxStartTask(self.task_handle)
+            except pydaq.DAQError as daq_err:
+                if daq_err.error == -50103: # "The specified resource is reserved."
+                    pass
+                else:
+                    raise daq_err
+            else:
+                started = True
+        if not started:
+            raise pydaq.DAQError(-50103)
+            
+    @_handle_daq_error
+    @log.log_this()
+    def stop_task(self):
+        """Stops DAQ, releasing the resource while keeping the task handle"""
         if self.task_handle:
             pydaq.DAQmxStopTask(self.task_handle)
-            pydaq.DAQmxClearTask(self.task_handle)
 
+    @_handle_daq_error
+    @log.log_this()
+    def clear_task(self):
+        """Stops and Clears the DAQ task handle"""
+        if self.task_handle:
+            self.stop_task()
+            pydaq.DAQmxClearTask(self.task_handle)
+        
+    @log.log_this()
     def point_measure(self, samples=100, rate=10000):
         """Averages over a quick data run to return one point"""
         self.create_analog_in(samples, rate)
         result = np.average(self.read_analog_in())
-        self.end_task()
+        self.clear_task()
         return result

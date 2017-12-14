@@ -15,6 +15,7 @@ class SRS_SIM900(vo.Visa):
         super(SRS_SIM900, self).__init__(visa_address, res_manager=res_manager)
         if self.resource is None:
             raise ac_excepts.VirtualDeviceError('Could not create SRS SIM900 instrument!', self.__init__)
+        self.flush_resource()
         self.port = port
         self.open_command = 'CONN '+str(self.port)+',"xyz"'
         self.close_command = 'xyz'

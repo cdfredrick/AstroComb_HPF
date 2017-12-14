@@ -58,7 +58,7 @@ class ni_USB6361:
         self.read = int32()
         self.data = np.zeros( (self.NSAMPS,), dtype = np.float64)
         self.t = Task()
-        self.t.CreateAIVoltageChan(dev_channel_id, "", DAQmx_Val_Diff, low_v, high_v, DAQmx_Val_Volts, None)
+        self.t.CreateAIVoltageChan(dev_channel_id, "", DAQmx_Val_RSE, low_v, high_v, DAQmx_Val_Volts, None)
     
     def read_analog(self):
         start_busy(self.t)
@@ -192,14 +192,14 @@ def get_lock(srs, daq, last_good_pos = None):
         #Coarse Estimate
     min_index = np.argmin(y)
     new_output = x[min_index]
-    
+    print(time.strftime('%c')+' - maximum DAC = {:.3f}.'.format(np.max(y)))
 #    plt.plot(x, y)
 #    plt.show()
 
     #Get Lock
     print(time.strftime('%c')+' - estimated voltage setpoint = {:.3f}, locking.'.format(new_output))
     srs.set_man_output(new_output)
-    time.sleep(.1)
+    time.sleep(.2)
     srs.set_pid_state(1)
     if abs(new_output - srs.center) >= srs.threshold_2:
         print(time.strftime('%c')+' - estimated voltage setpoint is near rails, adjust HV amplifier'.format(new_output))
@@ -208,8 +208,8 @@ def get_lock(srs, daq, last_good_pos = None):
 # %% Setup
 rm = visa.ResourceManager()
 
-cav_pid = srs_SIM900('ASRL16::INSTR', 3, rm)
-cav_err = ni_USB6361('Dev5/ai1')
+cav_pid = srs_SIM900('ASRL9::INSTR', 3, rm)
+cav_err = ni_USB6361('Dev1/ai1')
 
 last_good_pos = None
 err_hist = np.array([])
@@ -223,6 +223,8 @@ while test:
         current_err = cav_err.get_avg()
         current_output = cav_pid.get_output()
         current_output_cond = cav_pid.get_output_cond()
+        print(current_err)
+        print(current_output)
         if abs(current_output - cav_pid.center) > cav_pid.threshold_2:
             print(time.strftime('%c')+' - lost cavity lock')
             get_lock(cav_pid, cav_err, last_good_pos)
@@ -238,13 +240,17 @@ while test:
                 err_hist = np.roll(err_hist, 1)
                 err_hist[0] = current_err
             last_good_pos = current_output
-        elif current_err > .3: #resonance should be ~.1
+        elif current_err > .5: #resonance should be ~.1
             get_lock(cav_pid, cav_err)
         else:
             err_hist = np.append(err_hist, current_err)
     else:
+        current_err = cav_err.get_avg()
+        current_output = cav_pid.get_output()
+        current_output_cond = cav_pid.get_output_cond()
+        print(current_err)
+        print(current_output)
         get_lock(cav_pid, cav_err)
-    time.sleep(.1)
     #End Test
     test = 0
     print('Test Ended')
@@ -254,17 +260,21 @@ while test:
 # %% Main Loop
 
 while 1:
+    current_err = cav_err.get_avg()
+    current_output = cav_pid.get_output()
+    current_output_cond = cav_pid.get_output_cond()
     if cav_pid.get_pid_state():
-        current_err = cav_err.get_avg()
-        current_output = cav_pid.get_output()
-        current_output_cond = cav_pid.get_output_cond()
         if abs(current_output - cav_pid.center) > cav_pid.threshold_2:
             print(time.strftime('%c')+' - lost cavity lock')
             get_lock(cav_pid, cav_err, last_good_pos)
             err_hist = np.array([])
+        elif current_err > .3: #on resonance is ~.1 V, off is ~.5V
+            print(time.strftime('%c')+' - DAC was {:.3f}, lost cavity lock'.format(current_err))
+            get_lock(cav_pid, cav_err)
+            err_hist = np.array([])
         elif err_hist.size > 50:
-            if current_err/np.mean(err_hist) > 5:
-                print(time.strftime('%c')+' - lost cavity lock')
+            if current_err/np.abs(np.mean(err_hist)) > 5:
+                print(time.strftime('%c')+' - DAC was {:.3f}, lost cavity lock'.format(current_err))
                 get_lock(cav_pid, cav_err, last_good_pos)
                 err_hist = np.array([])
             elif err_hist.size < 100:
@@ -273,13 +283,13 @@ while 1:
                 err_hist = np.roll(err_hist, 1)
                 err_hist[0] = current_err
             last_good_pos = current_output
-        elif current_err > 1: #on resonance is ~.1 V, off is ~4 V
-            print(time.strftime('%c')+' - lost cavity lock')
-            get_lock(cav_pid, cav_err)
         else:
             err_hist = np.append(err_hist, current_err)
+            if err_hist.size == 5:
+                print(time.strftime('%c')+' - cavity locked, current DAC {:.3f}'.format(current_err))
     else:
+        print(time.strftime('%c')+' - cavity unlocked, current DAC {:.3f}'.format(current_err))
         get_lock(cav_pid, cav_err)
-    time.sleep(.1)
+        err_hist = np.array([])
 
     

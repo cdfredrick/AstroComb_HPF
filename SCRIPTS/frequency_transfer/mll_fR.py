@@ -73,8 +73,8 @@ class ilx_LDC3900:
         self.tec_open_cmd = 'TEC:CHAN {:}'.format(int(channel))
         self.tec_settling_time = 30 # seconds
         self.last_tec_change = time.time()
-        self.nominal_tec_r = 7.8
-        self.safe_tec_range = .3
+        self.nominal_tec_r = 7.7
+        self.safe_tec_range = .2
         print(time.strftime('%c')+' - Initialized.')
     
     def get_resistance(self):
@@ -147,7 +147,7 @@ class ni_USB6361:
         self.read = int32()
         self.data = np.zeros( (self.NSAMPS,), dtype = np.float64)
         self.t = Task()
-        self.t.CreateAIVoltageChan(dev_channel_id, "", DAQmx_Val_Diff, low_v, high_v, DAQmx_Val_Volts, None)
+        self.t.CreateAIVoltageChan(dev_channel_id, "", DAQmx_Val_RSE, low_v, high_v, DAQmx_Val_Volts, None)
     
     def read_analog(self):
         start_busy(self.t)
@@ -161,10 +161,15 @@ class ni_USB6361:
         amps = np.abs(np.fft.rfft(han_win*self.data))
         peak_ind = np.argmax(amps)
         return freqs[peak_ind]
+    
+    def get_rms(self):
+        self.read_analog()
+        rms = np.sqrt(np.mean(np.square(self.data)))
+        return rms
 
 
 class srs_SIM900:
-    def __init__(self, visa_id, channel, rm = None, thrsh_1 = .2, thrsh_2 = .01):
+    def __init__(self, visa_id, channel, rm = None, thrsh_1 = .2, thrsh_2 = .05):
         print(time.strftime('%c')+' - Initializing communication with the SRS SIM900.')
         if rm is None:
             rm = visa.ResourceManager()
@@ -180,6 +185,7 @@ class srs_SIM900:
             else:
                 opened = True
         self.srs.close()
+        self.flush()
         self.open_cmd = 'CONN '+str(channel)+',"xyz"\n'
         # Get settings (from instrument or database?)
         self.ulim, self.llim = self.get_output_lims()
@@ -188,11 +194,16 @@ class srs_SIM900:
         self.threshold_2 = (self.ulim - self.llim)*(1.-thrsh_2*2.)/2.
         print(time.strftime('%c')+' - Initialized.')
     
+    def flush(self):
+        open_busy(self.srs)
+        self.srs.flush(visa.constants.VI_READ_BUF)
+        self.srs.close()
+    
     def get_man_output(self):
         open_busy(self.srs)
         self.srs.write(self.open_cmd)
         man_output = self.srs.query('MOUT?').strip()
-        self.srs.query('xyz*IDN?\n')
+        self.srs.write('xyz')
         self.srs.close()
         return float(man_output)
     
@@ -200,14 +211,14 @@ class srs_SIM900:
         open_busy(self.srs)
         self.srs.write(self.open_cmd)
         self.srs.write('MOUT {:.3f}'.format(output))
-        self.srs.query('xyz*IDN?\n')
+        self.srs.write('xyz')
         self.srs.close()
     
     def get_output(self):
         open_busy(self.srs)
         self.srs.write(self.open_cmd)
         level = self.srs.query('OMON?\n').strip()
-        self.srs.query('xyz*IDN?\n')
+        self.srs.write('xyz')
         self.srs.close()
         return float(level)
     
@@ -217,7 +228,7 @@ class srs_SIM900:
         u_lim = self.srs.query('INCR? 1').strip()
         l_lim = self.srs.query('INCR? 2').strip()
         anti_wind = self.srs.query('INCR? 3').strip()
-        self.srs.query('xyz*IDN?\n')
+        self.srs.write('xyz')
         self.srs.close()
         return [int(u_lim), int(l_lim), int(anti_wind)]
     
@@ -226,7 +237,7 @@ class srs_SIM900:
         self.srs.write(self.open_cmd)
         ulim = self.srs.query('ULIM?\n').strip()
         llim = self.srs.query('LLIM?\n').strip()
-        self.srs.query('xyz*IDN?\n')
+        self.srs.write('xyz')
         self.srs.close()
         return [float(ulim), float(llim)]
     
@@ -234,7 +245,7 @@ class srs_SIM900:
         open_busy(self.srs)
         self.srs.write(self.open_cmd)
         state = self.srs.query("AMAN?\n").strip()
-        self.srs.query('xyz*IDN?\n')
+        self.srs.write('xyz')
         self.srs.close()
         return int(state)
     
@@ -242,7 +253,7 @@ class srs_SIM900:
         open_busy(self.srs)
         self.srs.write(self.open_cmd)
         self.srs.write("AMAN {:}\n".format(int(state)))
-        self.srs.query('xyz*IDN?\n')
+        self.srs.write('xyz')
         self.srs.close()
 
 
@@ -277,7 +288,11 @@ def get_lock(srs, daq, ilx, last_good_pos = None):
     output_coarse = -y[slope_ind]/slopes[slope_ind] + x[slope_ind]
     slope_coarse = np.abs(slopes[slope_ind])
         #Fine Estimate
-    new_output = curve_fit(to_fit, x, y, [output_coarse, slope_coarse])[0][0]
+    try:
+        new_output = curve_fit(to_fit, x, y, [output_coarse, slope_coarse])[0][0]
+    except:
+        print(time.strftime('%c')+' - Curve fit failed')
+        new_output = srs.center
     
     #Get Lock
     if abs(new_output - srs.center) < srs.threshold_2:
@@ -298,9 +313,9 @@ def get_lock(srs, daq, ilx, last_good_pos = None):
 # %% Setup
 rm = visa.ResourceManager()
 
-fr_pid = srs_SIM900('ASRL16::INSTR', 1, rm)
-fr_err = ni_USB6361('Dev5/ai0')
-fr_tec = ilx_LDC3900(u'GPIB1::20::INSTR', 1, rm)
+fr_pid = srs_SIM900('ASRL9::INSTR', 1, rm)
+fr_err = ni_USB6361('Dev1/ai0')
+fr_tec = ilx_LDC3900(u'GPIB0::20::INSTR', 1, rm)
 
 last_good_pos = None
 
@@ -318,6 +333,10 @@ while test:
     if fr_pid.get_pid_state():
         current_output = fr_pid.get_output()
         current_output_cond = fr_pid.get_output_cond()
+        current_rms = fr_err.get_rms()
+        print current_output
+        print current_output_cond
+        print current_rms
         if abs(current_output - fr_pid.center) > fr_pid.threshold_2:
             print(time.strftime('%c')+' - lost fR lock')
             get_lock(fr_pid, fr_err, fr_tec, last_good_pos)
@@ -353,12 +372,11 @@ while 1:
                 fr_tec.change_tec_output(-1)
             elif current_output - fr_pid.center < 0:
                 print(time.strftime('%c')+' - voltage was {:.3f}, raising the resistance setpoint.'.format(current_output))
-                fr_tec.change_tec_output(1)
+                fr_tec.change_tec_output(+1)
         else:
             last_good_pos = current_output
     else:
         get_lock(fr_pid, fr_err, fr_tec)
-    time.sleep(.1)
 
 
 print('temperature setpoint is out of range')

@@ -134,6 +134,16 @@ class Visa(object):
         self.resource.clear()
 
     @log.log_this()
+    @handle_visa_error
+    def flush_resource(self):
+        '''
+        Flushes the device's buffer
+        '''
+        self.open_resource()
+        self.resource.flush(visa.constants.VI_READ_BUF)
+        self.close_resource()
+
+    @log.log_this()
     def close_resource(self):
         '''
         Closes the resource session. All data structures that had been allocated

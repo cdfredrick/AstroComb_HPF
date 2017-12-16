@@ -24,7 +24,6 @@ Public functions:
 
 #Python imports
 import logging
-import logging.config
 import sys
 from functools import wraps
 from DRIVERS.Database.mongoDB import mongo_logger
@@ -65,7 +64,7 @@ def start_logging(database=None, logger_level=logging.DEBUG, handler_level=loggi
     logger.info('Logging started!')
     return logger
 
-def log_this(level1=10, level2=10, log_string1='', log_string2=''):
+def log_this(level1=logging.DEBUG, level2=logging.DEBUG, log_string1='', log_string2=''):
     """Takes optional integers for levels and optional descriptors.
 
     Levels |   10  |  20  |   30    |   40  |    50    |
@@ -91,7 +90,7 @@ def log_this(level1=10, level2=10, log_string1='', log_string2=''):
         return wrapper
     return function_decorator
 
-def log_error(mod_name, func_name, err, log_str='', level=40):
+def log_error(mod_name, func_name, err, log_str='', level=logging.ERROR):
     """Takes originating function name and module and error to log.
 
     Optional descriptive string & log level
@@ -103,7 +102,7 @@ def log_error(mod_name, func_name, err, log_str='', level=40):
     logger = logging.getLogger('astroComb.%s.%s' % (mod_name, func_name))
     logger.log(level, str(err) + log_str)
 
-def log_warn(mod_name, func_name, log_str, level=30):
+def log_warn(mod_name, func_name, log_str, level=logging.WARNING):
     """Takes originating function name and module and string to log.
 
     Optional level, not just for warnings

@@ -2,41 +2,190 @@
 """
 Created on Fri Jul 21 15:51:36 2017
 
-@author: AstroComb
+@author: Connor
 """
 
-# %%
+# %% Import Packages and Drivers ==============================================
 
 import numpy as np
-
 from scipy.optimize import curve_fit
-
-import visa
-
-from PyDAQmx import Task
-from PyDAQmx.DAQmxConstants import *
-from PyDAQmx.DAQmxTypes import *
-from PyDAQmx import DAQError
-
-
-
 import matplotlib.pyplot as plt
-
 import time
 
+from DRIVERS.Database import mongoDB
+from DRIVERS.Logging import eventlog as log
+from DRIVERS.Visa.srs_sim_driver import SRS_SIM960 as SIM960
+from DRIVERS.Visa.ilx_driver import TECModule
+from DRIVERS.DAQ import daq_objects as DAQ_object
+
+
+# %% Settings and Constants ===================================================
+
+# Local Database Names --------------------------------------------------------
+'''The following are lists of all of the databases originating within this 
+    control script. Each of these databases are initialized within this script.
+    The databases should be grouped by function.
+        state:
+            -The entries in state databases should reflect the current state of
+            the system and the level of compliance. Other scripts should look 
+            to these databases in order to resolve prerequisites. Entries are
+            specified as follows:
+                {'state':<name of the current state>,
+                'compliance':<compliance with the current state>
+                'desired_state':<name of the desired state>,
+                }
+            -The compliance level should be a simple boolean value.
+            -The "desired_state" is mostly for internal use, particularly for 
+            cases where the state is temporarliy changed. The script should 
+            seek to bring the current state to the desired state.
+        visa:
+            -The entries in visa databases should include the settings for
+            each unique device or device/channel combination.
+        daq:
+            -There should be a unique daq database for each daq channel 
+            configuration. All necessary settings should be included.
+        monitor:
+            -The entries in monitor databases should contain secondary 
+            variables used to determine compliance with the state of the
+            system, and to determine any actions required to maintain
+            compliance.
+        log:
+            -This should be a single database that serves as the intermediary 
+            between this script and others. The entries in the log database
+            should be recognizable as commands in this script.'''
+STATE_DBs = [ 
+    'mll_fR/state', 'mll_fR/initialized']
+VISA_DBs =[
+    'mll_fR/TEC_settings', 'mll_fR/PID_settings', 'mll_fR/HV_settings']
+DAQ_DBs = ['mll_fR/DAQ_settings']
+MONITOR_DBs = [
+    'mll_fR/TEC_temperature', 'mll_fR/TEC_current', 'mll_fR/PID_voltage', 
+    'mll_fR/HV_output', 'mll_fR/rmsError']
+LOG_DB = 'mll_fR/log'
+MASTER_DBs = STATE_DBs + MONITOR_DBs + [LOG_DB]
+
+# External Database Names -----------------------------------------------------
+'''This is a list of all databases external to this control script that are 
+    needed to check prerequisites'''
+READ_DBs = []
+
+# Default Settings ------------------------------------------------------------
+'''This should include all settings used in this script. Upon initialization 
+    these settings are checked against those saved in the database, and 
+    populated if found empty. The setting names should be derived from the 
+    method names of the drivers. Each state, device, database should be represented. The
+    default values are only added to the database if no other values are found.'''
+DEFAULT_SETTINGS = {
+    'mll_fR_TEC_settings':{
+        'tec_off_triggers':[5, 6, 7, 8, 10], 'tec_gain':100, 
+        'tec_current_limit':0.400, 'tec_temperature_limit':40.0, 'tec_mode':'R',
+        'tec_output':True, 'tec_resistance_setpoint':7.580},
+    'mll_fR_PID_settings':{
+        'proportional_action':True, 'integral_action':True,
+        'derivative_action':False, 'offset_action':False, 
+        'proportional_gain':-3.0e0, 'integral_gain':5.0e2, 'pid_action':False,
+        'setpoint_action':False, 'internal_setpoint':0.000, 'ramp_action':False,
+        'manual_output':0.000, 'upper_output_limit':8.00,
+        'lower_output_limit':0.00, 'power_line_frequency':60, 'display':True},
+    'mll_fR_HV_settings':{},
+    'mll_fR_state':{},
+    'mll_fR_initialized':{}}
+
+# Define states ---------------------------------------------------------------
+'''Defined states are composed of collections of settings and prerequisites.
+    -Only the settings particular to a state need to be listed.
+    -Prerequisites should be entered as lists of dictionaries that include the 
+    database and key:value pair that corresponds to a passing prerequisite for 
+    the given state. Prereqs should be separated by severity.
+        critical:
+            -A failed critical prereq could jeopardize the health of the
+            system if left in the applied state.
+            -Critical prerequisites are continuously monitored.
+            -The system is placed into a temporary "safe" state upon failure of
+            a critical prereq.
+        necessary:
+            -Failure of a necessary prereq will cause the system to come out of,
+            or be unable to reach, compliance.
+            -Necessary prereqs are checked if the system is out of compliance.
+            -The system is prevented from moving to the applied state upon 
+            failure of a necessary prereq.
+        optional:
+            -Failure of an optional prereq should not cause failure elsewhere, 
+            but system performance or specifications can't be guaranteed. It is
+            more "non compulsory" than "optional".
+            -Optional prereqs are checked if the system is out of compliance.
+            -The system is allowed to move into the applied state upon 
+            failure of an optional prereq, but the system should not listed as
+            compliant.
+    -The state as listed in the '''
+STATES = {
+    'lock':{
+        'settings':{
+            'mll_fR_TEC_settings':{'tec_mode':'R', 'tec_output':True},
+            'mll_fR_PID_settings':{},
+            'mll_fR_HV_settings':{}},
+        'prerequisites':{
+            'critical':[
+                {'db':'', 'key':'', 'value':''}],
+            'necessary':[],
+            'optional':[]}},
+    'free':{
+        'settings':{
+            'mll_fR_TEC_settings':{},
+            'mll_fR_PID_settings':{},
+            'mll_fR_HV_settings':{}},
+        'prerequisites':{}},
+    'safe':{
+        'settings':{
+            'mll_fR_TEC_settings':{},
+            'mll_fR_PID_settings':{'pid_action':False},
+            'mll_fR_HV_settings':{}},
+        'prerequisites':{}}}
+
+    
+# %% Initialization ===========================================================
+
+# Connect to MongoDB
+mongo_client = mongoDB.MongoClient()
+db = {}
+for database in MASTER_DBs:
+    db[database] = mongoDB.DatabaseMaster(mongo_client, database)
+for database in READ_DBs:
+    db[database] = mongoDB.DatabaseRead(mongo_client, database)
+
+# Start Logging
+log.start_logging(database=db[LOG_DB])
+
+# Initialize drivers
+'''Each driver should be associated with one state database. '''
+driver = {}
+driver['mll_fR_TEC_settings'] = TECModule(visa_address, tec_channel)
+driver['mll_fR_PID_settings'] = SIM960(visa_address, port)
+
+
+# Check that all settings (as listed in the defaults) exist in the databases
+    # If misssing, populate with the default values
+
+
+
+# %% Main Loop ================================================================
+loop = True
+while loop:
+    pass
+# Check for critical prerequisites
+    # Place into safe state if critical prereqs fail
+# Get current status
+    #read values for each of the monitored parameters
+# Check for compliance
+    # Check the log for new settings, or specified state
+        # if db_name in 
+    # Check the monitored parameters against requirements of the state
+    # If out of compliance, check necessary and optional prerequisites
+    # Bring in to compliance if prereqs pass
+
+# %% OLD STUFF
+#==============================================================================
 # %% Functions
-def open_busy(resource):
-    opened = False
-    while not opened:
-        try:
-            resource.open()
-        except visa.VisaIOError as visa_err:
-            if visa_err[0] == visa.VisaIOError(visa.constants.VI_ERROR_RSRC_BUSY)[0]:
-                pass
-            else:
-                raise
-        else:
-            opened = True
 
 def start_busy(task):
     started = False

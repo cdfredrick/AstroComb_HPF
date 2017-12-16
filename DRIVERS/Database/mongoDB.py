@@ -31,68 +31,56 @@ class MongoClient:
         '''
         self.client.close()
 
-# %% DatabaseMaster
-class DatabaseMaster:
-    def __init__(self, mongo_client, database, capped_collection_size=int(1e6)):
+# %% DatabaseRead
+class DatabaseRead():
+    def __init__(self, mongo_client, database):
         '''
-        The "master" handler for the database. This class enforces the database
-            settings as given in the kwargs and ensures that the record and log
-            have the correct indexes.
+        The "read only" handler for the database. This subclass is used to form
+            a read only connection to a database, without needing to specify
+            the database specific settings. The methods in this subclass can not 
+            change values in the database.
+        In order to allow for a more hierarchical structure, names may be 
+            separated by a single forward slash '/'. The preceding name will be
+            the name of the database and the following name will be that of a 
+            collection. The sub collection names ('record', 'buffer', 
+            'log', 'log_buffer') will be appended to the collection name. Only 
+            one level is supported, mongoDB does not support nested collections.
         
         *args
         mongo_client: a MongoClient object
-        database: str, the name of the requested database
-        
-        **kwargs
-        capped_collection_size: int, the size of the capped collection (buffer)
-            in bytes.
+        database: str, the name of the requested database. Use the '/' separator
+            to include multiple collections in a single database file.
         '''
-        self.get_databases(mongo_client, database)
-        self.ensure_compliance(capped_collection_size)
+    # Initialize
+        self.get_collections(mongo_client, database)
 
-    def ensure_compliance(self, capped_collection_size):
-    # The record
-        # Create a descending index for documents with timestamps in the record
-        self.record.create_index([('timestamp', pymongo.DESCENDING)])
-    # The buffer
-        # Check that the buffer is as specified in the initialization options
-        buffer_options = self.buffer.options()
-        if not bool(buffer_options):
-            # Create the collection if it does not already exist
-            self.database.create_collection('buffer', capped=True, size=capped_collection_size)
-        elif (not buffer_options['capped']) or (buffer_options['size'] != capped_collection_size):
-            # Convert the collection if it is not capped or if it is the wrong size
-            self.database.command({'convertToCapped':'buffer', 'size':capped_collection_size})
-    # The log
-        # Create a descending index with timestamps for documents in the log
-        self.log.create_index([('timestamp', pymongo.DESCENDING)])
-        # Create an ascending index with level for documents in the log
-        self.log.create_index([('log_level', pymongo.ASCENDING)])
-    # The log buffer
-        # Check that the log buffer is as specified in the initialization options
-        buffer_options = self.log_buffer.options()
-        if not bool(buffer_options):
-            # Create the collection if it does not already exist
-            self.database.create_collection('log_buffer', capped=True, size=capped_collection_size)
-        elif (not buffer_options['capped']) or (buffer_options['size'] != capped_collection_size):
-            # Convert the collection if it is not capped or if it is the wrong size
-            self.database.command({'convertToCapped':'log_buffer', 'size':capped_collection_size})
-
-    def get_databases(self, mongo_client, database):
+    def get_collections(self, mongo_client, database):
     # Get the MongoDB client
         self.client = mongo_client.client
+    # Parse database name
+        database = database.split('/')
+        if len(database) is 2:
+            collection = database[1]+'_'
+            database = database[0]
+        else:
+            collection = ''
+            database = database[0]
     # Get the requested database
         self.database_name = database
+        self.collection_name = collection
         self.database = self.client[self.database_name]
     # Get the record
-        self.record = self.database['record']
+        self.record = self.database[self.collection_name+'record']
     # Get the buffer
-        self.buffer = self.database['buffer']
+        self.buffer = self.database[self.collection_name+'buffer']
     # Get the log
-        self.log = self.database['log']
+        self.log = self.database[self.collection_name+'log']
     # Get the log buffer
-        self.log_buffer = self.database['log_buffer']
-
+        self.log_buffer = self.database[self.collection_name+'log_buffer']
+    # Set constants
+        self.COLLECTION_KEYS = [self.collection_name+key for key in self.client.COLLECTION_KEYS]
+        self.DOCUMENT_KEYS = self.client.DOCUMENT_KEYS
+    
     def read_buffer(self, number_of_documents=0, sort_ascending=True, tailable_cursor=False):
         '''
         Returns an iterable cursor object containing documents from the buffer.
@@ -231,6 +219,28 @@ class DatabaseMaster:
     # Cursor
         return self.record.find(ranged_filter, limit=number_of_documents, sort=sort_order)
 
+# %% DatabaseReadWrite
+class DatabaseReadWrite(DatabaseRead):
+    def __init__(self, mongo_client, database):
+        '''
+        The "read and write" handler for the database. This subclass is used to
+            form a read and write connection to a database, without needing to
+            specify the database specific settings.
+        In order to allow for a more hierarchical structure, names may be 
+            separated by a single forward slash '/'. The preceding name will be
+            the name of the database and the following name will be that of a 
+            collection. The sub collection names ('record', 'buffer', 
+            'log', 'log_buffer') will be appended to the collection name. Only 
+            one level is supported, mongoDB does not support nested collections.
+        
+        *args
+        mongo_client: a MongoClient object
+        database: str, the name of the requested database. Use the '/' separator
+            to include multiple collections in a single database file.
+        '''
+    # Initialize
+        super(DatabaseReadWrite, self).__init__(mongo_client, database)
+   
     def write_document_to_log(self, document):
         '''
         Writes a document into the log. This is intended to be used to write
@@ -313,48 +323,62 @@ class DatabaseMaster:
         document = {'entry':entry, 'timestamp':datetime.datetime.utcnow()}
         self.record.insert_one(document)
 
-# %% DatabaseReadWrite
-class DatabaseReadWrite(DatabaseMaster):
-    def __init__(self, mongo_client, database):
-        '''
-        The "read and write" handler for the database. This subclass is used to
-            form a read and write connection to a database, without needing to
-            specify the database specific settings.
-        
-        *args
-        mongo_client: a MongoClient object
-        database: str, the name of the requested database
-        '''
-    # Initialize
-        self.get_databases(mongo_client, database)
-    # Disable methods from the master class
-        self.ensure_compliance = None
 
-# %% DatabaseRead
-class DatabaseRead(DatabaseMaster):
-    def __init__(self, mongo_client, database):
+# %% DatabaseMaster
+class DatabaseMaster:
+    def __init__(self, mongo_client, database, capped_collection_size=int(1e6)):
         '''
-        The "read only" handler for the database. This subclass is used to form
-            a read only connection to a database, without needing to specify
-            the database specific settings. The methods in this subclass can not 
-            change values in the database.
+        The "master" handler for the database. This class enforces the database
+            settings as given in the kwargs and ensures that the record and log
+            have the correct indexes.
+        In order to allow for a more hierarchical structure, names may be 
+            separated by a single forward slash '/'. The preceding name will be
+            the name of the database and the following name will be that of a 
+            collection. The sub collection names ('record', 'buffer', 
+            'log', 'log_buffer') will be appended to the collection name. Only 
+            one level is supported, mongoDB does not support nested collections.
         
         *args
         mongo_client: a MongoClient object
-        database: str, the name of the requested database
+        database: str, the name of the requested database. Use the '/' separator
+            to include multiple collections in a single database file.
+        
+        **kwargs
+        capped_collection_size: int, the size of the capped collection (buffer)
+            in bytes.
         '''
-    # Initialize
-        self.get_databases(mongo_client, database)
-    # Disable methods from the master class
-        self.ensure_compliance = None
-        self.write_document_to_log = None
-        self.write_document_to_record = None
-        self.write_buffer = None
-        self.write_log = None
-        self.write_log_buffer = None
-        self.write_record = None
-    
- 
+        super(DatabaseReadWrite, self).__init__(mongo_client, database)
+        self.ensure_compliance(capped_collection_size)
+
+    def ensure_compliance(self, capped_collection_size):
+    # The record
+        # Create a descending index for documents with timestamps in the record
+        self.record.create_index([('timestamp', pymongo.DESCENDING)])
+    # The record buffer
+        # Check that the buffer is as specified in the initialization options
+        buffer_options = self.buffer.options()
+        if not bool(buffer_options):
+            # Create the collection if it does not already exist
+            self.database.create_collection(self.COLLECTION_KEYS[1], capped=True, size=capped_collection_size)
+        elif (not buffer_options['capped']) or (buffer_options['size'] != capped_collection_size):
+            # Convert the collection if it is not capped or if it is the wrong size
+            self.database.command({'convertToCapped':self.COLLECTION_KEYS[1], 'size':capped_collection_size})
+    # The log
+        # Create a descending index with timestamps for documents in the log
+        self.log.create_index([('timestamp', pymongo.DESCENDING)])
+        # Create an ascending index with level for documents in the log
+        self.log.create_index([('log_level', pymongo.ASCENDING)])
+    # The log buffer
+        # Check that the log buffer is as specified in the initialization options
+        buffer_options = self.log_buffer.options()
+        if not bool(buffer_options):
+            # Create the collection if it does not already exist
+            self.database.create_collection(self.COLLECTION_KEYS[3], capped=True, size=capped_collection_size)
+        elif (not buffer_options['capped']) or (buffer_options['size'] != capped_collection_size):
+            # Convert the collection if it is not capped or if it is the wrong size
+            self.database.command({'convertToCapped':self.COLLECTION_KEYS[3], 'size':capped_collection_size})
+
+
 # %% Logging Handler
 
 class LoggingHandler(logging.Handler):

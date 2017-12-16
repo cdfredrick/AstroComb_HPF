@@ -55,264 +55,264 @@ class SRS_SIM960(SRS_SIM900):
     @log.log_this()
     def __init__(self, visa_address, port, res_manager=None):
         super(SRS_SIM960, self).__init__(visa_address, port, res_manager=res_manager)
-        self.token_mode(z=0)
+        self.token_mode(set_mode=0)
         self.lower_limit = self.lower_output_limit()
         self.upper_limit = self.upper_output_limit()
 
     @log.log_this()
-    def proportional_action(self, z=None):
+    def proportional_action(self, set_action=None):
         '''
         The proportional control. When ON, the PID Control path includes the 
         proportional control term.
         '''
-        if z is None:
+        if set_action is None:
         # Send query
             result = self.query('PCTL?')
             return bool(result)
         else:
         # Limit range
-            z = vo.tf_toggle(z)
+            set_action = vo.tf_toggle(set_action)
         # Send command
-            self.write('PCTL {:}'.format(['OFF','ON'][z]))
+            self.write('PCTL {:}'.format(['OFF','ON'][set_action]))
     
     @log.log_this()
-    def integral_action(self, z=None):
+    def integral_action(self, set_action=None):
         '''
         The integral control. When ON, the PID Control path includes the 
         integral control term.
         '''
-        if z is None:
+        if set_action is None:
         # Send query
             result = self.query('ICTL?')
             return bool(result)
         else:
         # Limit range
-            z = vo.tf_toggle(z)
+            set_action = vo.tf_toggle(set_action)
         # Send command
-            self.write('ICTL {:}'.format(['OFF','ON'][z]))
+            self.write('ICTL {:}'.format(['OFF','ON'][set_action]))
     
     @log.log_this()
-    def derivative_action(self, z=None):
+    def derivative_action(self, set_action=None):
         '''
         The derivative control. When ON, the PID Control path includes the 
         derivative control term.
         '''
-        if z is None:
+        if set_action is None:
         # Send query
             result = self.query('DCTL?')
             return bool(result)
         else:
         # Limit range
-            z = vo.tf_toggle(z)
+            set_action = vo.tf_toggle(set_action)
         # Send command
-            self.write('DCTL {:}'.format(['OFF','ON'][z]))
+            self.write('DCTL {:}'.format(['OFF','ON'][set_action]))
     
     @log.log_this()
-    def offset_action(self, z=None):
+    def offset_action(self, set_action=None):
         '''
         The offset control. When ON, the PID Control path includes the constant
         output offset.
         '''
-        if z is None:
+        if set_action is None:
         # Send query
             result = self.query('OCTL?')
             return bool(result)
         else:
         # Limit range
-            z = vo.tf_toggle(z)
+            set_action = vo.tf_toggle(set_action)
         # Send command
-            self.write('OCTL {:}'.format(['OFF','ON'][z]))
+            self.write('OCTL {:}'.format(['OFF','ON'][set_action]))
     
     @log.log_this()
-    def proportional_gain(self, f=None):
+    def proportional_gain(self, set_gain=None):
         '''
         The proportional gain (P), in V/V. Setting GAIN overrides the previous
         setting of APOL.
         '''
-        if f is None:
+        if set_gain is None:
         # Send query
             result = self.query('GAIN?')
             return float(result)
         else:
         # Limit range
-            if abs(f)<1e-1:
-                f=1e-1*math.copysign(1, f)
-            elif abs(f)>1e3:
-                f=1e3*math.copysign(1, f)
+            if abs(set_gain)<1e-1:
+                set_gain=1e-1*math.copysign(1, set_gain)
+            elif abs(set_gain)>1e3:
+                set_gain=1e3*math.copysign(1, set_gain)
         # Command syntax
-            if f<1e0:
-                command = 'GAIN {:.1G}'.format(f)
-            elif f<=1e3:
-                command = 'GAIN {:.2G}'.format(f)
+            if set_gain<1e0:
+                command = 'GAIN {:.1G}'.format(set_gain)
+            elif set_gain<=1e3:
+                command = 'GAIN {:.2G}'.format(set_gain)
         # Send command
             self.write(command)
     
     @log.log_this()
-    def polarity(self, z=None):
+    def polarity(self, set_polarity=None):
         '''
         The proportional gain polarity {to z=(POS 1, NEG 0)}. Setting APOL will
         override the sign of a previously-commanded GAIN.
         '''
-        if z is None:
+        if set_polarity is None:
         # Send query
             result = self.query('APOL?')
             return bool(result)
         else:
         # Limit range
-            z = vo.tf_toggle(z)
+            set_polarity = vo.tf_toggle(set_polarity)
         # Send command
-            self.write('APOL {:}'.format(['NEG','POS'][z]))
+            self.write('APOL {:}'.format(['NEG','POS'][set_polarity]))
     
     @log.log_this()
-    def integral_gain(self, f=None):
+    def integral_gain(self, set_gain=None):
         '''
         The integral gain (I), in V/(V·s).
         '''
-        if f is None:
+        if set_gain is None:
         # Send query
             result = self.query('INTG?')
             return float(result)
         else:
         # Limit range
-            if f<1e-2:
-                f=1e-2
-            elif f>5e5:
-                f=5e5
+            if set_gain<1e-2:
+                set_gain=1e-2
+            elif set_gain>5e5:
+                set_gain=5e5
         # Command syntax
-            if f<1e-1:
-                command = 'INTG {:.1G}'.format(f)
-            elif f<=5e5:
-                command = 'INTG {:.2G}'.format(f)
+            if set_gain<1e-1:
+                command = 'INTG {:.1G}'.format(set_gain)
+            elif set_gain<=5e5:
+                command = 'INTG {:.2G}'.format(set_gain)
         # Send command
             self.write(command)
     
     @log.log_this()
-    def derivative_gain(self, f=None):
+    def derivative_gain(self, set_gain=None):
         '''
         The derivative gain (D), in V/(V/s).
         '''
-        if f is None:
+        if set_gain is None:
         # Send query
             result = self.query('DERV?')
             return float(result)
         else:
         # Limit range
-            if f<1e-6:
-                f=1e-6
-            elif f>1e1:
-                f=1e1
+            if set_gain<1e-6:
+                set_gain=1e-6
+            elif set_gain>1e1:
+                set_gain=1e1
         # Command syntax
-            if f<1e-5:
-                command = 'DERV {:.1G}'.format(f)
-            elif f<=1e1:
-                command = 'DERV {:.2G}'.format(f)
+            if set_gain<1e-5:
+                command = 'DERV {:.1G}'.format(set_gain)
+            elif set_gain<=1e1:
+                command = 'DERV {:.2G}'.format(set_gain)
         # Send command
             self.write(command)
     
     @log.log_this()
-    def offset(self, f=None):
+    def offset(self, set_offset=None):
         '''
         The output offset, in volts.
         '''
-        if f is None:
+        if set_offset is None:
         # Send query
             result = self.query('OFST?')
             return float(result)
         else:
         # Limit range
-            if f<-10.:
-                f=-10.
-            elif f>10.:
-                f=10.
+            if set_offset<-10.:
+                set_offset=-10.
+            elif set_offset>10.:
+                set_offset=10.
         # Send command
-            self.write('OFST {:.3f}'.format(f))
+            self.write('OFST {:.3f}'.format(set_offset))
     
     @log.log_this()
-    def pid_action(self, z=None):
+    def pid_action(self, set_action=None):
         '''
         The controller output state.
         '''
-        if z is None:
+        if set_action is None:
         # Send query
             result = self.query('AMAN?')
             return bool(result)
         else:
         # Limit range
-            z = vo.tf_toggle(z)
+            set_action = vo.tf_toggle(set_action)
         # Send command
-            self.write('AMAN {:}'.format(['MAN','PID'][z]))
+            self.write('AMAN {:}'.format(['MAN','PID'][set_action]))
     
     @log.log_this()
-    def setpoint_action(self, z=None):
+    def setpoint_action(self, set_action=None):
         '''
         The setpoint input state.
         '''
-        if z is None:
+        if set_action is None:
         # Send query
             result = self.query('INPT?')
             return bool(result)
         else:
         # Limit range
-            z = vo.tf_toggle(z)
+            set_action = vo.tf_toggle(set_action)
         # Send command
-            self.write('INPT {:}'.format(['INT','EXT'][z]))
+            self.write('INPT {:}'.format(['INT','EXT'][set_action]))
     
     @log.log_this()
-    def internal_setpoint(self, f=None):
+    def internal_setpoint(self, set_setpoint=None):
         '''
         The internal setpoint value, in volts. If ramping is enabled (see RAMP),
         SETP will initiate a ramp to f. Otherwise, the setpoint value changes
         immediately to the new value.
         '''
-        if f is None:
+        if set_setpoint is None:
         # Send query
             result = self.query('SETP?')
             return float(result)
         else:
         # Limit range
-            if f<-10.:
-                f=-10.
-            elif f>10.:
-                f=10.
+            if set_setpoint<-10.:
+                set_setpoint=-10.
+            elif set_setpoint>10.:
+                set_setpoint=10.
         # Send command
-            self.write('SETP {:.3f}'.format(f))
+            self.write('SETP {:.3f}'.format(set_setpoint))
     
     @log.log_this()
-    def ramp_action(self, z=None):
+    def ramp_action(self, set_action=None):
         '''
         Internal setpoint ramping. When ON, the changes to the internal setpoint
         are made with constant slew-rate ramping enabled.
         '''
-        if z is None:
+        if set_action is None:
         # Send query
             result = self.query('RAMP?')
             return bool(result)
         else:
         # Limit range
-            z = vo.tf_toggle(z)
+            set_action = vo.tf_toggle(set_action)
         # Send command
-            self.write('RAMP {:}'.format(['OFF','ON'][z]))
+            self.write('RAMP {:}'.format(['OFF','ON'][set_action]))
     
     @log.log_this()
-    def ramp_rate(self, f=None):
+    def ramp_rate(self, set_rate=None):
         '''
         The setpoint ramping rate, in V/s.
         '''
-        if f is None:
+        if set_rate is None:
         # Send query
             result = self.query('RATE?')
             return float(result)
         else:
         # Limit range
-            if f<1e-3:
-                f=1e-3
-            elif f>1e4:
-                f=1e4
+            if set_rate<1e-3:
+                set_rate=1e-3
+            elif set_rate>1e4:
+                set_rate=1e4
         # Command syntax
-            if f<1e-2:
-                command = 'RATE {:.1G}'.format(f)
-            elif f<=1e4:
-                command = 'RATE {:.2G}'.format(f)
+            if set_rate<1e-2:
+                command = 'RATE {:.1G}'.format(set_rate)
+            elif set_rate<=1e4:
+                command = 'RATE {:.2G}'.format(set_rate)
         # Send command
             self.write(command)
     
@@ -329,66 +329,66 @@ class SRS_SIM960(SRS_SIM900):
         return int(result)
     
     @log.log_this()
-    def manual_output(self, f=None):
+    def manual_output(self, set_output=None):
         '''
         The manual output value, in volts.
         '''
-        if f is None:
+        if set_output is None:
         # Send query
             result = self.query('MOUT?')
             return float(result)
         else:
         # Limit range
-            if f<-10.:
-                f=-10.
-            elif f>10.:
-                f=10.
+            if set_output<-10.:
+                set_output=-10.
+            elif set_output>10.:
+                set_output=10.
         # Send command
-            self.write('MOUT {:.3f}'.format(f))
+            self.write('MOUT {:.3f}'.format(set_output))
     
     @log.log_this()
-    def upper_output_limit(self, f=None):
+    def upper_output_limit(self, set_limit=None):
         '''
         The upper output limit, in volts. the output voltage will always be 
         clamped to remain less positive than the ULIM limit. Combined with the 
         LLIM limit, this results in the output obeying:
             −10.00 ≤ LLIM ≤ Output ≤ ULIM ≤ +10.00
         '''
-        if f is None:
+        if set_limit is None:
         # Send query
             result = self.query('ULIM?')
             return float(result)
         else:
         # Limit range
-            if f<self.lower_limit:
-                f=self.lower_limit
-            elif f>10.:
-                f=10.
+            if set_limit<self.lower_limit:
+                set_limit=self.lower_limit
+            elif set_limit>10.:
+                set_limit=10.
         # Send command
-            self.write('ULIM {:.2f}'.format(f))
-            self.upper_limit = f
+            self.write('ULIM {:.2f}'.format(set_limit))
+            self.upper_limit = set_limit
     
     @log.log_this()
-    def lower_output_limit(self, f=None):
+    def lower_output_limit(self, set_limit=None):
         '''
         The lower output limit, in volts. the output voltage will always be 
         clamped to remain less negative than the LLIM limit. Combined with the 
         ULIM limit, this results in the output obeying:
             −10.00 ≤ LLIM ≤ Output ≤ ULIM ≤ +10.00
         '''
-        if f is None:
+        if set_limit is None:
         # Send query
             result = self.query('LLIM?')
             return float(result)
         else:
         # Limit range
-            if f<-10.:
-                f=-10.
-            elif f>self.upper_limit:
-                f=self.upper_limit
+            if set_limit<-10.:
+                set_limit=-10.
+            elif set_limit>self.upper_limit:
+                set_limit=self.upper_limit
         # Send command
-            self.write('LLIM {:.2f}'.format(f))
-            self.lower_limit = f
+            self.write('LLIM {:.2f}'.format(set_limit))
+            self.lower_limit = set_limit
     
     @log.log_this()
     def setpoint_monitor(self):
@@ -433,22 +433,22 @@ class SRS_SIM960(SRS_SIM900):
         return float(result)
     
     @log.log_this()
-    def power_line_frequency(self, i=None):
+    def power_line_frequency(self, set_frequency=None):
         '''
         The power line cycle frequency in Hz. FPLC is used to program the
         power-line rejection frequency for the precision voltage monitors (SMON?,
         MMON?, EMON?, OMON?). Valid inputs are 50 or 60 Hz.
         '''
-        if i is None:
+        if set_frequency is None:
         # Send query
             result = self.query('FPLC?')
             return int(result)
         else:
         # Limit range
-            if i not in [50, 60]:
-                i = min([50, 60], key=lambda x:abs(x-i))
+            if set_frequency not in [50, 60]:
+                set_frequency = min([50, 60], key=lambda x:abs(x-set_frequency))
         # Send command
-            self.write('FPLC {:}'.format(i))
+            self.write('FPLC {:}'.format(set_frequency))
     
     @log.log_this()
     def device_identification(self):
@@ -464,36 +464,36 @@ class SRS_SIM960(SRS_SIM900):
         return result
     
     @log.log_this()
-    def token_mode(self, z=None):
+    def token_mode(self, set_mode=None):
         '''
         The Token Query mode. If TOKN ON is set, then queries to the SIM960 that return tokens will 
         return the text keyword; otherwise they return the decimal integer value.
         '''
-        if z is None:
+        if set_mode is None:
         # Send query
             result = self.query('TOKN?')
             return bool(result)
         else:
         # Limit range
-            z = vo.tf_toggle(z)
+            set_mode = vo.tf_toggle(set_mode)
         # Send command
-            self.write('TOKN {:}'.format(['OFF','ON'][z]))
+            self.write('TOKN {:}'.format(['OFF','ON'][set_mode]))
     
     @log.log_this()
-    def display(self, z=None):
+    def display(self, set_display=None):
         '''
         The front panel display status. When the display is turned off 
         (DISX OFF), all front panel indicators and buttons are disabled.
         '''
-        if z is None:
+        if set_display is None:
         # Send query
             result = self.query('DISX?')
             return bool(result)
         else:
         # Limit range
-            z = vo.tf_toggle(z)
+            set_display = vo.tf_toggle(set_display)
         # Send command
-            self.write('DISX {:}'.format(['OFF','ON'][z]))
+            self.write('DISX {:}'.format(['OFF','ON'][set_display]))
 
 # %% SIM940 10 MHz Rubidium Oscillator
 class SRS_SIM940(SRS_SIM900):

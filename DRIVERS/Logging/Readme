@@ -6,7 +6,7 @@ To use eventlog.py you also need to download logging.conf
 
 Use the command:
 
-  import eventlog.py as log
+  from DRIVERS.Logging import eventlog as log
 
 
 #Calling the logger#

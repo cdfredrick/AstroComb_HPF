@@ -59,28 +59,33 @@ class DAQAnalogIn(object):
 
     @_handle_daq_error
     @log.log_this()
-    def create_analog_in(self, n_samples, log_rate, max_v=10., min_v=-10.):
+    def analog_in(self, samples=None, rate=10e3, max_v=10., min_v=-10.):
         """Sets up a task handler for an analog input channel."""
-        self.params['samples'] = n_samples
-        self.params['rate'] = log_rate
-        self.params['max_v'] = max_v
-        self.params['min_v'] = min_v
-        self.chan_name = '{0:}/ai{1:}'.format(self.address, self.chan_num)
-        self.task_handle = pydaq.TaskHandle()
+        if samples is None:
+        # Return the channel parameters
+            return self.params
+        else:
+            self.clear_task()
+            self.params['samples'] = samples
+            self.params['rate'] = rate
+            self.params['max_v'] = max_v
+            self.params['min_v'] = min_v
+            self.chan_name = '{0:}/ai{1:}'.format(self.address, self.chan_num)
+            self.task_handle = pydaq.TaskHandle()
 
-        pydaq.DAQmxCreateTask('', pydaq.byref(self.task_handle))
+            pydaq.DAQmxCreateTask('', pydaq.byref(self.task_handle))
 
-        pydaq.DAQmxCreateAIVoltageChan(self.task_handle, self.chan_name, '',
-                                       pydaq.DAQmx_Val_Cfg_Default,
-                                       self.params['min_v'],
-                                       self.params['max_v'],
-                                       pydaq.DAQmx_Val_Volts, None)
+            pydaq.DAQmxCreateAIVoltageChan(self.task_handle, self.chan_name, '',
+                                           pydaq.DAQmx_Val_Cfg_Default,
+                                           self.params['min_v'],
+                                           self.params['max_v'],
+                                           pydaq.DAQmx_Val_Volts, None)
 
-        pydaq.DAQmxCfgSampClkTiming(self.task_handle, '',
-                                    self.params['rate'],
-                                    pydaq.DAQmx_Val_Rising,
-                                    pydaq.DAQmx_Val_FiniteSamps,
-                                    self.params['samples'])
+            pydaq.DAQmxCfgSampClkTiming(self.task_handle, '',
+                                        self.params['rate'],
+                                        pydaq.DAQmx_Val_Rising,
+                                        pydaq.DAQmx_Val_FiniteSamps,
+                                        self.params['samples'])
 
     @_handle_daq_error
     @log.log_this()
@@ -131,7 +136,7 @@ class DAQAnalogIn(object):
             pydaq.DAQmxClearTask(self.task_handle)
         
     @log.log_this()
-    def point_measure(self, samples=100, rate=10000):
+    def point_measure(self, samples=100, rate=10e3):
         """Averages over a quick data run to return one point"""
         self.create_analog_in(samples, rate)
         result = np.average(self.read_analog_in())

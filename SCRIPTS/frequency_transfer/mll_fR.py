@@ -16,10 +16,10 @@ from DRIVERS.Database import mongoDB
 from DRIVERS.Logging import eventlog as log
 from DRIVERS.Visa.srs_sim_driver import SRS_SIM960 as SIM960
 from DRIVERS.Visa.ilx_driver import TECModule
-from DRIVERS.DAQ import daq_objects as DAQ_object
+from DRIVERS.DAQ.daq_objects import DAQAnalogIn
 
 
-# %% Settings and Constants ===================================================
+# %% Databases and Settings ===================================================
 
 # Local Database Names --------------------------------------------------------
 '''The following are lists of all of the databases originating within this 
@@ -27,42 +27,30 @@ from DRIVERS.DAQ import daq_objects as DAQ_object
     The databases should be grouped by function.
         state:
             -The entries in state databases should reflect the current state of
-            the system and the level of compliance. Other scripts should look 
-            to these databases in order to resolve prerequisites. Entries are
-            specified as follows:
-                {'state':<name of the current state>,
-                'compliance':<compliance with the current state>
-                'desired_state':<name of the desired state>,
-                }
-            -The compliance level should be a simple boolean value.
-            -The "desired_state" is mostly for internal use, particularly for 
-            cases where the state is temporarliy changed. The script should 
-            seek to bring the current state to the desired state.
-        visa:
+                the system and the level of compliance. Other scripts should 
+                look to these databases in order to resolve prerequisites.
+        device:
             -The entries in visa databases should include the settings for
-            each unique device or device/channel combination.
-        daq:
-            -There should be a unique daq database for each daq channel 
-            configuration. All necessary settings should be included.
+                each unique device or device/channel combination.
         monitor:
             -The entries in monitor databases should contain secondary 
-            variables used to determine compliance with the state of the
-            system, and to determine any actions required to maintain
-            compliance.
+                variables used to determine compliance with the state of the
+                system, and to determine any actions required to maintain
+                compliance.
         log:
             -This should be a single database that serves as the intermediary 
-            between this script and others. The entries in the log database
-            should be recognizable as commands in this script.'''
-STATE_DBs = [ 
-    'mll_fR/state', 'mll_fR/initialized']
-VISA_DBs =[
-    'mll_fR/TEC_settings', 'mll_fR/PID_settings', 'mll_fR/HV_settings']
-DAQ_DBs = ['mll_fR/DAQ_settings']
+                between this script and others. The entries in the log database
+                should be parsed as commands in this script.'''
+STATE_DBs = [
+    'mll_fR/state']
+DEVICE_DBs =[
+    'mll_fR/TEC_settings', 'mll_fR/PID_settings', 'mll_fR/HV_settings',
+    'mll_fR/DAQ_settings']
 MONITOR_DBs = [
     'mll_fR/TEC_temperature', 'mll_fR/TEC_current', 'mll_fR/PID_voltage', 
     'mll_fR/HV_output', 'mll_fR/rmsError']
 LOG_DB = 'mll_fR/log'
-MASTER_DBs = STATE_DBs + MONITOR_DBs + [LOG_DB]
+MASTER_DBs = STATE_DBs + VISA_DBs + DAQ_DBs + MONITOR_DBs + [LOG_DB]
 
 # External Database Names -----------------------------------------------------
 '''This is a list of all databases external to this control script that are 
@@ -70,12 +58,45 @@ MASTER_DBs = STATE_DBs + MONITOR_DBs + [LOG_DB]
 READ_DBs = []
 
 # Default Settings ------------------------------------------------------------
-'''This should include all settings used in this script. Upon initialization 
+'''A template for all settings used in this script. Upon initialization 
     these settings are checked against those saved in the database, and 
-    populated if found empty. The setting names should be derived from the 
-    method names of the drivers. Each state, device, database should be represented. The
-    default values are only added to the database if no other values are found.'''
-DEFAULT_SETTINGS = {
+    populated if found empty. Each state and device database should be
+    represented. Default values are only added to a database if they are found 
+    to be undefined within the database.
+state:
+    -Entries in the state databases are specified as follows:
+        {'state':<name of the current state>,
+         'compliance':<compliance with the current state>
+         'desired_state':<name of the desired state>,
+         'initialized':<initialization state of the control script>
+         }
+    -The state name should correspond to one of the defined states.
+    -The compliance level should be a simple boolean value that indicates
+        whether the system is compliant with the current state.
+    -The "desired_state" is mostly for internal use, particularly for cases
+        where the state is temporarliy changed. The script should seek to bring
+        the current state to the desired state. The script should not change 
+        the current state if the desired state is undefined.
+    -The "initialized" parameter is a boolean value that indicates that the
+        current state is accurate. It should be set to False by the master
+        program before the control scripts are loaded, and should only be set
+        to True after the control script has determined the current state. In
+        order to smoothly connect to the system if the instruments are already
+        running, initialization prerequisites should be no higher than 
+        "necessary".
+device:
+    -Entries in the device databases are specified as follows:
+        {<database path?:{<method name>:<value>,...},...}
+    -The entries in device databases should include the settings for each
+        unique device or device/channel combination. The setting names and
+        parameters should be derived from the methods of the drivers for
+        automation purposes.'''
+STATE_SETTINGS = {
+    'mll_fR/state':{
+            'state':'unknown',
+            'compliance':False,
+            'desired_state':'lock'}}
+DEVICE_SETTINGS = {
     'mll_fR_TEC_settings':{
         'tec_off_triggers':[5, 6, 7, 8, 10], 'tec_gain':100, 
         'tec_current_limit':0.400, 'tec_temperature_limit':40.0, 'tec_mode':'R',
@@ -88,64 +109,15 @@ DEFAULT_SETTINGS = {
         'manual_output':0.000, 'upper_output_limit':8.00,
         'lower_output_limit':0.00, 'power_line_frequency':60, 'display':True},
     'mll_fR_HV_settings':{},
-    'mll_fR_state':{},
-    'mll_fR_initialized':{}}
-
-# Define states ---------------------------------------------------------------
-'''Defined states are composed of collections of settings and prerequisites.
-    -Only the settings particular to a state need to be listed.
-    -Prerequisites should be entered as lists of dictionaries that include the 
-    database and key:value pair that corresponds to a passing prerequisite for 
-    the given state. Prereqs should be separated by severity.
-        critical:
-            -A failed critical prereq could jeopardize the health of the
-            system if left in the applied state.
-            -Critical prerequisites are continuously monitored.
-            -The system is placed into a temporary "safe" state upon failure of
-            a critical prereq.
-        necessary:
-            -Failure of a necessary prereq will cause the system to come out of,
-            or be unable to reach, compliance.
-            -Necessary prereqs are checked if the system is out of compliance.
-            -The system is prevented from moving to the applied state upon 
-            failure of a necessary prereq.
-        optional:
-            -Failure of an optional prereq should not cause failure elsewhere, 
-            but system performance or specifications can't be guaranteed. It is
-            more "non compulsory" than "optional".
-            -Optional prereqs are checked if the system is out of compliance.
-            -The system is allowed to move into the applied state upon 
-            failure of an optional prereq, but the system should not listed as
-            compliant.
-    -The state as listed in the '''
-STATES = {
-    'lock':{
-        'settings':{
-            'mll_fR_TEC_settings':{'tec_mode':'R', 'tec_output':True},
-            'mll_fR_PID_settings':{},
-            'mll_fR_HV_settings':{}},
-        'prerequisites':{
-            'critical':[
-                {'db':'', 'key':'', 'value':''}],
-            'necessary':[],
-            'optional':[]}},
-    'free':{
-        'settings':{
-            'mll_fR_TEC_settings':{},
-            'mll_fR_PID_settings':{},
-            'mll_fR_HV_settings':{}},
-        'prerequisites':{}},
-    'safe':{
-        'settings':{
-            'mll_fR_TEC_settings':{},
-            'mll_fR_PID_settings':{'pid_action':False},
-            'mll_fR_HV_settings':{}},
-        'prerequisites':{}}}
-
+    'mll_fR/DAQ_settings':{
+        'analog_in':{
+            'samples':1e3, 'rate':50e3, 'max_v':10., 'min_v':-10.}}}
     
-# %% Initialization ===========================================================
+SETTINGS = dict(list(STATE_SETTINGS.items()) + list(DEVICE_SETTINGS.items()))
 
-# Connect to MongoDB
+# %% Initialize Databases, Devices, and Settings ==============================
+
+# Connect to MongoDB ----------------------------------------------------------
 mongo_client = mongoDB.MongoClient()
 db = {}
 for database in MASTER_DBs:
@@ -153,35 +125,144 @@ for database in MASTER_DBs:
 for database in READ_DBs:
     db[database] = mongoDB.DatabaseRead(mongo_client, database)
 
-# Start Logging
+# Start Logging ---------------------------------------------------------------
 log.start_logging(database=db[LOG_DB])
-
-# Initialize drivers
-'''Each driver should be associated with one state database. '''
-driver = {}
-driver['mll_fR_TEC_settings'] = TECModule(visa_address, tec_channel)
-driver['mll_fR_PID_settings'] = SIM960(visa_address, port)
-
 
 # Check that all settings (as listed in the defaults) exist in the databases
     # If misssing, populate with the default values
 
+# Initialize devices ----------------------------------------------------------
+'''Each device database should be associated with a device object.'''
+dev = {}
+dev['mll_fR/TEC_settings'] = TECModule(visa_address, tec_channel)
+dev['mll_fR/PID_settings'] = SIM960(visa_address, port)
+dev['mll_fR/DAQ_settings'] = DAQAnalogIn(device_address, chan_num)
+
+
+# %% Routines ==================================================================
+'''This section is for defining the methods needed to maintain the system in
+    its defined states.'''
+
+def lock():
+    pass
+
+# %% States and Monitors ======================================================
+'''Defined states are composed of collections of settings, prerequisites,
+    monitors, and a method.
+setttings:
+    -Only the settings particular to a state need to be listed, and they should
+        be in the same format as those in the defaults.
+    -The settings listed here should be thought of as stationary prerequisites 
+        or as an known initialization state that the system should pass through
+        to ease the transition to the compliant state. Dynamic settings should
+        be dealt with in the state's method.
+prerequisites:
+    -Prerequisites should be entered as lists of dictionaries that include the 
+        database and key:value pair that corresponds to a passing prerequisite
+        for the given state:
+        [{'db':<database path>, 'key':<entry's key (optional)>, 'value':<desired value>},...]
+    -Prereqs should be separated by severity.
+        critical:
+            -A failed critical prereq could jeopardize the health of the
+                system if left in the applied state.
+            -Critical prerequisites are continuously monitored.
+            -The system is placed into a temporary "safe" state upon failure of
+                a critical prereq.
+        necessary:
+            -Failure of a necessary prereq will cause the system to come out of,
+                or be unable to reach, compliance.
+            -Necessary prereqs are checked if the system is out of compliance.
+            -The system is prevented from moving to the applied state upon 
+                failure of a necessary prereq.
+        optional:
+            -Failure of an optional prereq should not cause failure elsewhere, 
+                but system performance or specifications can't be guaranteed. 
+                It is more "non compulsory" than "optional".
+            -Optional prereqs are checked if the system is out of compliance.
+            -The system is allowed to move into the applied state upon 
+                failure of an optional prereq, but the system should not listed
+                as compliant.
+monitors:
+    -Monitors should associate the monitor databases with the methods that 
+        returns the monitored values:
+        {<database path>:<monitoring function>,...}
+routines:
+    -The routines are the functions needed to determine if the state is in 
+        compliance, bring the state into compliance, and maintain the current
+        state in compliance. Only one function call should be listed for each
+        method. The methods themselves may call others.
+    -Routines should be entered'''
+STATES = {
+    'lock':{
+        'settings':{
+            'mll_fR_TEC_settings':{'tec_mode':'R', 'tec_output':True},
+            'mll_fR_PID_settings':{},
+            'mll_fR_HV_settings':{},
+            'mll_fR/DAQ_settings':{
+                'analog_in':{
+                    'samples':1e3, 'rate':50e3, 'max_v':10., 'min_v':-10.}}},
+        'prerequisites':{
+            'critical':[
+                {'db':'', 'key':'', 'value':''}],
+            'necessary':[],
+            'optional':[]},
+        'monitors':{
+            'mll_fR/TEC_temperature':{'method':gettatr(),'unit':'kOhms'},
+            'mll_fR/TEC_current':{'method':gettatr(),'unit':'A'},
+            'mll_fR/PID_voltage':{'method':gettatr(),'unit':'V'},
+            'mll_fR/HV_output':{'method':gettatr(),'unit':'V'},
+            'mll_fR/rmsError':{'method':gettatr(),'unit':'V'}},
+        'routines':{'test':monitor_lock, 'search':find_lock, 'maintain':keep_lock}},
+    'free':{
+        'settings':{
+            'mll_fR_TEC_settings':{},
+            'mll_fR_PID_settings':{},
+            'mll_fR_HV_settings':{}},
+        'prerequisites':{},
+        'monitors':{},
+        'method':{}},
+    'safe':{
+        'settings':{
+            'mll_fR_TEC_settings':{},
+            'mll_fR_PID_settings':{'pid_action':False},
+            'mll_fR_HV_settings':{}},
+        'prerequisites':{},
+        'monitors':{},
+        'method':{}}}
+
+# Initialize monitors ---------------------------------------------------------
+'''Each monitor database should be associated with the method that returns the
+    monitored value.'''
+mon = {}
+for monitor in MONITOR_DBs:
+    mon[monitor] = np.array([])
 
 
 # %% Main Loop ================================================================
 loop = True
 while loop:
     pass
-# Check for critical prerequisites
-    # Place into safe state if critical prereqs fail
-# Get current status
-    #read values for each of the monitored parameters
-# Check for compliance
-    # Check the log for new settings, or specified state
-        # if db_name in 
-    # Check the monitored parameters against requirements of the state
-    # If out of compliance, check necessary and optional prerequisites
-    # Bring in to compliance if prereqs pass
+# Check the critical prerequisites of the current state
+    # Place into safe state if critical prereqs fail.
+        # Change the state variable and update the device settings
+        # The desired state should be left unaltered
+# Check the log for new settings, or specified state
+    # if a new setting, check if it conflicts with the current state
+        # excecute new command if no conflicts
+    # if a new state, update the desired state variable
+# Check that the current state is the desired state
+    # Check the critical prereqs for the desired if different from current
+        # Upon passing, update the current state variable to the desired state
+        # The current state variable should show noncompliance.
+# Maintain the current state
+    # If compliant
+        # Check the monitored parameters against requirements of the state
+    # If out of compliance, 
+        # update the current settings or reinitialize the state if required
+        # check necessary and optional prerequisites
+        # Bring in to compliance if prereqs pass
+    # elif compliant
+        # Maintain the state in compliance
 
 # %% OLD STUFF
 #==============================================================================

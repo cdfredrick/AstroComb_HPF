@@ -63,7 +63,7 @@ READ_DBs = []
     populated if found empty. Each state and device database should be
     represented. Default values are only added to a database if they are found 
     to be undefined within the database.
-state:
+states:
     -Entries in the state databases are specified as follows:
         {'state':<name of the current state>,
          'compliance':<compliance with the current state>
@@ -84,7 +84,7 @@ state:
         order to smoothly connect to the system if the instruments are already
         running, initialization prerequisites should be no higher than 
         "necessary".
-device:
+devices:
     -Entries in the device databases are specified as follows:
         {<database path?:{<method name>:<value>,...},...}
     -The entries in device databases should include the settings for each
@@ -153,35 +153,37 @@ setttings:
     -Only the settings particular to a state need to be listed, and they should
         be in the same format as those in the defaults.
     -The settings listed here should be thought of as stationary prerequisites 
-        or as an known initialization state that the system should pass through
+        or as known initialization states that the system should pass through
         to ease the transition to the compliant state. Dynamic settings should
-        be dealt with in the state's method.
+        be dealt with in the state's methods.
+    -These settings will be applied when the system is out of compliance.
 prerequisites:
     -Prerequisites should be entered as lists of dictionaries that include the 
         database and key:value pair that corresponds to a passing prerequisite
         for the given state:
         [{'db':<database path>, 'key':<entry's key (optional)>, 'value':<desired value>},...]
+    -The key is optional, and is only used if specified.
     -Prereqs should be separated by severity.
         critical:
             -A failed critical prereq could jeopardize the health of the
-                system if left in the applied state.
+                system if brought into or left in the applied state.
             -Critical prerequisites are continuously monitored.
             -The system is placed into a temporary "safe" state upon failure of
                 a critical prereq.
         necessary:
-            -Failure of a necessary prereq will cause the system to come out of,
-                or be unable to reach, compliance.
+            -Failure of a necessary prereq will cause the system to come out of
+                or be unable to reach compliance.
             -Necessary prereqs are checked if the system is out of compliance.
             -The system is prevented from moving to the applied state upon 
-                failure of a necessary prereq.
+                failure of a necessary prereq, and no attempts are made to 
+                bring the system into compliance if already in the state.
         optional:
             -Failure of an optional prereq should not cause failure elsewhere, 
                 but system performance or specifications can't be guaranteed. 
                 It is more "non compulsory" than "optional".
             -Optional prereqs are checked if the system is out of compliance.
             -The system is allowed to move into the applied state upon 
-                failure of an optional prereq, but the system should not listed
-                as compliant.
+                failure of an optional prereq.
 monitors:
     -Monitors should associate the monitor databases with the methods that 
         returns the monitored values:
@@ -191,13 +193,17 @@ routines:
         compliance, bring the state into compliance, and maintain the current
         state in compliance. Only one function call should be listed for each
         method. The methods themselves may call others.
-    -Routines should be entered'''
+    -Routines should be entered for the three cases of testing the state, 
+        searching for the state, and maintaining the state.
+        {'test':<method1>, 'search':<method2>, 'maintain':<method3>}
+    -The test methods should return a boolean value indicating the compliance of
+        the state. Searching and maintaining methods should not return anything.'''
 STATES = {
     'lock':{
         'settings':{
-            'mll_fR_TEC_settings':{'tec_mode':'R', 'tec_output':True},
-            'mll_fR_PID_settings':{},
-            'mll_fR_HV_settings':{},
+            'mll_fR/TEC_settings':{'tec_mode':'R', 'tec_output':True},
+            'mll_fR/PID_settings':{},
+            'mll_fR/HV_settings':{},
             'mll_fR/DAQ_settings':{
                 'analog_in':{
                     'samples':1e3, 'rate':50e3, 'max_v':10., 'min_v':-10.}}},
@@ -215,9 +221,9 @@ STATES = {
         'routines':{'test':monitor_lock, 'search':find_lock, 'maintain':keep_lock}},
     'free':{
         'settings':{
-            'mll_fR_TEC_settings':{},
-            'mll_fR_PID_settings':{},
-            'mll_fR_HV_settings':{}},
+            'mll_fR/TEC_settings':{},
+            'mll_fR/PID_settings':{},
+            'mll_fR/HV_settings':{}},
         'prerequisites':{},
         'monitors':{},
         'method':{}},
@@ -231,8 +237,7 @@ STATES = {
         'method':{}}}
 
 # Initialize monitors ---------------------------------------------------------
-'''Each monitor database should be associated with the method that returns the
-    monitored value.'''
+'''Each monitor database should be associated with a local variable.'''
 mon = {}
 for monitor in MONITOR_DBs:
     mon[monitor] = np.array([])

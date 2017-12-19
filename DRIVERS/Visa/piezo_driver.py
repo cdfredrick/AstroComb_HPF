@@ -140,7 +140,8 @@ class MDT639B(vo.Visa):
     @log.log_this()
     def x_voltage(self, set_voltage=None):
         '''
-        The output voltage for the x axis.
+        The output voltage for the x axis. The external modulation signal is
+        summed with the setpoint.
         '''
         if set_voltage is None:
         # Send query
@@ -196,7 +197,8 @@ class MDT639B(vo.Visa):
     @log.log_this()
     def y_voltage(self, set_voltage=None):
         '''
-        The output voltage for the y axis.
+        The output voltage for the y axis. The external modulation signal is
+        summed with the setpoint.
         '''
         if set_voltage is None:
         # Send query
@@ -252,7 +254,8 @@ class MDT639B(vo.Visa):
     @log.log_this()
     def z_voltage(self, set_voltage=None):
         '''
-        The output voltage for the z axis.
+        The output voltage for the z axis. The external modulation signal is
+        summed with the setpoint.
         '''
         if set_voltage is None:
         # Send query

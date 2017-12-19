@@ -17,6 +17,7 @@ from DRIVERS.Logging import eventlog as log
 from DRIVERS.Visa.srs_sim_driver import SRS_SIM960 as SIM960
 from DRIVERS.Visa.ilx_driver import TECModule
 from DRIVERS.DAQ.daq_objects import DAQAnalogIn
+from DRIVERS.Visa.piezo_driver import MDT639B
 
 
 # %% Databases and Settings ===================================================
@@ -93,7 +94,7 @@ devices:
         automation purposes.'''
 STATE_SETTINGS = {
     'mll_fR/state':{
-            'state':'unknown',
+            'state':'free',
             'compliance':False,
             'desired_state':'lock'}}
 DEVICE_SETTINGS = {
@@ -108,7 +109,8 @@ DEVICE_SETTINGS = {
         'setpoint_action':False, 'internal_setpoint':0.000, 'ramp_action':False,
         'manual_output':0.000, 'upper_output_limit':8.00,
         'lower_output_limit':0.00, 'power_line_frequency':60, 'display':True},
-    'mll_fR_HV_settings':{},
+    'mll_fR_HV_settings':{
+        'x_min':0.00, 'x_max':60.00, 'x_voltage':0.00},
     'mll_fR/DAQ_settings':{
         'analog_in':{
             'samples':1e3, 'rate':50e3, 'max_v':10., 'min_v':-10.}}}
@@ -136,6 +138,7 @@ log.start_logging(database=db[LOG_DB])
 dev = {}
 dev['mll_fR/TEC_settings'] = TECModule(visa_address, tec_channel)
 dev['mll_fR/PID_settings'] = SIM960(visa_address, port)
+dev['mll_fR/HV_settings'] = MDT639B(visa_address)
 dev['mll_fR/DAQ_settings'] = DAQAnalogIn(device_address, chan_num)
 
 

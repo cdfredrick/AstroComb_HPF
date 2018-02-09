@@ -33,10 +33,11 @@ import time
 
 #3rd party imports
 import visa
+from pyvisa import errors as visa_errors # for error handling
 
 #Astrocomb imports
-import eventlog as log
-import ac_excepts
+from DRIVERS.Logging import eventlog as log
+from DRIVERS.Logging import ac_excepts
 
 
 #Constants
@@ -63,11 +64,11 @@ def handle_visa_error(method):
         try:
             result = method(self, *args, **kwargs)
             return result
-        except (visa.errors.VisaIOError,visa.errors.InvalidSession) as visa_err:
+        except (visa_errors.VisaIOError,visa_errors.InvalidSession) as visa_err:
             result = None
             log.log_error(method.__module__, method.__name__, visa_err)
             self.check_resource()
-            if self.connected is True:
+            if self.opened is True:
                 self.close_resource()
             return result
     return attempt_method
@@ -150,7 +151,7 @@ class Visa(object):
             for the specified instrument are freed.
         '''
         self.resource.close()
-        self.connected = False
+        self.opened = False
         
     @log.log_this()
     def initialize_resource(self):
@@ -159,7 +160,7 @@ class Visa(object):
         '''
         try:
             self.resource = self.res_man.get_resource(self.address)
-        except (visa.errors.VisaIOError, UnboundLocalError) as err:
+        except (visa_errors.VisaIOError, UnboundLocalError) as err:
             self.resource = None
             log.log_error('visa_objects', 'initialize_resource', err)
     

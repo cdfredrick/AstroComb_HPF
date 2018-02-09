@@ -19,6 +19,15 @@ from DRIVERS.Visa.ilx_driver import TECModule
 from DRIVERS.DAQ.daq_objects import DAQAnalogIn
 from DRIVERS.Visa.piezo_driver import MDT639B
 
+# %% Helper Functions
+def getvalue(nested_dict, key_list):
+    if isinstance(key_list, list):
+        for key in key_list:
+            nested_dict = nested_dict[key]
+    else:
+        nested_dict = nested_dict[key_list]
+    return nested_dict
+    
 
 # %% Databases and Settings ===================================================
 
@@ -33,6 +42,13 @@ from DRIVERS.Visa.piezo_driver import MDT639B
         device:
             -The entries in visa databases should include the settings for
                 each unique device or device/channel combination.
+        daq:
+            -The entries in the daq databases should include the settings
+                needed to generate a task handler. DAQ databases are not for
+                storing data retrieved from the device, use monitor databases
+                for that purpose. If there are multiple use cases for a single
+                channel (same channel, different task handlers), each case
+                should have a db.
         monitor:
             -The entries in monitor databases should contain secondary 
                 variables used to determine compliance with the state of the
@@ -45,13 +61,14 @@ from DRIVERS.Visa.piezo_driver import MDT639B
 STATE_DBs = [
     'mll_fR/state']
 DEVICE_DBs =[
-    'mll_fR/TEC_settings', 'mll_fR/PID_settings', 'mll_fR/HV_settings',
-    'mll_fR/DAQ_settings']
+    'mll_fR/TEC_settings', 'mll_fR/PID_settings', 'mll_fR/HV_settings']
+DAQ_DBs = [
+    'mll_fR/DAQ_error_frequency', 'mll_fR/DAQ_rms_error']
 MONITOR_DBs = [
     'mll_fR/TEC_temperature', 'mll_fR/TEC_current', 'mll_fR/PID_voltage', 
-    'mll_fR/HV_output', 'mll_fR/rmsError']
+    'mll_fR/HV_output', 'mll_fR/rms_error']
 LOG_DB = 'mll_fR/log'
-MASTER_DBs = STATE_DBs + VISA_DBs + DAQ_DBs + MONITOR_DBs + [LOG_DB]
+MASTER_DBs = STATE_DBs + DEVICE_DBs + DAQ_DBs + MONITOR_DBs + [LOG_DB]
 
 # External Database Names -----------------------------------------------------
 '''This is a list of all databases external to this control script that are 
@@ -66,7 +83,7 @@ READ_DBs = []
     to be undefined within the database.
 states:
     -Entries in the state databases are specified as follows:
-        {'state':<name of the current state>,
+        <database path>:{'state':<name of the current state>,
          'compliance':<compliance with the current state>
          'desired_state':<name of the desired state>,
          'initialized':<initialization state of the control script>
@@ -85,37 +102,47 @@ states:
         order to smoothly connect to the system if the instruments are already
         running, initialization prerequisites should be no higher than 
         "necessary".
-devices:
-    -Entries in the device databases are specified as follows:
-        {<database path?:{<method name>:<value>,...},...}
-    -The entries in device databases should include the settings for each
-        unique device or device/channel combination. The setting names and
-        parameters should be derived from the methods of the drivers for
-        automation purposes.'''
+devices and daq:
+    -Entries in the device and daq databases are specified as follows:
+        <database path>:{<method name>:<value>,...},...
+    -The entries should include the settings for each unique device or
+        device/channel combination. The setting names and parameters should be
+        derived from the methods of the drivers for automation purposes.
+    -Place multiple arguments in a list, keyword arguments in
+        dictionaries, and combinations of the two in tuples, 
+        ([args], {kwargs}). Single arguments may be left as is, but single
+        arguments that are lists must nested, [[list argument]]. The automation
+        checks whether the instance is list, dictionary, or tuple before 
+        sending the commands.
+'''
 STATE_SETTINGS = {
     'mll_fR/state':{
             'state':'free',
             'compliance':False,
             'desired_state':'lock'}}
 DEVICE_SETTINGS = {
-    'mll_fR_TEC_settings':{
+    'mll_fR/TEC_settings':{
         'tec_off_triggers':[5, 6, 7, 8, 10], 'tec_gain':100, 
         'tec_current_limit':0.400, 'tec_temperature_limit':40.0, 'tec_mode':'R',
         'tec_output':True, 'tec_resistance_setpoint':7.580},
-    'mll_fR_PID_settings':{
+    'mll_fR/PID_settings':{
         'proportional_action':True, 'integral_action':True,
         'derivative_action':False, 'offset_action':False, 
         'proportional_gain':-3.0e0, 'integral_gain':5.0e2, 'pid_action':False,
         'setpoint_action':False, 'internal_setpoint':0.000, 'ramp_action':False,
         'manual_output':0.000, 'upper_output_limit':8.00,
         'lower_output_limit':0.00, 'power_line_frequency':60, 'display':True},
-    'mll_fR_HV_settings':{
-        'x_min':0.00, 'x_max':60.00, 'x_voltage':0.00},
-    'mll_fR/DAQ_settings':{
-        'analog_in':{
+    'mll_fR/HV_settings':{
+        'x_min':0.00, 'x_max':60.00, 'x_voltage':0.00}}
+DAQ_SETTINGS = {
+    'mll_fR/DAQ_error_frequency':{
+        'task_handler':{
+            'samples':1e3, 'rate':50e3, 'max_v':10., 'min_v':-10.}},
+    'mll_fR/DAQ_rms_error':{
+        'task_handler':{
             'samples':1e3, 'rate':50e3, 'max_v':10., 'min_v':-10.}}}
     
-SETTINGS = dict(list(STATE_SETTINGS.items()) + list(DEVICE_SETTINGS.items()))
+SETTINGS = dict(list(STATE_SETTINGS.items()) + list(DEVICE_SETTINGS.items()) + list(DAQ_SETTINGS.items()))
 
 # %% Initialize Databases, Devices, and Settings ==============================
 
@@ -133,25 +160,51 @@ log.start_logging(database=db[LOG_DB])
 # Check that all settings (as listed in the defaults) exist in the databases
     # If misssing, populate with the default values
 
-# Initialize devices ----------------------------------------------------------
+# Initialize Devices ----------------------------------------------------------
 '''Each device database should be associated with a device object.'''
 dev = {}
 dev['mll_fR/TEC_settings'] = TECModule(visa_address, tec_channel)
 dev['mll_fR/PID_settings'] = SIM960(visa_address, port)
 dev['mll_fR/HV_settings'] = MDT639B(visa_address)
-dev['mll_fR/DAQ_settings'] = DAQAnalogIn(device_address, chan_num)
 
+# Initialize DAQ Channels -----------------------------------------------------
+daq = {}
+daq['mll_fR/DAQ_error_frequency'] = DAQAnalogIn(device_address, chan_num)
+daq['mll_fR/DAQ_error_frequency'] = DAQAnalogIn(device_address, chan_num)
+
+# Initialize Local Copy of Device Settings ------------------------------------
+# TODO: Get directly from instrument?
+local_settings = {}
+for database in SETTINGS:
+    local_settings[database] = db[database].read_buffer()['entry']
 
 # %% Routines ==================================================================
+def nothing():
+    pass
+
+# State Routines --------------------------------------------------------------
 '''This section is for defining the methods needed to maintain the system in
     its defined states.'''
+def monitor_lock():
+    pass
 
-def lock():
+def find_lock():
+    pass
+
+def keep_lock():
+    pass
+
+def locked_disabled():
+    pass
+
+# Monitor Functions
+'''This section is for defining the methods needed to monitor the system.'''
+def rms_error():
     pass
 
 # %% States and Monitors ======================================================
 '''Defined states are composed of collections of settings, prerequisites,
-    monitors, and a method.
+    and a routines.
 setttings:
     -Only the settings particular to a state need to be listed, and they should
         be in the same format as those in the defaults.
@@ -187,90 +240,136 @@ prerequisites:
             -Optional prereqs are checked if the system is out of compliance.
             -The system is allowed to move into the applied state upon 
                 failure of an optional prereq.
-monitors:
-    -Monitors should associate the monitor databases with the methods that 
-        returns the monitored values:
-        {<database path>:<monitoring function>,...}
 routines:
     -The routines are the functions needed to determine if the state is in 
         compliance, bring the state into compliance, and maintain the current
         state in compliance. Only one function call should be listed for each
         method. The methods themselves may call others.
-    -Routines should be entered for the three cases of testing the state, 
+    -Routines should be entered for the three cases: testing the state, 
         searching for the state, and maintaining the state.
         {'test':<method1>, 'search':<method2>, 'maintain':<method3>}
     -The test methods should return a boolean value indicating the compliance of
         the state. Searching and maintaining methods should not return anything.'''
 STATES = {
-    'lock':{
-        'settings':{
-            'mll_fR/TEC_settings':{'tec_mode':'R', 'tec_output':True},
-            'mll_fR/PID_settings':{},
-            'mll_fR/HV_settings':{},
-            'mll_fR/DAQ_settings':{
-                'analog_in':{
-                    'samples':1e3, 'rate':50e3, 'max_v':10., 'min_v':-10.}}},
-        'prerequisites':{
-            'critical':[
-                {'db':'', 'key':'', 'value':''}],
-            'necessary':[],
-            'optional':[]},
-        'monitors':{
-            'mll_fR/TEC_temperature':{'method':gettatr(),'unit':'kOhms'},
-            'mll_fR/TEC_current':{'method':gettatr(),'unit':'A'},
-            'mll_fR/PID_voltage':{'method':gettatr(),'unit':'V'},
-            'mll_fR/HV_output':{'method':gettatr(),'unit':'V'},
-            'mll_fR/rmsError':{'method':gettatr(),'unit':'V'}},
-        'routines':{'test':monitor_lock, 'search':find_lock, 'maintain':keep_lock}},
-    'free':{
-        'settings':{
-            'mll_fR/TEC_settings':{},
-            'mll_fR/PID_settings':{},
-            'mll_fR/HV_settings':{}},
-        'prerequisites':{},
-        'monitors':{},
-        'method':{}},
-    'safe':{
-        'settings':{
-            'mll_fR_TEC_settings':{},
-            'mll_fR_PID_settings':{'pid_action':False},
-            'mll_fR_HV_settings':{}},
-        'prerequisites':{},
-        'monitors':{},
-        'method':{}}}
+    'mll_fR/state':{
+        'lock':{
+            'settings':{
+                'mll_fR/TEC_settings':{
+                    'tec_mode':'R', 'tec_output':True},
+                'mll_fR/PID_settings':{
+                    'proportional_action':True, 'integral_action':True,
+                    'derivative_action':False, 'offset_action':False,
+                    'proportional_gain':-3.0e0, 'integral_gain':5.0e2,},
+                'mll_fR/HV_settings':{
+                    'x_min':0.00, 'x_max':60.00, 'x_voltage':0.00},
+                'mll_fR/DAQ_settings':{
+                    'task_handler':{
+                        'samples':1e3, 'rate':50e3, 'max_v':2., 'min_v':-2.}}},
+            'prerequisites':{
+                'critical':[
+                    {'db':'', 'key':'entry', 'value':''}],
+                'necessary':[],
+                'optional':[]},
+            'routines':{'test':monitor_lock, 'search':find_lock, 'maintain':keep_lock}},
+        'free':{
+            'settings':{
+                'mll_fR/TEC_settings':{},
+                'mll_fR/PID_settings':{},
+                'mll_fR/HV_settings':{}},
+            'prerequisites':{
+                'critical':[],
+                'necessary':[],
+                'optional':[]},
+            'routines':{'test':locked_disabled, 'search':transfer_to_manual, 'maintain':nothing}},
+        'safe':{
+            'settings':{
+                'mll_fR_TEC_settings':{},
+                'mll_fR_PID_settings':{'pid_action':False},
+                'mll_fR_HV_settings':{}},
+            'prerequisites':{
+                'critical':[],
+                'necessary':[],
+                'optional':[]},
+            'routines':{}}}}
 
 # Initialize monitors ---------------------------------------------------------
-'''Each monitor database should be associated with a local variable.'''
-mon = {}
-for monitor in MONITOR_DBs:
-    mon[monitor] = np.array([])
+'''
+monitors:
+    -Monitors should associate the monitor databases with the methods that 
+        returns the monitored values, the units, and contain local copies of
+        the monitored data for use by state routines:
+        {<database path>:{'method':<monitoring function>,'units':<units>, 
+                          'data':<placeholder for local data copy>}, ...}'''
+mon = {
+    'mll_fR/TEC_temperature':{
+        'method':gettatr(), 'units':'kOhms', 'data':np.array([])},
+    'mll_fR/TEC_current':{
+        'method':gettatr(), 'units':'A', 'data':np.array([])},
+    'mll_fR/PID_voltage':{
+        'method':gettatr(), 'units':'V', 'data':np.array([])},
+    'mll_fR/HV_output':{
+        'method':gettatr(), 'units':'V', 'data':np.array([])},
+    'mll_fR/rmsError':{
+        'method':gettatr(), 'units':'V', 'data':np.array([])}}
 
 
 # %% Main Loop ================================================================
 loop = True
 while loop:
-    pass
-# Check the critical prerequisites of the current state
-    # Place into safe state if critical prereqs fail.
-        # Change the state variable and update the device settings
-        # The desired state should be left unaltered
-# Check the log for new settings, or specified state
-    # if a new setting, check if it conflicts with the current state
-        # excecute new command if no conflicts
-    # if a new state, update the desired state variable
-# Check that the current state is the desired state
-    # Check the critical prereqs for the desired if different from current
-        # Upon passing, update the current state variable to the desired state
-        # The current state variable should show noncompliance.
+# Get the current state
+    current_state = {}
+    for state_db in STATE_DBs:
+        current_state[state_db] = db[state_db].read_buffer()['entry']
+# Check the critical prerequisites of the current states
+    for state_db in STATE_DBs:
+        prereqs_pass = True
+        for prereq in STATES[state_db][current_state[state_db]['state']]['prerequisites']['critical']:
+            critical_prereq = getvalue(db[prereq['db']].read_buffer(),prereq['key'])
+            prereqs_pass *= (critical_prereq == prereq['value'])
+    # Place into safe state if critical prereqs fail
+        if not prereqs_pass:
+        # Update the device settings
+            for device in STATES[state_db]['safe']['settings']:
+                for setting in STATES[state_db]['safe']['settings'][device]:
+                # Send command to the device
+                    getattr(dev[device], setting)(STATES[state_db]['safe']['settings'][device][setting])
+                # Update the device settings' local copy
+                    local_settings[device][setting] = STATES[state_db]['safe']['settings'][device][setting]
+            # Update the database
+                db[device].write_buffer(local_settings[device])
+        # Update the state variable
+            current_state[state_db]['state'] = 'safe'
+            current_state[state_db]['compliance'] = False
+            db[state_db].write_buffer(current_state[state_db]) # The desired state should be left unaltered
 # Maintain the current state
     # If compliant
         # Check the monitored parameters against requirements of the state
+        # Determine compliance
     # If out of compliance, 
         # update the current settings or reinitialize the state if required
         # check necessary and optional prerequisites
         # Bring in to compliance if prereqs pass
     # elif compliant
         # Maintain the state in compliance
+# Check the log for new settings, or specified state
+    # if a new setting, check if it conflicts with the current state
+        # excecute new command if no conflicts
+    # if a new state, update the desired state variable
+# Check that the current state is the desired state
+    for state_db in STATE_DBs:
+        if current_state[state_db]['state'] != current_state[state_db]['desired_state']:
+        # Check the critical prerequisites of the desired states
+            prereqs_pass = True
+            for prereq in STATES[state_db][current_state[state_db]['desired_state']]['prerequisites']['critical']:
+                critical_prereq = getvalue(db[prereq['db']].read_buffer(),prereq['key'])
+                prereqs_pass *= (critical_prereq == prereq['value'])
+        # If the critical prerequisites pass, initialize transition into the desired state
+            if prereqs_pass:
+            # Update the state variable
+                current_state[state_db]['state'] = current_state[state_db]['desired_state']
+                current_state[state_db]['compliance'] = False # The current state variable should show noncompliance.
+                db[state_db].write_buffer(current_state[state_db])
+        
 
 # %% OLD STUFF
 #==============================================================================

@@ -59,8 +59,9 @@ class DAQAnalogIn(object):
 
     @_handle_daq_error
     @log.log_this()
-    def analog_in(self, samples=None, rate=10e3, max_v=10., min_v=-10.):
-        """Sets up a task handler for an analog input channel."""
+    def task_handler(self, samples=None, rate=10e3, max_v=10., min_v=-10.):
+        """Sets up a task handler for an analog input channel. Max sample rate
+        for the PCIe-6320 is 250kS/s."""
         if samples is None:
         # Return the channel parameters
             return self.params

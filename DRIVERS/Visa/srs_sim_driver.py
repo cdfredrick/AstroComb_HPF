@@ -4,9 +4,9 @@ Created on Tue Nov 28 13:14:23 2017
 
 @author: cdf1
 """
-import visa_objects as vo
-import eventlog as log
-import ac_excepts
+import DRIVERS.Visa.visa_objects as vo
+from DRIVERS.Logging import ac_excepts
+from DRIVERS.Logging import eventlog as log
 import math
 
 # %% SIM900 Mainframe
@@ -500,6 +500,10 @@ class SRS_SIM940(SRS_SIM900):
     @log.log_this()
     def __init__(self, visa_address, port, res_manager=None):
         super(SRS_SIM940, self).__init__(visa_address, port, res_manager=res_manager)
+        self.resource.open_resource()
+        self.resource.read_termination = '\r'
+        self.resource.write_termination = '\r'
+        self.resource.close_resource()
     
     @log.log_this()
     def status(self):

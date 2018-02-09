@@ -81,7 +81,7 @@ class DatabaseRead():
         self.COLLECTION_KEYS = [self.collection_name+key for key in self.client.COLLECTION_KEYS]
         self.DOCUMENT_KEYS = self.client.DOCUMENT_KEYS
     
-    def read_buffer(self, number_of_documents=0, sort_ascending=True, tailable_cursor=False):
+    def read_buffer(self, number_of_documents=1, sort_ascending=False, tailable_cursor=False):
         '''
         Returns an iterable cursor object containing documents from the buffer.
         A tailable cursor remains open after the client exhausts the results in
@@ -478,25 +478,25 @@ if __name__ == '__main__':
         test_database.write_buffer(x**2.)
         # Read buffer (default)
     print('\n Read buffer: sort ascending')
-    for doc in test_database.read_buffer():
+    for doc in test_database.read_buffer(sort_ascending=False):
         pass
     print(doc)
         # Read buffer (sort descending)
     print('\n Read buffer: sort descending')
-    for doc in test_database.read_buffer(sort_ascending=False):
+    for doc in test_database.read_buffer():
         pass
     print(doc)
         # Read buffer (document limit)
     print('\n Read buffer: document limit, sort ascending')
-    for doc in test_database.read_buffer(number_of_documents=3):
+    for doc in test_database.read_buffer(number_of_documents=3, sort_ascending=False):
         print(doc)
         # Read buffer (document limit, sort descening)
     print('\n Read buffer: document limit, sort descending')
-    for doc in test_database.read_buffer(number_of_documents=3, sort_ascending=False):
+    for doc in test_database.read_buffer(number_of_documents=3):
         print(doc)
         # Read buffer (tailable cursor)
     print('\n Read buffer: tailable cursor, sort ascending')
-    cursor = test_database.read_buffer(tailable_cursor=True)
+    cursor = test_database.read_buffer(tailable_cursor=True, sort_ascending=False)
     for doc in cursor:
         pass
     print(doc)
@@ -507,7 +507,7 @@ if __name__ == '__main__':
         print(doc)
         # Read buffer (tailable cursor, sort descending)
     print('\n Read buffer: tailable cursor, sort descending')
-    cursor = test_database.read_buffer(tailable_cursor=True, sort_ascending=False)
+    cursor = test_database.read_buffer(tailable_cursor=True)
     for doc in cursor:
         pass
     print(doc)
@@ -519,7 +519,7 @@ if __name__ == '__main__':
     print('\t tailable cursor only works with ascending sort')
         # Read buffer (tailable cursor, document limit)
     print('\n Read buffer: tailable cursor, sort descending')
-    cursor = test_database.read_buffer(number_of_documents=3, tailable_cursor=True)
+    cursor = test_database.read_buffer(number_of_documents=3, sort_ascending=False, tailable_cursor=True)
     for doc in cursor:
         pass
     print(doc)

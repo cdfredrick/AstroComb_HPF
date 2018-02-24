@@ -26,7 +26,7 @@ Public functions:
 import logging
 import sys
 from functools import wraps
-from DRIVERS.Database.mongoDB import mongo_logger
+from Drivers.Database.MongoDB import MongoLogger
 
 #Public functions
 def start_logging(database=None, logger_level=logging.DEBUG, handler_level=logging.DEBUG, format_str=None, remove_old_handlers=True):
@@ -45,7 +45,7 @@ def start_logging(database=None, logger_level=logging.DEBUG, handler_level=loggi
     # If a database is specified, initialize the mongo logger
         if format_str is None:
             format_str = '%(name)s: %(message)s'
-        logger = mongo_logger(database, name='astroComb', logger_level=logger_level, handler_level=handler_level, format_str=format_str, remove_old_handlers=remove_old_handlers)
+        logger = MongoLogger(database, name='astroComb', logger_level=logger_level, handler_level=handler_level, format_str=format_str, remove_old_handlers=remove_old_handlers)
     else:
     # If no database is specified, setup a simple stream handler
         if format_str is None:

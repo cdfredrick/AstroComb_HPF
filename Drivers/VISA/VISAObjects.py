@@ -4,8 +4,8 @@ Created on Mon Jun 12 15:29:26 2017
 
 @author: Wesley Brand
 
-Module: visa_objects
-    import visa_objects as vo
+Module: VisaObjects
+    import VisaObjects as vo
 
 Defines the super class to which all visa controlled devices should belong
 
@@ -18,7 +18,7 @@ List of public functions:
 method = handle_timeout(method)
 
 
-List of public methods in class Visa:
+List of public methods in class VISA:
 
 __init__(res_name, res_address)
 open_resource()
@@ -36,8 +36,8 @@ import visa
 from pyvisa import errors as visa_errors # for error handling
 
 #Astrocomb imports
-from DRIVERS.Logging import eventlog as log
-from DRIVERS.Logging import ac_excepts
+from Drivers.Logging import EventLog as log
+from Drivers.Logging import AcExceptions
 
 
 #Constants
@@ -99,7 +99,7 @@ class ResourceManager(visa.ResourceManager):
         res.close()
         return res
 
-class Visa(object):
+class VISA(object):
     """
     Defines the basic visa operations for all visa controlled devices. A resource
     manager is automatically generated if one is not provided.
@@ -125,7 +125,7 @@ class Visa(object):
             self.valid_resource = True
         else:
             self.valid_resource = False
-            raise ac_excepts.VisaConnectionError('No device at {:}'.format(self.address), self.check_resource)
+            raise AcExceptions.VisaConnectionError('No device at {:}'.format(self.address), self.check_resource)
 
     @log.log_this()
     def clear_resource(self):
@@ -162,7 +162,7 @@ class Visa(object):
             self.resource = self.res_man.get_resource(self.address)
         except (visa_errors.VisaIOError, UnboundLocalError) as err:
             self.resource = None
-            log.log_error('visa_objects', 'initialize_resource', err)
+            log.log_error('VisaObjects', 'initialize_resource', err)
     
     @log.log_this()
     def open_resource(self, timeout=5):
@@ -178,7 +178,7 @@ class Visa(object):
                     # Keep trying if the resource is busy
                     pass
                 else:
-                    log.log_error('visa_objects', 'open_resource', visa_err)
+                    log.log_error('VisaObjects', 'open_resource', visa_err)
                     raise visa_err
             else:
                 self.opened = True

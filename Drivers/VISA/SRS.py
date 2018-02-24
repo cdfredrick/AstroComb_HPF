@@ -4,17 +4,17 @@ Created on Tue Nov 28 13:14:23 2017
 
 @author: cdf1
 """
-import DRIVERS.Visa.visa_objects as vo
-from DRIVERS.Logging import ac_excepts
-from DRIVERS.Logging import eventlog as log
+import Drivers.VISA.VisaObjects as vo
+from Drivers.Logging import AcExceptions
+from Drivers.Logging import EventLog as log
 import math
 
 # %% SIM900 Mainframe
-class SRS_SIM900(vo.Visa):
+class SIM900(vo.VISA):
     def __init__(self, visa_address, port, res_manager=None):
-        super(SRS_SIM900, self).__init__(visa_address, res_manager=res_manager)
+        super(SIM900, self).__init__(visa_address, res_manager=res_manager)
         if self.resource is None:
-            raise ac_excepts.VirtualDeviceError('Could not create SRS SIM900 instrument!', self.__init__)
+            raise AcExceptions.VirtualDeviceError('Could not create SRS SIM900 instrument!', self.__init__)
         self.flush_resource()
         self.port = port
         self.open_command = 'CONN '+str(self.port)+',"xyz"'
@@ -51,7 +51,7 @@ class SRS_SIM900(vo.Visa):
 
 # %% SIM960 PID Controller
 
-class SRS_SIM960(SRS_SIM900):
+class SRS_SIM960(SIM900):
     @log.log_this()
     def __init__(self, visa_address, port, res_manager=None):
         super(SRS_SIM960, self).__init__(visa_address, port, res_manager=res_manager)
@@ -496,7 +496,7 @@ class SRS_SIM960(SRS_SIM900):
             self.write('DISX {:}'.format(['OFF','ON'][set_display]))
 
 # %% SIM940 10 MHz Rubidium Oscillator
-class SRS_SIM940(SRS_SIM900):
+class SRS_SIM940(SIM900):
     @log.log_this()
     def __init__(self, visa_address, port, res_manager=None):
         super(SRS_SIM940, self).__init__(visa_address, port, res_manager=res_manager)

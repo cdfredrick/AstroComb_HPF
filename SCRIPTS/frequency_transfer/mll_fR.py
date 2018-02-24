@@ -6,21 +6,20 @@ Created on Fri Jul 21 15:51:36 2017
 """
 
 # %% Import Packages and Drivers ==============================================
-
 import numpy as np
 from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
 import time
 
-from DRIVERS.Database import mongoDB
-from DRIVERS.Logging import eventlog as log
-from DRIVERS.Visa.srs_sim_driver import SRS_SIM960 as SIM960
-from DRIVERS.Visa.ilx_driver import TECModule
-from DRIVERS.DAQ.daq_objects import DAQAnalogIn
-from DRIVERS.Visa.piezo_driver import MDT639B
+from Drivers.Database import MongoDB
+from Drivers.Logging import EventLog as log
+from Drivers.VISA.SRS import SIM960
+from Drivers.VISA.ILXLightwave import TECModule
+from Drivers.Daq.DaqObjects import DAQAnalogIn
+from Drivers.VISA.Thorlabs import MDT639B
 
-# %% Helper Functions
-def getvalue(nested_dict, key_list):
+# %% Helper Functions =========================================================
+def from_keys(nested_dict, key_list):
     if isinstance(key_list, list):
         for key in key_list:
             nested_dict = nested_dict[key]
@@ -324,7 +323,7 @@ while loop:
     for state_db in STATE_DBs:
         prereqs_pass = True
         for prereq in STATES[state_db][current_state[state_db]['state']]['prerequisites']['critical']:
-            critical_prereq = getvalue(db[prereq['db']].read_buffer(),prereq['key'])
+            critical_prereq = from_keys(db[prereq['db']].read_buffer(),prereq['key'])
             prereqs_pass *= (critical_prereq == prereq['value'])
     # Place into safe state if critical prereqs fail
         if not prereqs_pass:
@@ -361,7 +360,7 @@ while loop:
         # Check the critical prerequisites of the desired states
             prereqs_pass = True
             for prereq in STATES[state_db][current_state[state_db]['desired_state']]['prerequisites']['critical']:
-                critical_prereq = getvalue(db[prereq['db']].read_buffer(),prereq['key'])
+                critical_prereq = from_keys(db[prereq['db']].read_buffer(),prereq['key'])
                 prereqs_pass *= (critical_prereq == prereq['value'])
         # If the critical prerequisites pass, initialize transition into the desired state
             if prereqs_pass:

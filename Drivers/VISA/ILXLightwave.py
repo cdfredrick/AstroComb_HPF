@@ -8,7 +8,7 @@ Module: ilx_driver
 #Laser diode control
 
 Public Classes:
-    ILX(vo.Visa)
+    ILX(vo.VISA)
     LDC(ILX)
 
 
@@ -52,9 +52,9 @@ Set TEC:
 
 
 #Astrocomb imports
-import visa_objects as vo
-import eventlog as log
-import ac_excepts
+import VisaObjects as vo
+import EventLog as log
+import AcExceptions
 
 
 #Constants
@@ -62,13 +62,13 @@ _MARKER = object()  #To check errors in LDControl class inheritance
 ILX_ADDRESS = '' #ADD ME!!!
 
 # %% ILX LDC-3900 Mainframe
-class ILX_LDC3900(vo.Visa):
+class LDC3900(vo.VISA):
     """Holds commands for ILX chassis and passes commands for components."""
     @log.log_this()
     def __init__(self, visa_address, res_manager=None):
-        super(ILX_LDC3900, self).__init__(visa_address, res_manager=res_manager)
+        super(LDC3900, self).__init__(visa_address, res_manager=res_manager)
         if self.resource is None:
-            raise ac_excepts.VirtualDeviceError(
+            raise AcExceptions.VirtualDeviceError(
                 'Could not create ILX instrument!', self.__init__)
         self.radix(set_radix='DEC')
     
@@ -170,7 +170,7 @@ class ILX_LDC3900(vo.Visa):
             
 
 # %% ILX LDC-3900 Mainframe - Laser Module
-class LaserModule(ILX_LDC3900):
+class LaserModule(LDC3900):
     def __init__(self, visa_address, laser_channel, res_manager=None):
         super(LaserModule, self).__init__(visa_address, res_manager=res_manager)
         self.las_channel = laser_channel
@@ -578,7 +578,7 @@ class LaserModule(ILX_LDC3900):
             self.write_las('ONLY:OUT {:}'.format(output))
 
 # %% ILX LDC-3900 Mainframe - TEC Module
-class TECModule(ILX_LDC3900):
+class TECModule(LDC3900):
     def __init__(self, visa_address, tec_channel, res_manager=None):
         super(TECModule, self).__init__(visa_address, res_manager=res_manager)
         self.tec_channel = tec_channel

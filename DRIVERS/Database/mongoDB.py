@@ -409,7 +409,7 @@ class LoggingHandler(logging.Handler):
         except Exception:
             self.handleError(record)
 
-def mongo_logger(database, name=None, logger_level=logging.DEBUG, handler_level=logging.DEBUG, format_str=None, remove_old_handlers=True):
+def MongoLogger(database, name=None, logger_level=logging.DEBUG, handler_level=logging.DEBUG, format_str=None, remove_old_handlers=True):
     '''
     Returns a logger instance whose handler writes to the given database's log
         buffer. This is a helper function used to simplify logger setup.
@@ -591,8 +591,8 @@ if __name__ == '__main__':
         # Write with logger
     print('\n \t Write with logger')
             # create logger
-    logger = mongo_logger(test_database)
-    #from DRIVERS.Logging.eventlog import start_logging
+    logger = MongoLogger(test_database)
+    #from Drivers.Logging.EventLog import start_logging
     #logger = start_logging(test_database)
     #logger = start_logging()
             # 'application' code

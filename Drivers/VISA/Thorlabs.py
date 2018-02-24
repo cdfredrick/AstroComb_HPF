@@ -7,19 +7,19 @@ Created on Mon Dec 18 2017
 """
 
 #Astrocomb imports
-import visa_objects as vo
-import eventlog as log
-import ac_excepts
+import VisaObjects as vo
+import EventLog as log
+import AcExceptions
 
 
 # %% Thorlabs MDT693B
-class MDT639B(vo.Visa):
+class MDT639B(vo.VISA):
     """Holds commands for ILX chassis and passes commands for components."""
     @log.log_this()
     def __init__(self, visa_address, res_manager=None):
         super(MDT639B, self).__init__(visa_address, res_manager=res_manager)
         if self.resource is None:
-            raise ac_excepts.VirtualDeviceError(
+            raise AcExceptions.VirtualDeviceError(
                 'Could not create piezo instrument!', self.__init__)
         self.resource.read_termination = '\r>'
         self.echo(set_echo=False)

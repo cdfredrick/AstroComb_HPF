@@ -17,7 +17,9 @@ class MongoClient:
             databases and collections.
         The "keys" list the hardcoded names of the collections and of the keys
             needed to access records in the documents (documents are returned 
-            as dictionaries).
+            as dictionaries). Items in the record and buffer only contain the
+            'timestamp' key by default. The user specifies the other keys with
+            the input dictionary. Logs contain all three hardcoded document keys.
         '''
         # Connect to the mongoDB client
         self.client = pymongo.MongoClient()
@@ -267,16 +269,17 @@ class DatabaseReadWrite(DatabaseRead):
         document.pop('_id')
         self.record.insert_one(document)
 
-    def write_buffer(self, entry):
+    def write_buffer(self, entry_dict):
         '''
-        Writes an entry into the buffer. An entry into the buffer can be of any
-            type, but all entries should be of the same type and should represent
-            the same database object.
+        Writes an entry into the buffer. An entry into the buffer can contain any
+            type, but all entries should contain the same type and should represent
+            the same database object. Entries must be dictionaries.
         
         *args
-        entry: a thing to write to the buffer.
+        entry_dict: a dictionary containing things to write to the buffer.
         '''
-        document = {'entry':entry, 'timestamp':datetime.datetime.utcnow()}
+        document = {'timestamp':datetime.datetime.utcnow()}
+        document = dict(list(document.items()) + list(entry_dict.items()))
         self.buffer.insert_one(document)
 
     def write_log(self, entry, log_level):
@@ -311,16 +314,17 @@ class DatabaseReadWrite(DatabaseRead):
         document = {'entry':entry, 'timestamp':datetime.datetime.utcnow(), 'log_level':log_level}
         self.log_buffer.insert_one(document)
 
-    def write_record(self, entry):
+    def write_record(self, entry_dict):
         '''
         Writes an entry into the record. This bypasses the buffer and directly 
-            writes an entry into the record. The entry should have the same format
-            as those written to the buffer.
+            writes an entry into the record. For compatibility considerations, 
+            the entry should have the same format as those written to the buffer.
         
         *args
-        document: a thing to write to the record.
+        entry_dict: a dictionary containing thing to write to the record.
         '''
-        document = {'entry':entry, 'timestamp':datetime.datetime.utcnow()}
+        document = {'timestamp':datetime.datetime.utcnow()}
+        document = dict(list(document.items()) + list(entry_dict.items()))
         self.record.insert_one(document)
 
 
@@ -475,7 +479,7 @@ if __name__ == '__main__':
     # Read and write to buffer
     print('\n Read and write to the buffer ----------------------------------')
     for x in range(int(2e4)):
-        test_database.write_buffer(x**2.)
+        test_database.write_buffer({'entry':x**2.})
         # Read buffer (default)
     print('\n Read buffer: sort ascending')
     for doc in test_database.read_buffer(sort_ascending=False):
@@ -502,7 +506,7 @@ if __name__ == '__main__':
     print(doc)
     print('\t new documents')
     for x in range(10):
-        test_database.write_buffer(x**2.)
+        test_database.write_buffer({'entry':x**2.})
     for doc in cursor:
         print(doc)
         # Read buffer (tailable cursor, sort descending)
@@ -513,7 +517,7 @@ if __name__ == '__main__':
     print(doc)
     print('\t new documents')
     for x in range(10):
-        test_database.write_buffer(x**2.)
+        test_database.write_buffer({'entry':x**2.})
     for doc in cursor:
         print(doc)
     print('\t tailable cursor only works with ascending sort')
@@ -525,7 +529,7 @@ if __name__ == '__main__':
     print(doc)
     print('\t new documents')
     for x in range(10):
-        test_database.write_buffer(x**2.)
+        test_database.write_buffer({'entry':x**2.})
     for doc in cursor:
         print(doc)
     print('\t tailable cursor only works with no document limits')
@@ -533,7 +537,7 @@ if __name__ == '__main__':
     # Read and write to the record
     print('\n Read and write to the record ----------------------------------')
     for x in range(int(2e1)):
-        test_database.write_record(x**2.)
+        test_database.write_record({'entry':x**2.})
         # Read record (default)
     print('\n Read record: sort ascending')
     stop = datetime.datetime.utcnow()
@@ -559,7 +563,7 @@ if __name__ == '__main__':
         # Write documents from the buffer
     print('\n Write documents from buffer')
     for x in range(5):
-        test_database.write_buffer(x**2.)
+        test_database.write_buffer({'entry':x**2.})
     for doc in test_database.read_buffer(number_of_documents=5, sort_ascending=False):
         test_database.write_document_to_record(doc)
     for doc in test_database.read_record(start, datetime.datetime.utcnow(), number_of_documents=5, sort_ascending=False):

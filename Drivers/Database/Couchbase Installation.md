@@ -17,9 +17,11 @@
 	https://developer.couchbase.com/server/other-products/release-notes-archives/c-sdk
 	
 4.----------------------------
+
 ~Copy the C sdk directory (containing "bin", "include", "lib", and "share") into the couchbase python client repository (or change the "lcb_root" directory in the next step to point its current path)
 
 5.----------------------------
+
 ~Edit the setup.py file to point to the correct directories of the C sdk 
 
 ----Initialize "pkgdata" as a list instead of as a dictionary at line 18

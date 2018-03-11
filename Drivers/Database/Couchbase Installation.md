@@ -18,7 +18,7 @@
 	
 4.----------------------------
 
-~Copy the C sdk directory (containing "bin", "include", "lib", and "share") into the couchbase python client repository (or change the "lcb_root" directory in the next step to point its current path)
+~Copy the C sdk directory (containing "bin", "include", "lib", and "share") into the couchbase python client repository (or change the "lcb_root" directory in the next step to point to its current path)
 
 5.----------------------------
 
@@ -30,7 +30,7 @@
     ->
     pkgdata = []
 
-----Overwrite the code in the "else" statement starting roughly at line 45
+----Overwrite the code in the "else" statement, starting roughly at line 45, with the following
 
     lcb_root = os.path.join(os.getcwd(),'<C sdk directory>')
 
@@ -49,6 +49,7 @@
 
 
 6.----------------------------
+
 ~Ensure that the proper C++ compilers are installed
 
 ----Python 3: Visual Studios C++ Build Tools

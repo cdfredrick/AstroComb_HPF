@@ -50,16 +50,52 @@ Set TEC:
 ### Avoid ILX.__init__() in LDControl.__init__ because inherits
 ###  from ILX instance
 
-
+# %% Modules
 #Astrocomb imports
 import VisaObjects as vo
 import EventLog as log
 import AcExceptions
 
+from functools import wraps
 
-#Constants
+
+# %% Constants
 _MARKER = object()  #To check errors in LDControl class inheritance
 ILX_ADDRESS = '' #ADD ME!!!
+
+
+# %% Private Functions
+@log.log_this()
+def _auto_connect_las(func):
+    """A function decorator that handles automatic laser channel connections."""
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        """Wrapped function"""
+        if self.auto_connect:
+            self.open_las()
+            result = func(self, *args, **kwargs)
+            self.close_resource()
+            return result
+        else:
+            result = func(self, *args, **kwargs)
+            return result
+    return wrapper
+
+def _auto_connect_tec(func):
+    """A function decorator that handles automatic TEC channel connections."""
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        """Wrapped function"""
+        if self.auto_connect:
+            self.open_tec()
+            result = func(self, *args, **kwargs)
+            self.close_resource()
+            return result
+        else:
+            result = func(self, *args, **kwargs)
+            return result
+    return wrapper
+
 
 # %% ILX LDC-3900 Mainframe
 class LDC3900(vo.VISA):
@@ -171,27 +207,30 @@ class LDC3900(vo.VISA):
 
 # %% ILX LDC-3900 Mainframe - Laser Module
 class LaserModule(LDC3900):
+    @log.log_this()
     def __init__(self, visa_address, laser_channel, res_manager=None):
         super(LaserModule, self).__init__(visa_address, res_manager=res_manager)
         self.las_channel = laser_channel
         self.las_open_command = 'LAS:CHAN {:}'.format(self.las_channel)
     
-    @log.log_this()
     @vo.handle_visa_error
-    def query_las(self, message, delay=None):
+    @log.log_this()
+    def open_las(self):
         self.open_resource()
         self.resource.write(self.las_open_command)
+    
+    @vo.handle_visa_error
+    @_auto_connect_las
+    @log.log_this()
+    def query_las(self, message, delay=None):
         result = self.resource.query('LAS:'+message, delay=delay)
-        self.close_resource()
         return result
     
-    @log.log_this()
     @vo.handle_visa_error
+    @_auto_connect_las
+    @log.log_this()
     def write_las(self, message, termination=None, encoding=None):
-        self.open_resource()
-        self.resource.write(self.las_open_command)
         self.resource.write('LAS:'+message, termination=termination, encoding=encoding)
-        self.close_resource()
     
     @log.log_this()
     def laser_channel(self):
@@ -579,28 +618,31 @@ class LaserModule(LDC3900):
 
 # %% ILX LDC-3900 Mainframe - TEC Module
 class TECModule(LDC3900):
+    @log.log_this()
     def __init__(self, visa_address, tec_channel, res_manager=None):
         super(TECModule, self).__init__(visa_address, res_manager=res_manager)
         self.tec_channel = tec_channel
         self.tec_open_command = 'LAS:CHAN {:}'.format(self.tec_channel)
         self.tec_step_size = self.tec_step()
     
-    @log.log_this()
     @vo.handle_visa_error
-    def query_tec(self, message, delay=None):
+    @log.log_this()
+    def open_tec(self):
         self.open_resource()
         self.resource.write(self.tec_open_command)
+    
+    @vo.handle_visa_error
+    @_auto_connect_tec
+    @log.log_this()
+    def query_tec(self, message, delay=None):
         result = self.resource.query('TEC:'+message, delay=delay)
-        self.close_resource()
         return result
     
-    @log.log_this()
     @vo.handle_visa_error
+    @_auto_connect_tec
+    @log.log_this()
     def write_tec(self, message, termination=None, encoding=None):
-        self.open_resource()
-        self.resource.write(self.tec_open_command)
         self.resource.write('TEC:'+message, termination=termination, encoding=encoding)
-        self.close_resource()
     
     @log.log_this()
     def tec_channel(self):
@@ -1194,6 +1236,7 @@ class TECModule(LDC3900):
 
 # %% ILX LDC-3900 Mainframe - Laser and TEC Module
 class CombinationModule(LaserModule, TECModule):
+    @log.log_this()
     def __init__(self, visa_address, channel, res_manager=None):
         LaserModule.__init__(self, visa_address, channel, res_manager=res_manager)
         TECModule.__init__(self, visa_address, channel, res_manager=self.res_man)

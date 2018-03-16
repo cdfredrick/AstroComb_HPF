@@ -4,53 +4,79 @@ Created on Tue Nov 28 13:14:23 2017
 
 @author: cdf1
 """
+# %% Modules
 import Drivers.VISA.VisaObjects as vo
 from Drivers.Logging import AcExceptions
 from Drivers.Logging import EventLog as log
 import math
 
+from functools import wraps
+
+
+# %% Private Functions
+@log.log_this()
+def _auto_connect(func):
+    """A function decorator that handles automatic connections."""
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        """Wrapped function"""
+        if self.auto_connect:
+            self.open_port()
+            result = func(self, *args, **kwargs)
+            self.close_port()
+            return result
+        else:
+            result = func(self, *args, **kwargs)
+            return result
+    return wrapper
+
+
 # %% SIM900 Mainframe
 class SIM900(vo.VISA):
+    @log.log_this()
     def __init__(self, visa_address, port, res_manager=None):
         super(SIM900, self).__init__(visa_address, res_manager=res_manager)
         if self.resource is None:
             raise AcExceptions.VirtualDeviceError('Could not create SRS SIM900 instrument!', self.__init__)
-        self.flush_resource()
+        self.clear_resource()
         self.port = port
         self.open_command = 'CONN '+str(self.port)+',"xyz"'
         self.close_command = 'xyz'
-        
+    
+    @vo._handle_visa_error
     @log.log_this()
-    @vo.handle_visa_error
-    def query(self, message, delay=None):
+    def open_port(self):
         self.open_resource()
         self.resource.write(self.open_command)
-        result = self.resource.query(message, delay=delay)
+    
+    @vo._handle_visa_error
+    @log.log_this()
+    def close_port(self):
         self.resource.write(self.close_command)
         self.close_resource()
+    
+    @vo._handle_visa_error
+    @_auto_connect
+    @log.log_this()
+    def query(self, message, delay=None):
+        result = self.resource.query(message, delay=delay)
         return result
 
+    @vo._handle_visa_error
+    @_auto_connect
     @log.log_this()
-    @vo.handle_visa_error
     def read(self, termination=None, encoding=None):
-        self.open_resource()
-        self.resource.write(self.open_command)
         result = self.resource.read(termination=termination, encoding=encoding)
-        self.resource.write(self.close_command)
-        self.close_resource()
         return result
     
+    @vo._handle_visa_error
+    @_auto_connect
     @log.log_this()
-    @vo.handle_visa_error
     def write(self, message, termination=None, encoding=None):
-        self.open_resource()
-        self.resource.write(self.open_command)
         self.resource.write(message, termination=termination, encoding=encoding)
-        self.resource.write(self.close_command)
-        self.close_resource()
+
 
 # %% SIM960 PID Controller
-
 class SRS_SIM960(SIM900):
     @log.log_this()
     def __init__(self, visa_address, port, res_manager=None):
@@ -212,7 +238,7 @@ class SRS_SIM960(SIM900):
     @log.log_this()
     def offset(self, set_offset=None):
         '''
-        The output offset, in volts.
+        The output offset, in volts. Offsets the PID output point.
         '''
         if set_offset is None:
         # Send query
@@ -339,10 +365,10 @@ class SRS_SIM960(SIM900):
             return float(result)
         else:
         # Limit range
-            if set_output<-10.:
-                set_output=-10.
-            elif set_output>10.:
-                set_output=10.
+            if set_output<self.lower_limit.:
+                set_output=self.lower_limit
+            elif set_output>self.upper_limit:
+                set_output=self.upper_limit
         # Send command
             self.write('MOUT {:.3f}'.format(set_output))
     

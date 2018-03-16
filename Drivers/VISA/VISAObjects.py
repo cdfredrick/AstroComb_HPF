@@ -26,7 +26,7 @@ check_connection()
 disconnected()
 """
 
-
+# %% Modules
 #Python imports
 from functools import wraps
 import time
@@ -40,11 +40,11 @@ from Drivers.Logging import EventLog as log
 from Drivers.Logging import AcExceptions
 
 
-#Constants
+# %% Constants
 SB_ONE = visa.constants.StopBits.one
 
 
-#Public functions
+# %% Public functions
 def tf_toggle(var):
     """Returns 0 or 1 in place of T/F variable."""
     if var == True:
@@ -53,26 +53,47 @@ def tf_toggle(var):
         binary = 0
     return binary
 
-def handle_visa_error(method):
-    """
-    To be used as a function decorator that does general visa error handling
-    Returns None if an error occurs, driver code should handle that possibility.
-    """
-    @wraps(method)
-    def attempt_method(self, *args, **kwargs):
+
+# %% Private functions
+def _handle_visa_error(func):
+    """A function decorator that closes the visa resource upon untamed errors."""
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
         """Wrapped function"""
         try:
-            result = method(self, *args, **kwargs)
+            result = func(self, *args, **kwargs)
             return result
-        except (visa_errors.VisaIOError,visa_errors.InvalidSession) as visa_err:
-            result = None
-            log.log_error(method.__module__, method.__name__, visa_err)
-            self.check_resource()
-            if self.opened is True:
+        except:
+            try:
+                self.auto_connect = False
+                self.clear_resource()
+            except:
+                pass
+            try:
                 self.close_resource()
-            return result
-    return attempt_method
+            except:
+                pass
+            raise
+    return wrapper
 
+@log.log_this()
+def _auto_connect(func):
+    """A function decorator that handles automatic connections."""
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        """Wrapped function"""
+        if self.auto_connect:
+            self.open_resource()
+            result = func(self, *args, **kwargs)
+            self.close_resource()
+            return result
+        else:
+            result = func(self, *args, **kwargs)
+            return result
+    return wrapper
+
+
+# %% Resource Manager
 class ResourceManager(visa.ResourceManager):
     def get_resource(self, resource_name, resource_pyclass=None, **kwargs):
         """Return an instrument without opening a session to the resource.
@@ -99,13 +120,17 @@ class ResourceManager(visa.ResourceManager):
         res.close()
         return res
 
+
+# %% VISA
 class VISA(object):
     """
     Defines the basic visa operations for all visa controlled devices. A resource
     manager is automatically generated if one is not provided.
     """
+    @_handle_visa_error
     @log.log_this()
-    def __init__(self, res_address, res_manager=None):
+    def __init__(self, res_address, res_manager=None, timeout=5.0):
+        self.timeout = timeout
         self.address = res_address
         if res_manager is None:
             self.res_man = ResourceManager()
@@ -114,7 +139,9 @@ class VISA(object):
         self.check_resource()
         self.opened = False
         self.initialize_resource()
-
+        self.auto_connect = True
+    
+    @_handle_visa_error
     @log.log_this()
     def check_resource(self):
         """
@@ -126,33 +153,8 @@ class VISA(object):
         else:
             self.valid_resource = False
             raise AcExceptions.VisaConnectionError('No device at {:}'.format(self.address), self.check_resource)
-
-    @log.log_this()
-    def clear_resource(self):
-        '''
-        Clears the device's controller
-        '''
-        self.resource.clear()
-
-    @log.log_this()
-    @handle_visa_error
-    def flush_resource(self):
-        '''
-        Flushes the device's buffer
-        '''
-        self.open_resource()
-        self.resource.flush(visa.constants.VI_READ_BUF)
-        self.close_resource()
-
-    @log.log_this()
-    def close_resource(self):
-        '''
-        Closes the resource session. All data structures that had been allocated
-            for the specified instrument are freed.
-        '''
-        self.resource.close()
-        self.opened = False
-        
+    
+    @_handle_visa_error
     @log.log_this()
     def initialize_resource(self):
         '''
@@ -164,46 +166,70 @@ class VISA(object):
             self.resource = None
             log.log_error('VisaObjects', 'initialize_resource', err)
     
+    @_handle_visa_error
     @log.log_this()
-    def open_resource(self, timeout=5):
+    def open_resource(self):
         """
         Opens the resource to accept commands.
         """
         start_time = time.time()
-        while (not self.opened) and (time.time()-start_time < timeout):
+        while (not self.opened):
             try:
                 self.resource.open()
             except visa.VisaIOError as visa_err:
-                if (visa_err.error_code == visa.constants.VI_ERROR_RSRC_BUSY):
+                if (visa_err.error_code == visa.constants.VI_ERROR_RSRC_BUSY) and (time.time()-start_time < self.timeout):
                     # Keep trying if the resource is busy
                     pass
                 else:
-                    log.log_error('VisaObjects', 'open_resource', visa_err)
                     raise visa_err
             else:
                 self.opened = True
-        if not self.opened:
-            raise visa.VisaIOError(visa.constants.VI_ERROR_RSRC_BUSY)
     
+    @_handle_visa_error
+    @_auto_connect
     @log.log_this()
-    @handle_visa_error
     def query(self, message, delay=None):
-        self.open_resource()
+        '''
+        Send a query command to the instrument and returns the result
+        '''
         result = self.resource.query(message, delay=delay)
-        self.close_resource()
         return result
 
+    @_handle_visa_error
+    @_auto_connect
     @log.log_this()
-    @handle_visa_error
     def read(self, termination=None, encoding=None):
-        self.open_resource()
+        '''
+        Send a read command to the instrument and returns the result
+        '''
         result = self.resource.read(termination=termination, encoding=encoding)
-        self.close_resource()
         return result
     
+    @_handle_visa_error
+    @_auto_connect
     @log.log_this()
-    @handle_visa_error
     def write(self, message, termination=None, encoding=None):
-        self.open_resource()
+        '''
+        Send a write command to the instrument
+        '''
         self.resource.write(message, termination=termination, encoding=encoding)
-        self.close_resource()
+    
+    @_handle_visa_error
+    @_auto_connect
+    @log.log_this()
+    def clear_resource(self):
+        '''
+        Clears the device's controller, resetting the communication interface.
+        '''
+        self.resource.clear()
+    
+    @log.log_this()
+    def close_resource(self):
+        '''
+        Closes the resource session. All data structures that had been allocated
+            for the specified instrument are freed.
+        '''
+        self.resource.close()
+        self.opened = False
+
+

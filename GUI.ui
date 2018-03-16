@@ -18,14 +18,19 @@
     <item row="1" column="0">
      <widget class="QTabWidget" name="tabWidget">
       <property name="currentIndex">
-       <number>1</number>
+       <number>2</number>
       </property>
+      <widget class="QWidget" name="tab_60">
+       <attribute name="title">
+        <string>Main</string>
+       </attribute>
+      </widget>
       <widget class="QWidget" name="tab">
        <property name="enabled">
         <bool>true</bool>
        </property>
        <attribute name="title">
-        <string>Main</string>
+        <string>TEMP</string>
        </attribute>
        <widget class="QGroupBox" name="groupBox">
         <property name="geometry">
@@ -983,6 +988,19 @@
          </item>
         </layout>
        </widget>
+       <widget class="QLabel" name="label_161">
+        <property name="geometry">
+         <rect>
+          <x>270</x>
+          <y>10</y>
+          <width>251</width>
+          <height>16</height>
+         </rect>
+        </property>
+        <property name="text">
+         <string>This page is Temporary, just for designing layouts</string>
+        </property>
+       </widget>
       </widget>
       <widget class="QWidget" name="tab_3">
        <attribute name="title">
@@ -992,7 +1010,7 @@
         <item row="0" column="0">
          <widget class="QTabWidget" name="tabWidget_3">
           <property name="currentIndex">
-           <number>0</number>
+           <number>1</number>
           </property>
           <widget class="QWidget" name="tab_6">
            <attribute name="title">
@@ -2374,7 +2392,7 @@
             <item row="0" column="0">
              <widget class="QTabWidget" name="tabWidget_4">
               <property name="currentIndex">
-               <number>1</number>
+               <number>2</number>
               </property>
               <widget class="QWidget" name="tab_12">
                <attribute name="title">
@@ -2394,6 +2412,20 @@
                 </property>
                 <layout class="QGridLayout" name="gridLayout_52">
                  <item row="0" column="1">
+                  <widget class="QLabel" name="label_119">
+                   <property name="text">
+                    <string>TEC</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="1" column="1">
+                  <widget class="QLabel" name="label_120">
+                   <property name="text">
+                    <string>LAS</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="0" column="0">
                   <widget class="QGraphicsView" name="graphicsView_50">
                    <property name="maximumSize">
                     <size>
@@ -2409,21 +2441,7 @@
                    </property>
                   </widget>
                  </item>
-                 <item row="0" column="0">
-                  <widget class="QLabel" name="label_119">
-                   <property name="text">
-                    <string>TEC</string>
-                   </property>
-                  </widget>
-                 </item>
                  <item row="1" column="0">
-                  <widget class="QLabel" name="label_120">
-                   <property name="text">
-                    <string>LAS</string>
-                   </property>
-                  </widget>
-                 </item>
-                 <item row="1" column="1">
                   <widget class="QGraphicsView" name="graphicsView_147">
                    <property name="maximumSize">
                     <size>
@@ -2455,6 +2473,20 @@
                 </property>
                 <layout class="QGridLayout" name="gridLayout_53">
                  <item row="0" column="1">
+                  <widget class="QLabel" name="label_121">
+                   <property name="text">
+                    <string>TEC</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="1" column="1">
+                  <widget class="QLabel" name="label_122">
+                   <property name="text">
+                    <string>LAS</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="0" column="0">
                   <widget class="QGraphicsView" name="graphicsView_148">
                    <property name="maximumSize">
                     <size>
@@ -2470,21 +2502,7 @@
                    </property>
                   </widget>
                  </item>
-                 <item row="0" column="0">
-                  <widget class="QLabel" name="label_121">
-                   <property name="text">
-                    <string>TEC</string>
-                   </property>
-                  </widget>
-                 </item>
                  <item row="1" column="0">
-                  <widget class="QLabel" name="label_122">
-                   <property name="text">
-                    <string>LAS</string>
-                   </property>
-                  </widget>
-                 </item>
-                 <item row="1" column="1">
                   <widget class="QGraphicsView" name="graphicsView_149">
                    <property name="maximumSize">
                     <size>
@@ -2515,7 +2533,21 @@
                  <string>Box Temperature</string>
                 </property>
                 <layout class="QGridLayout" name="gridLayout_54">
+                 <item row="1" column="1">
+                  <widget class="QLabel" name="label_124">
+                   <property name="text">
+                    <string>LAS</string>
+                   </property>
+                  </widget>
+                 </item>
                  <item row="0" column="1">
+                  <widget class="QLabel" name="label_123">
+                   <property name="text">
+                    <string>TEC</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="0" column="0">
                   <widget class="QGraphicsView" name="graphicsView_150">
                    <property name="maximumSize">
                     <size>
@@ -2531,21 +2563,7 @@
                    </property>
                   </widget>
                  </item>
-                 <item row="0" column="0">
-                  <widget class="QLabel" name="label_123">
-                   <property name="text">
-                    <string>TEC</string>
-                   </property>
-                  </widget>
-                 </item>
                  <item row="1" column="0">
-                  <widget class="QLabel" name="label_124">
-                   <property name="text">
-                    <string>LAS</string>
-                   </property>
-                  </widget>
-                 </item>
-                 <item row="1" column="1">
                   <widget class="QGraphicsView" name="graphicsView_151">
                    <property name="maximumSize">
                     <size>
@@ -2576,7 +2594,21 @@
                  <string>980nm BW Pump</string>
                 </property>
                 <layout class="QGridLayout" name="gridLayout_55">
+                 <item row="1" column="1">
+                  <widget class="QLabel" name="label_126">
+                   <property name="text">
+                    <string>LAS</string>
+                   </property>
+                  </widget>
+                 </item>
                  <item row="0" column="1">
+                  <widget class="QLabel" name="label_125">
+                   <property name="text">
+                    <string>TEC</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="0" column="0">
                   <widget class="QGraphicsView" name="graphicsView_152">
                    <property name="maximumSize">
                     <size>
@@ -2592,21 +2624,7 @@
                    </property>
                   </widget>
                  </item>
-                 <item row="0" column="0">
-                  <widget class="QLabel" name="label_125">
-                   <property name="text">
-                    <string>TEC</string>
-                   </property>
-                  </widget>
-                 </item>
                  <item row="1" column="0">
-                  <widget class="QLabel" name="label_126">
-                   <property name="text">
-                    <string>LAS</string>
-                   </property>
-                  </widget>
-                 </item>
-                 <item row="1" column="1">
                   <widget class="QGraphicsView" name="graphicsView_153">
                    <property name="maximumSize">
                     <size>
@@ -2659,6 +2677,132 @@
                  </item>
                 </layout>
                </widget>
+              </widget>
+              <widget class="QWidget" name="tab_55">
+               <attribute name="title">
+                <string>Optical Pumps</string>
+               </attribute>
+               <layout class="QGridLayout" name="gridLayout_59">
+                <item row="0" column="0">
+                 <widget class="QTabWidget" name="tabWidget_21">
+                  <property name="currentIndex">
+                   <number>0</number>
+                  </property>
+                  <widget class="QWidget" name="tab_56">
+                   <attribute name="title">
+                    <string>Monitor</string>
+                   </attribute>
+                   <layout class="QGridLayout" name="gridLayout_64">
+                    <item row="0" column="0">
+                     <widget class="QGroupBox" name="groupBox_23">
+                      <property name="title">
+                       <string>Oscillator</string>
+                      </property>
+                      <layout class="QGridLayout" name="gridLayout_60">
+                       <item row="2" column="0">
+                        <widget class="QLabel" name="label_165">
+                         <property name="text">
+                          <string>Setpoint</string>
+                         </property>
+                        </widget>
+                       </item>
+                       <item row="4" column="0">
+                        <widget class="QLabel" name="label_164">
+                         <property name="text">
+                          <string>TEC</string>
+                         </property>
+                        </widget>
+                       </item>
+                       <item row="3" column="1">
+                        <widget class="QLabel" name="label_162">
+                         <property name="text">
+                          <string>&lt;temp&gt;, &lt;TEC current&gt;</string>
+                         </property>
+                        </widget>
+                       </item>
+                       <item row="4" column="1">
+                        <widget class="QGraphicsView" name="graphicsView_162"/>
+                       </item>
+                       <item row="1" column="1">
+                        <widget class="QGraphicsView" name="graphicsView_158"/>
+                       </item>
+                       <item row="0" column="1">
+                        <widget class="QLabel" name="label_159">
+                         <property name="text">
+                          <string>&lt;las current&gt;</string>
+                         </property>
+                        </widget>
+                       </item>
+                       <item row="1" column="0">
+                        <widget class="QLabel" name="label_158">
+                         <property name="text">
+                          <string>LAS</string>
+                         </property>
+                        </widget>
+                       </item>
+                       <item row="2" column="1">
+                        <widget class="QLabel" name="label_163">
+                         <property name="text">
+                          <string>&lt;current setpoint&gt;</string>
+                         </property>
+                        </widget>
+                       </item>
+                       <item row="5" column="0">
+                        <widget class="QLabel" name="label_166">
+                         <property name="text">
+                          <string>Setpoint</string>
+                         </property>
+                        </widget>
+                       </item>
+                       <item row="5" column="1">
+                        <widget class="QLabel" name="label_167">
+                         <property name="text">
+                          <string>&lt;temp setpoint&gt;</string>
+                         </property>
+                        </widget>
+                       </item>
+                      </layout>
+                     </widget>
+                    </item>
+                    <item row="1" column="0">
+                     <widget class="QGroupBox" name="groupBox_24">
+                      <property name="title">
+                       <string>Amplifiers</string>
+                      </property>
+                      <layout class="QGridLayout" name="gridLayout_61">
+                       <item row="0" column="1">
+                        <widget class="QGraphicsView" name="graphicsView_159"/>
+                       </item>
+                       <item row="1" column="1">
+                        <widget class="QGraphicsView" name="graphicsView_160"/>
+                       </item>
+                       <item row="0" column="0">
+                        <widget class="QLabel" name="label_156">
+                         <property name="text">
+                          <string>TextLabel</string>
+                         </property>
+                        </widget>
+                       </item>
+                       <item row="1" column="0">
+                        <widget class="QLabel" name="label_157">
+                         <property name="text">
+                          <string>TextLabel</string>
+                         </property>
+                        </widget>
+                       </item>
+                      </layout>
+                     </widget>
+                    </item>
+                   </layout>
+                  </widget>
+                  <widget class="QWidget" name="tab_57">
+                   <attribute name="title">
+                    <string>Control</string>
+                   </attribute>
+                  </widget>
+                 </widget>
+                </item>
+               </layout>
               </widget>
               <widget class="QWidget" name="tab_13">
                <attribute name="title">
@@ -3164,6 +3308,70 @@
                 </layout>
                </widget>
               </widget>
+              <widget class="QWidget" name="tab_18">
+               <attribute name="title">
+                <string>CW Laser</string>
+               </attribute>
+               <layout class="QGridLayout" name="gridLayout_20">
+                <item row="1" column="0">
+                 <widget class="QTabWidget" name="tabWidget_22">
+                  <property name="currentIndex">
+                   <number>0</number>
+                  </property>
+                  <widget class="QWidget" name="tab_58">
+                   <attribute name="title">
+                    <string>Monitor</string>
+                   </attribute>
+                   <layout class="QGridLayout" name="gridLayout_65">
+                    <item row="0" column="0">
+                     <widget class="QGroupBox" name="groupBox_25">
+                      <property name="title">
+                       <string>RIO Laser</string>
+                      </property>
+                      <layout class="QGridLayout" name="gridLayout_62">
+                       <item row="0" column="0">
+                        <widget class="QLabel" name="label_25">
+                         <property name="text">
+                          <string>Text Label</string>
+                         </property>
+                        </widget>
+                       </item>
+                       <item row="0" column="1">
+                        <widget class="QGraphicsView" name="graphicsView_20"/>
+                       </item>
+                      </layout>
+                     </widget>
+                    </item>
+                    <item row="1" column="0">
+                     <widget class="QGroupBox" name="groupBox_26">
+                      <property name="title">
+                       <string>Amplifier</string>
+                      </property>
+                      <layout class="QGridLayout" name="gridLayout_63">
+                       <item row="0" column="1">
+                        <widget class="QGraphicsView" name="graphicsView_161"/>
+                       </item>
+                       <item row="0" column="0">
+                        <widget class="QLabel" name="label_160">
+                         <property name="text">
+                          <string>TextLabel</string>
+                         </property>
+                        </widget>
+                       </item>
+                      </layout>
+                     </widget>
+                    </item>
+                   </layout>
+                  </widget>
+                  <widget class="QWidget" name="tab_59">
+                   <attribute name="title">
+                    <string>Control</string>
+                   </attribute>
+                  </widget>
+                 </widget>
+                </item>
+               </layout>
+              </widget>
               <widget class="QWidget" name="tab_17">
                <attribute name="title">
                 <string>Comb Generator</string>
@@ -3249,36 +3457,6 @@
                    </attribute>
                   </widget>
                  </widget>
-                </item>
-               </layout>
-              </widget>
-              <widget class="QWidget" name="tab_18">
-               <attribute name="title">
-                <string>CW Laser</string>
-               </attribute>
-               <layout class="QGridLayout" name="gridLayout_20">
-                <item row="0" column="0">
-                 <widget class="QLabel" name="label_25">
-                  <property name="text">
-                   <string>Seed Power</string>
-                  </property>
-                 </widget>
-                </item>
-                <item row="0" column="1">
-                 <widget class="QGraphicsView" name="graphicsView_20"/>
-                </item>
-                <item row="1" column="1">
-                 <spacer name="verticalSpacer_2">
-                  <property name="orientation">
-                   <enum>Qt::Vertical</enum>
-                  </property>
-                  <property name="sizeHint" stdset="0">
-                   <size>
-                    <width>20</width>
-                    <height>40</height>
-                   </size>
-                  </property>
-                 </spacer>
                 </item>
                </layout>
               </widget>

@@ -8,8 +8,6 @@ Created on Fri Jul 21 15:51:36 2017
 # %% Import Moduless ==========================================================
 
 import numpy as np
-from scipy.optimize import curve_fit
-import matplotlib.pyplot as plt
 import time
 import logging
 
@@ -25,9 +23,147 @@ from Drivers.VISA.Thorlabs import MDT639B
 from Drivers.DAQ.Tasks import AiTask
 
 
-# %% Helper Functions =========================================================
+# %% Main Loop Functions ======================================================
+
+'''The following are functions used in the main loop of the state machine. They
+    should not require any alteration. Changes to these methods change the
+    operation of the state machine logic.'''
+
+# Check the Prerequisites of a Given State ------------------------------------
+@log.log_this()
+def check_prereqs(state_db, state, level, log_failures=None):
+    if log_failures == None:
+        log_failures = ((time.time() - log_failed_prereqs_timer[state_db][state][level]) > log_failed_prereqs_interval)
+    prereqs_pass = True
+    for prereq in STATES[state_db][state]['prerequisites'][level]:
+        prereq_value = from_keys(db[prereq['db']].read_buffer(),prereq['key'])
+        prereq_status = (prereq_value == prereq['value'])
+        prereqs_pass *= prereq_status
+        if (not(prereq_status) and log_failures):
+            if (level=='critical'):
+                log_str = 'Critical prerequisite failure: state_db: {:}; state: {:}; prereq: {:}'.format(state_db, state, prereq)
+                log.log_critical(__name__,'check_prereqs',log_str)
+                log_failed_prereqs_timer[state_db][state]['critical'] = time.time()
+            elif (level=='necessary'):
+                log_str = 'Necessary prerequisite failure: state_db: {:}; state: {:}; prereq: {:}'.format(state_db, state, prereq)
+                log.log_warning(__name__,'check_prereqs',log_str)
+                log_failed_prereqs_timer[state_db][state]['necessary'] = time.time()
+            elif (level=='optional'):
+                log_str = 'Optional prerequisite failure: state_db: {:}; state: {:}; prereq: {:}'.format(state_db, state, prereq)
+                log.log_warning(__name__,'check_prereqs',log_str)
+                log_failed_prereqs_timer[state_db][state]['optional'] = time.time()
+    return prereqs_pass
+
+# Update Device Settings ------------------------------------------------------
+@log.log_this()
+def update_device_settings(device_db, settings_list):
+    updated = False
+# Check settings_list type
+    if isinstance(settings_list, dict):
+    # If settings_list is a dictionary then use only one settings_group
+        settings_list = [settings_list]
+# Wait for queue
+    queued = dev[device_db]['queue'].queue_and_wait()
+# Push device settings
+    for settings_group in settings_list:
+        for setting in settings_group:
+        # Log the device, method, and arguments
+            prologue_str = 'device: {:}; method: {:}; args: {:}'.format(device_db, setting, settings_group[setting])
+            log.log_info(__name__, 'update_device_settings', prologue_str)
+        # Try sending the command to the device
+            try:
+                result = send_args(getattr(dev[device_db]['driver'], setting),settings_group[setting])
+            except:
+                log.log_exception(__name__, 'update_device_settings')
+            else:
+            # Update the local copy if it exists in the device settings
+                if (setting in local_settings[device_db]):
+                    if settings_group[setting] == None:
+                    # A setting was read from the device
+                        new_setting = result
+                    else:
+                    # A new setting was applied to the device
+                        new_setting = settings_group[setting]
+                    if (local_settings[device_db][setting] != new_setting):
+                        updated = True
+                        local_settings[device_db][setting] = new_setting
+            # Log the returned result if stringable
+                try:
+                    epilogue_str = 'Returned: {:}'.format(str(result))
+                except:
+                    epilogue_str = 'Returned successfully, but result was not stringable'
+                log.log_info(__name__, 'update_device_settings', epilogue_str)
+        # Touch queue (prevent timeout)
+            dev[device_db]['queue'].touch()
+# Remove from queue
+    if not(queued):
+        dev[device_db]['queue'].remove()
+# Update the database if the local copy changed
+    if updated:
+        db[device_db].write_record_and_buffer(local_settings[device_db])
+
+# Setup the Transition to a New State -----------------------------------------
+@log.log_this()
+def setup_state(state_db, state, critical=True, necessary=True, optional=True):
+# Update the device settings
+    for device_db in STATES[state_db][state]['settings']:
+        update_device_settings(device_db, STATES[state_db][state]['settings'][device_db])
+# Update the state variable
+    current_state[state_db]['state'] = state
+    current_state[state_db]['prerequisites'] = {
+            'critical':critical,
+            'necessary':necessary,
+            'optional':optional}
+    current_state[state_db]['compliance'] = False
+    db[state_db].write_record_and_buffer(current_state[state_db]) # The desired state should be left unaltered
+
+# Parse Messages from the Communications Queue --------------------------------
+@log.log_this()
+def parse_message(message):
+    if ('message' in message):
+        message = message['message']
+        log.log_info(__name__, 'parse_message', str(message))
+    # If requesting to change states,
+        if ('state' in message):
+            for state_db in message['state']:
+                if ('state' in message['state'][state_db]):
+                    desired_state = message['state'][state_db]['state']
+                    if current_state[state_db]['desired_state'] != desired_state:
+                    # Update the state variable
+                        current_state[state_db]['desired_state'] = desired_state
+                        db[state_db].write_record_and_buffer(current_state[state_db])
+    # If requesting to change device settings,
+        if ('device_setting' in message):
+            for device_db in message['device_setting']:
+            # Update the device settings
+                if (device_db in DEVICE_DBs):
+                    update_device_settings(device_db, message['device_setting'][device_db])
+    # If requesting to change control parameters,
+        if ('control_parameter' in message):
+            updated = False
+            for method in message['control_parameter']:
+                if (method in local_settings[CONTROL_DB]):
+                    for parameter in message['control_parameter'][method]:
+                    # Update the control parameter
+                        if (parameter in local_settings[CONTROL_DB][method]):
+                        # Convert new parameter to the correct type
+                            parameter_type = local_settings[CONTROL_DB][method][parameter]['type']
+                            try:
+                                result = convert_type(message['control_parameter'][method][parameter], parameter_type)
+                            except:
+                                result_str = 'Could not convert {:} to {:} for control parameter {:}.{:}'.format(message['control_parameter'][method][parameter], parameter_type, method, parameter)
+                                log.log_info(__name__, 'parse_message', result_str)
+                            else:
+                                if (local_settings[CONTROL_DB][method][parameter]['value'] != result):
+                            # Update the local copy
+                                    updated = True
+                                    local_settings[CONTROL_DB][method][parameter]['value'] = result
+        # Update the database if the local copy changed
+            if updated:
+                db[CONTROL_DB].write_record_and_buffer(local_settings[CONTROL_DB])
 
 # Get Values from Nested Dictionary -------------------------------------------
+@log.log_this()
 def from_keys(nested_dict, key_list):
     if isinstance(key_list, list):
         for key in key_list:
@@ -37,38 +173,82 @@ def from_keys(nested_dict, key_list):
     return nested_dict
 
 # Parse and Send Arguments to Functions ---------------------------------------
+@log.log_this()
 def send_args(func, obj=None):
-    if isinstance(obj, list):
-        args = obj
-        kwargs = {}
-    elif isinstance(obj, dict):
-        args = []
-        kwargs = obj
-    elif isinstance(obj, tuple):
-        args = obj[0]
-        kwargs = obj[1]
-    elif obj == None:
-        args = []
-        kwargs = {}
+    try:
+        obj_length = len(obj)
+    except:
+        obj_length = None
+    if (obj_length == 1):
+    # Check for an internal list or dictionary
+        if isinstance(obj[0], list):
+            args = obj[0]
+            kwargs = {}
+        elif isinstance(obj[0], dict):
+            args = []
+            kwargs = obj[0]
+        else:
+            args = obj
+            kwargs = {}
+    elif (obj_length == 2):
+    # Check for both an internal list and dictionary
+        if ((list and dict) in [type(obj[0]), type(obj[1])]):
+            if isinstance(obj[0], list):
+                args = obj[0]
+                kwargs = obj[1]
+            else:
+                args = obj[1]
+                kwargs = obj[2]
+        else:
+            args = obj
+            kwargs = {}
     else:
-        args = [obj]
-        kwargs = {}
+    # Check if no input
+        if obj == None:
+            args = []
+            kwargs = {}
+        else:
+            args = obj
+            kwargs = {}
     result = func(*args, **kwargs)
     return result
 
 # Exhaust a MongoDB Cursor to Queue up the Most Recent Values -----------------
+@log.log_this()
 def exhaust_cursor(cursor):
     for doc in cursor:
         pass
     return cursor
 
 # Convert Type from a "type string" -------------------------------------------
+@log.log_this()
 def convert_type(obj, type_str):
     valid_types = {'bool':bool, 'complex':complex,
                    'float':float, 'int':int, 'str':str}
     obj = valid_types[type_str](obj)
     return obj
-        
+
+
+# %% Helper Functions =========================================================
+
+'''The following are helper functionss that increase the readablity of code in
+    this script. These functions are defined by the user and should not
+    directly appear in the main loop of the state machine.'''
+
+# Update a 1D circular buffer -------------------------------------------------
+@log.log_this()
+def update_buffer(buffer, new_data, length):
+    length = int(abs(length))
+    buffer = np.append(buffer, new_data)
+    if buffer.size > length:
+        buffer = buffer[-length:]
+    return buffer
+
+# Periodic Timer --------------------------------------------------------------
+@log.log_this()
+def get_lap(time_interval):
+    return int(time.time() // time_interval)
+
 
 # %% Databases and Settings ===================================================
 
@@ -98,7 +278,7 @@ def convert_type(obj, type_str):
     '''
 COMMS = 'mll_fR'
 
-# Local database names --------------------------------------------------------
+# Internal database names --------------------------------------------------------
 '''The following are all of the databases that this script directly
     controls. Each of these databases are initialized within this script.
     The databases should be grouped by function:
@@ -125,11 +305,12 @@ COMMS = 'mll_fR'
 STATE_DBs = [
     'mll_fR/state']
 DEVICE_DBs =[
-    'mll_fR/settings_TEC', 'mll_fR/settings_PID',
-    'mll_fR/settings_HV', 'mll_fR/settings_DAQ_ErrorFrequency']
+    'mll_fR/device_TEC', 'mll_fR/device_PID',
+    'mll_fR/device_HV', 'mll_fR/device_DAQ_error_frequency']
 MONITOR_DBs = [
-    'mll_fR/TEC_temperature', 'mll_fR/TEC_current', 'mll_fR/PID_voltage', 
-    'mll_fR/HV_output', 'mll_fR/rms_error']
+    'mll_fR/TEC_temperature', 'mll_fR/TEC_current', 'mll_fR/PID_voltage',
+    'mll_fR/PID_voltage_limits', 'mll_fR/HV_output', 'mll_fR/DAQ_error_frequency',
+    'mll_fR/TEC_event_status']
 LOG_DB = 'mll_fR/log'
 CONTROL_DB = 'mll_fR/control'
 MASTER_DBs = STATE_DBs + DEVICE_DBs + MONITOR_DBs + [LOG_DB] + [CONTROL_DB]
@@ -139,15 +320,21 @@ MASTER_DBs = STATE_DBs + DEVICE_DBs + MONITOR_DBs + [LOG_DB] + [CONTROL_DB]
     needed to check prerequisites'''
 R_STATE_DBs = []
 R_DEVICE_DBs =[]
-R_MONITOR_DBs = []
+R_MONITOR_DBs = ['mll_fR/DAQ_error_signal']
 READ_DBs = R_STATE_DBs + R_DEVICE_DBs + R_MONITOR_DBs
 
 # Default settings ------------------------------------------------------------
 '''A template for all settings used in this script. Upon initialization 
     these settings are checked against those saved in the database, and 
     populated if found empty. Each state and device database should be
-    represented. Default values are only added to a database if they are found 
-    to be undefined within the database:
+    represented. 
+    -Default values are only added to a database if the setting keys are not
+    found within the database (if the database has not yet been initialized
+    with that setting).
+    -For device databases, default settings of None are populated with values
+    from the device, but set values are written to the device. All
+    initialized settings are read from the device at startup.
+    -Include all settings that need to be tracked in the database:
         states:
             -Entries in the state databases are specified as follows:
                 {<state database path>:{
@@ -178,7 +365,7 @@ READ_DBs = R_STATE_DBs + R_DEVICE_DBs + R_MONITOR_DBs
             control scripts have determined the current state. In order to 
             smoothly connect to the system if the instruments are already 
             running, initialization prerequisites should be either
-            "necessary" or "optional".
+            "necessary" or "optional" ("critical" would force the "safe" state).
         devices:
             -Entries in the device databases are specified as follows:
                 {<device database path>:{
@@ -186,17 +373,25 @@ READ_DBs = R_STATE_DBs + R_DEVICE_DBs + R_MONITOR_DBs
             -The entries should include the settings for each unique device or
             device/channel combination. 
             -For automation purposes, the setting names and parameters should
-            be derived from the methods of the device drivers.
-            -Place multiple arguments in a list, keyword arguments in
-            dictionaries, and combinations of the two in tuples:
-                ([args], {kwargs})
-            -Single arguments may be left as is, but single arguments that are
-            lists must nested one level deep:
-                [[list argument]]
-            -The automated "send_args()" checks whether the instance is a list,
-            a dictionary, a tuple, or is None before sending the commands.
+            be derived from the names of the device driver methods.
+            -Single arguments should be entered as is:
+                <method name>:<arg>
+            -Place multiple arguments in a list containing a list of positional
+            arguments and a dictionary of keyword arguments:
+                <method name>:[[<args>], {<kwargs>}]
+                <method name>:[[<args>]]
+                <method name>:[{<kwargs>}]
+            -A setting of None calls the methods without any arguments. Device
+            drivers should reserve such cases for getting the current device
+            settings:
+                <method name>:None -> returns current device settings
+            -The automated "send_args()" checks for the above cases before
+            parsing and sending the commands.
+            -The "__init__" method should hold all arguments necessary to 
+            initialize the device driver.
         control parameter:
-            -Entries in the control parameter database are specified follows:
+            -Entries in the control parameter database are specified as
+            follows:
                 {<control database path>:{
                     <local method>:{
                         <control parameter>:{'value':<value>,'type':<type str>},...}
@@ -206,7 +401,8 @@ READ_DBs = R_STATE_DBs + R_DEVICE_DBs + R_MONITOR_DBs
             parameter if it happens to be used in multiple local methods. These
             methods are executed based on their placement in STATES.
             -Control parameters have both a value and a type.
-            -Only include parameters that should have remote access.'''
+            -Only include parameters that should have remote access. There is
+            no protection against the insertion of bad values.'''
 STATE_SETTINGS = {
         'mll_fR/state':{
                 'state':'engineering',
@@ -219,32 +415,33 @@ STATE_SETTINGS = {
                 'initialized':False}}
 DEVICE_SETTINGS = {
         # VISA device settings
-        'mll_fR/settings_TEC':{
-                '__init__':['visa address', 'channel'],
-                'tec_off_triggers':[[5, 6, 7, 8, 10]], 'tec_gain':100, 
-                'tec_current_limit':0.400, 'tec_temperature_limit':40.0, 'tec_mode':'R',
-                'tec_output':True, 'tec_resistance_setpoint':7.580},
-        'mll_fR/settings_PID':{
-                '__init__':['visa address', 'port'],
+        'mll_fR/device_TEC':{
+                '__init__':[['visa address', 'channel']],
+                'tec_off_triggers':None, 'tec_gain':100, 
+                'tec_current_limit':0.400, 'tec_temperature_limit':45.0, 'tec_mode':'R',
+                'tec_output':True, 'tec_resistance_setpoint':None},
+        'mll_fR/device_PID':{
+                '__init__':[['visa address', 'port']],
                 'proportional_action':True, 'integral_action':True,
-                'derivative_action':False, 'offset_action':False, 
-                'proportional_gain':-3.0e0, 'integral_gain':5.0e2, 'pid_action':False,
-                'setpoint_action':False, 'internal_setpoint':0.000, 'ramp_action':False,
-                'manual_output':0.000, 'upper_output_limit':8.00,
-                'lower_output_limit':0.00, 'power_line_frequency':60, 'display':True},
-        'mll_fR/settings_HV':{
-                '__init__':'<visa address>',
+                'derivative_action':False, 'offset_action':None, 'offset':None,
+                'proportional_gain':-3.0e0, 'integral_gain':5.0e2, 'pid_action':None,
+                'external_setpoint_action':False, 'internal_setpoint':0.000,
+                'ramp_action':False, 'manual_output':None, 'upper_output_limit':8.00,
+                'lower_output_limit':0.00, 'power_line_frequency':60},
+        'mll_fR/device_HV':{
+                '__init__':'<visa address>', 'master_scan_action':False,
                 'x_min':0.00, 'x_max':60.00, 'x_voltage':0.00},
         # DAQ settings
-        'mll_fR/settings_DAQ_ErrorFrequency':{
-                '__init__':(
-                        [[{'physical_channel':'Dev1/ai0', 'terminal_config':'NRSE',
-                           'min_val':-1.0, 'max_val':1.0}], 10e3, int(10e3*0.1)],
-                        {'timeout':5.0}),
-                'reserve_cont':False, 'reserve_point':False, 'read_point':10000}}
+        'mll_fR/device_DAQ_error_frequency':{
+                '__init__':[
+                    [[{'physical_channel':'Dev1/ai0', 'terminal_config':'NRSE',
+                       'min_val':-1.0, 'max_val':1.0}],
+                        100e3, int(100e3*0.1)],{'timeout':5.0}],
+                'reserve_cont':False, 'reserve_point':False}}
 CONTROL_PARAMS = {
         'mll_fR/control':{ }}
 SETTINGS = dict(list(STATE_SETTINGS.items()) + list(DEVICE_SETTINGS.items()) + list(CONTROL_PARAMS.items()))
+
 
 # %% Initialize Databases, Devices, and Settings ==============================
 
@@ -253,37 +450,22 @@ SETTINGS = dict(list(STATE_SETTINGS.items()) + list(DEVICE_SETTINGS.items()) + l
 mongo_client = MongoDB.MongoClient()
 db = {}
 for database in MASTER_DBs:
-    db[database] = mongoDB.DatabaseMaster(mongo_client, database)
+    db[database] = MongoDB.DatabaseMaster(mongo_client, database)
 
 for database in READ_DBs:
-    db[database] = mongoDB.DatabaseRead(mongo_client, database)
-
-# Initialize all Database Settings --------------------------------------------
-'''This checks that all settings (as listed in SETTINGS) exist within the
-    databases. Any missing settings are populated with the default values.'''
-for database in SETTINGS:
-    initialized = True
-    settings_in_db = db[database].read_buffer()
-    for setting in SETTINGS[database]:
-    # Check that the key exists in the database
-        if not(setting in settings_in_db):
-            initialized = False
-            settings_in_db[setting] = SETTINGS[database][setting]
-    if not(initialized):
-    # Update the database values if necessary
-        db[database].write_record_and_buffer(settings_in_db)
+    db[database] = MongoDB.DatabaseRead(mongo_client, database)
 
 # Start Logging ---------------------------------------------------------------
 '''Initializes logging for this script. If the logging database is unset then
-    all logs will be output to the stout. There are two logging handlers when 
-    the logging database is set, one logs lower threshold events to the log 
+    all logs will be output to the stout. When the logging database is set
+    there are two logging handlers, one logs lower threshold events to the log 
     buffer and the other logs warnings and above to the permanent log database.
     The threshold for the base logger, and the two handlers, may be set in the
     following command.'''
 log.start_logging(logger_level=logging.DEBUG) #database=db[LOG_DB])
 
 # Connect to the Communications Queue -----------------------------------------
-'''Creates a handle for the queue object defined by COMMS'''
+'''Creates a handle for the queue object defined in COMMS'''
 comms = CouchbaseDB.PriorityQueue(COMMS)
 
 # Initialize Devices ----------------------------------------------------------
@@ -293,66 +475,551 @@ comms = CouchbaseDB.PriorityQueue(COMMS)
                 'driver':<driver object>,
                 'queue':<queue objecct>}
     -The queue is needed to coordinate access to the devices. Each blocking
-    connection to a device should have a unique queue. If access to one part of
-    an instrument blocks access to other parts, that set of parts should all
-    use the same unique queue.'''
+    connection to a device should have a unique queue name. If access to one
+    part of an instrument blocks access to other parts, that set of parts
+    should all use the same unique queue. A good queue name is likely the 
+    instrument address.'''
 dev = {}
     # VISA drivers
-dev['mll_fR/settings_TEC'] = {
-        'driver':send_args(TECModule, DEVICE_SETTINGS['mll_fR/settings_TEC']['__init__']),
+dev['mll_fR/device_TEC'] = {
+        'driver':send_args(TECModule, DEVICE_SETTINGS['mll_fR/device_TEC']['__init__']),
         'queue':CouchbaseDB.PriorityQueue('<visa address>')}
-dev['mll_fR/settings_PID'] = {
-        'driver':send_args(SIM960, DEVICE_SETTINGS['mll_fR/settings_PID']['__init__']),
+dev['mll_fR/device_PID'] = {
+        'driver':send_args(SIM960, DEVICE_SETTINGS['mll_fR/device_PID']['__init__']),
         'queue':CouchbaseDB.PriorityQueue('<visa address>')}
-dev['mll_fR/settings_HV'] = {
-        'driver':send_args(MDT639B, DEVICE_SETTINGS['mll_fR/settings_HV']['__init__']),
+dev['mll_fR/device_HV'] = {
+        'driver':send_args(MDT639B, DEVICE_SETTINGS['mll_fR/device_HV']['__init__']),
         'queue':CouchbaseDB.PriorityQueue('<visa address>')}
     # DAQ drivers
-dev['mll_fR/settings_DAQ_ErrorFrequency'] = {
-        'driver':send_args(AiTask, DEVICE_SETTINGS['mll_fR/settings_DAQ_ErrorFrequency']['__init__']),
+dev['mll_fR/device_DAQ_error_frequency'] = {
+        'driver':send_args(AiTask, DEVICE_SETTINGS['mll_fR/device_DAQ_error_frequency']['__init__']),
         'queue':CouchbaseDB.PriorityQueue('<daq type and/or channels>')}
-
-# Initialize a Local Copy of Device Settings and Control Parameters -----------
-'''This pulls the most recent values from the databases for use in this scipt.'''
-local_settings = {}
-for database in SETTINGS:
-    local_settings[database] = db[database].read_buffer()
 
 # Initialize Local Copy of Monitors -------------------------------------------
 '''Monitors should associate the monitor databases with the local, circular
-    buffers of the monitored data. Monitors from the read database should have
-    their cursors exhausted so that only their most recent values are 
-    accessible:
+    buffers of the monitored data. Monitors should indicate when they have 
+    recieved new data.
+    -Monitors from the internal databases should be associated with the device
+    that they pull data from:
         {<database path>:{'data':<placeholder for local data copy>},
-                          'cursor':<tailable cursor object>}'''
-local_mon = {}
-for database in MONITOR_DBs:
-    mon[database] = {'data':np.array([]), 'cursor':None}
-
+                          'device':<device object>,
+                          'new':<bool>}
+    -Monitors from the read database should have their cursors exhausted so
+    that only their most recent values are accessible:
+        {<database path>:{'data':<placeholder for local data copy>},
+                          'cursor':<tailable cursor object>,
+                          'new':<bool>}'''
+mon = {}
+    # ILX -----------------------------
+mon['mll_fR/TEC_temperature'] = {
+        'data':np.array([]),
+        'device':dev['mll_fR/device_TEC'],
+        'new':False}
+mon['mll_fR/TEC_current'] = {
+        'data':np.array([]),
+        'device':dev['mll_fR/device_TEC'],
+        'new':False}
+mon['mll_fR/TEC_event_status'] = {
+        'data':np.array([]),
+        'device':dev['mll_fR/device_TEC'],
+        'new':False}
+    # SRS -----------------------------
+mon['mll_fR/PID_voltage'] = {
+        'data':np.array([]),
+        'device':dev['mll_fR/device_PID'],
+        'new':False}
+mon['mll_fR/PID_voltage_limits'] = {
+        'data':np.array([]),
+        'device':dev['mll_fR/device_PID'],
+        'new':False}
+    # HV Piezo ------------------------
+mon['mll_fR/HV_output'] = {
+        'data':np.array([]),
+        'device':dev['mll_fR/device_HV'],
+        'new':False}
+    # DAQ -----------------------------
+mon['mll_fR/DAQ_error_frequency'] = {
+        'data':np.array([]),
+        'device':dev['mll_fR/device_DAQ_error_frequency'],
+        'new':False}
+    # External ------------------------
 for database in R_MONITOR_DBs:
     cursor = db[database].read_buffer(tailable_cursor=True, no_cursor_timeout=True)
-    mon[database] = {'data':np.array([]), 'cursor':exhaust_cursor(cursor)}
+    mon[database] = {
+            'data':np.array([]),
+            'cursor':exhaust_cursor(cursor),
+            'new':False}
 
+# Initialize all Database Settings --------------------------------------------
+'''This checks that all settings (as listed in SETTINGS) exist within the
+    databases. Any missing settings are populated with the default values. 
+    -If the setting does not exist within a device database that setting is
+    propogated to the device, otherwise the local settings are read from the
+    device.
+    -The settings for '__init__' methods are are not sent or pulled to devices.
+    -A local copy of all settings is contained within the local_settings
+    dictionary.'''
+local_settings = {}
+for database in SETTINGS:
+    device_db_condition = (database in DEVICE_DBs)
+    local_settings[database] = db[database].read_buffer()
+# Check all SETTINGS
+    db_initialized = True
+    settings_list = []
+    for setting in SETTINGS[database]:
+    # Check that the key exists in the database
+        if not(setting in local_settings[database]):
+            db_initialized = False
+            local_settings[database][setting] = SETTINGS[database][setting]
+            if (device_db_condition and (setting != '__init__')):
+                settings_list.append({setting:SETTINGS[database][setting]})
+        elif (device_db_condition and (setting != '__init__')):
+            settings_list.append({setting:None})
+    if device_db_condition:
+        update_device_settings(database, settings_list)
+    if not(db_initialized):
+    # Update the database values if necessary
+        db[database].write_record_and_buffer(local_settings[database])
 
 # %% State and Monitor Functions ==============================================
 
+# Global Timing Variable ------------------------------------------------------
+timer = {}
+
 # Do nothing function ---------------------------------------------------------
 '''A functional placeholder for cases where nothing should happen.'''
-def nothing():
+@log.log_this()
+def nothing(state_db):
     pass
 
 # Monitor Functions -----------------------------------------------------------
 '''This section is for defining the methods needed to monitor the system.'''
-
+control_interval = 0.2 # s
+passive_interval = 1.0 # s
+timer['monitor:control'] = get_lap(control_interval)
+timer['monitor:passive'] = get_lap(passive_interval)
+def monitor(state_db):
+# Get lap number
+    new_control_lap = get_lap(control_interval)
+    new_passive_lap = get_lap(passive_interval)
+# Update control loop variables -------------------------------------
+    if (new_control_lap > timer['monitor:control']):
+    # Pull data from SRS ----------------------------------
+        device_db = 'mll_fR/device_PID'
+        # Wait for queue
+        dev[device_db]['queue'].queue_and_wait()
+        # Get values
+        new_v_out = dev[device_db]['driver'].new_output_monitor()
+        if new_v_out:
+            v_out = dev[device_db]['driver'].output_monitor()
+        v_min = dev[device_db]['driver'].lower_limit
+        v_max = dev[device_db]['driver'].upper_limit
+        # Remove from queue
+        dev[device_db]['queue'].remove()
+        # Update buffers and databases ----------
+            # Output voltage ----------
+        if new_v_out:
+            mon['mll_fR/PID_voltage']['new'] = True
+            mon['mll_fR/PID_voltage']['data'] = update_buffer(
+                    mon['mll_fR/PID_voltage']['data'],
+                    v_out, 500)
+            db['mll_fR/PID_voltage'].write_record_and_buffer({'V':v_out})
+            # Voltage limits ----------
+        if (mon['mll_fR/PID_voltage_limits']['data'] != {'min':v_min, 'max':v_max}):
+            mon['mll_fR/PID_voltage_limits']['new'] = True
+            mon['mll_fR/PID_voltage_limits']['data'] = {'min':v_min, 'max':v_max}
+            db['mll_fR/PID_voltage_limits'].write_record_and_buffer({'min':v_min, 'max':v_max})
+    # Pull data from external databases -------------------
+        new_data = []
+        for doc in mon['mll_fR/DAQ_error_signal']['cursor']:
+            new_data.append(doc['std'])
+         # Update buffers -----------------------
+        if len(new_data) > 0:
+            mon['mll_fR/DAQ_error_signal']['new'] = True
+            mon['mll_fR/DAQ_error_signal']['data'] = update_buffer(
+                mon['mll_fR/DAQ_error_signal']['data'],
+                new_data, 500)
+# Update passive monitoring variables -------------------------------
+    if (new_passive_lap > timer['monitor:passive']):
+    # Pull data from ILX Lightwave ------------------------
+        device_db = 'mll_fR/device_TEC'
+        # Wait for queue
+        dev[device_db]['queue'].queue_and_wait()
+        # Get values
+        tec_temp = dev[device_db]['driver'].tec_resistance()
+        tec_curr = dev[device_db]['driver'].tec_current()
+        tec_events = dev[device_db]['driver'].tec_events()
+        # Remove from queue
+        dev[device_db]['queue'].remove()
+        # Update buffers and databases -----------
+            # TEC temp ----------------
+        mon['mll_fR/TEC_temperature']['new'] = True
+        mon['mll_fR/TEC_temperature']['data'] = update_buffer(
+                mon['mll_fR/TEC_temperature']['data'],
+                tec_temp, 100)
+        db['mll_fR/TEC_temperature'].write_record_and_buffer({'kOhm':tec_temp})
+            # TEC current -------------
+        mon['mll_fR/TEC_current']['new'] = True
+        mon['mll_fR/TEC_current']['data'] = update_buffer(
+                mon['mll_fR/TEC_current']['data'],
+                tec_curr, 100)
+        db['mll_fR/TEC_current'].write_record_and_buffer({'A':tec_curr})
+            # TEC Events --------------
+        if (mon['mll_fR/TEC_event_status']['data'] != tec_events):
+            mon['mll_fR/TEC_event_status']['new'] = True
+            mon['mll_fR/TEC_event_status']['data'] = tec_events
+            db['mll_fR/TEC_event_status'].write_record_and_buffer({'events':tec_events})
+    # Pull data from Thorlabs 3-axis piezo controller -----
+        device_db = 'mll_fR/device_HV'
+        # Wait for queue
+        dev[device_db]['queue'].queue_and_wait()
+        # Get values
+        hv_out = dev[device_db]['driver'].x_voltage()
+        # Remove from queue
+        dev[device_db]['queue'].remove()
+        # Update buffers and databases ----------
+        mon['mll_fR/HV_output']['new'] = True
+        mon['mll_fR/HV_output']['data'] = update_buffer(
+                mon['mll_fR/HV_output']['data'],
+                hv_out, 300)
+        db['mll_fR/HV_output'].write_record_and_buffer({'V':hv_out})
+# Propogate lap numbers ---------------------------------------------
+    timer['monitor:control'] = new_control_lap
+    timer['monitor:passive'] = new_passive_lap
 
 # Search Functions ------------------------------------------------------------
 '''This section is for defining the methods needed to bring the system into
     its defined states.'''
+from scipy.optimize import curve_fit
+v_range_threshold = 0.1 #(limit-threshold)/(upper - lower limits)
+t_setpoint_threshold = 0.02 #kOhm
+tec_adjust_interval = 0.5 #s
+lock_hold_interval = 1.0 #s
+timer['find_lock:locked'] = time.time()
+timer['find_lock:tec_adjust'] = time.time()
+def find_lock(state_db, last_good_position=None):
+# Queue the SRS PID controller --------------------------------------
+    device_db = 'mll_fR/device_PID'
+    dev[device_db]['queue'].queue_and_wait(priority=True)
+# Initialize threshold variables ------------------------------------
+    v_high = (1-v_range_threshold)*dev[device_db]['driver'].upper_limit + v_range_threshold*dev[device_db]['driver'].lower_limit
+    v_low = (1-v_range_threshold)*dev[device_db]['driver'].lower_limit + v_range_threshold*dev[device_db]['driver'].upper_limit
+# Quick relock ------------------------------------------------------
+    # Re-engage the lock at the last know position --------
+    if last_good_position is not None:
+        '''This is used to quicklyre-engage the lock starting from a known
+        posistion. This is only activated if "last_good_position" is given as a 
+        keyword argument to this function call. The state then skips the first
+        round of lock tests.'''
+        settings_list = [
+                {'manual_output':last_good_position},
+                {'pid_action':False},
+                {'offset_action':True,'offset':last_good_position},
+                {'pid_action':True}] # TODO: add delay?
+        update_device_settings(device_db, settings_list)
+    # Update lock timer -----------------------------------
+        timer['find_lock:locked'] = time.time()
+        locked = True
+# Check if locked ---------------------------------------------------
+    elif dev[device_db]['driver'].pid_action():
+        '''This is the main logic used to determine if the current state is
+        locked. The main check is that the current output is within the
+        accepted range between the upper and lower hardware limits.'''
+    # PID is enabled
+        current_output = dev[device_db]['driver'].output_monitor()
+        if (current_output < v_low) or (current_output > v_high):
+        # Output is beyond voltage thresholds
+            locked = False
+        # TODO: elif rms error signal is high -> locked = False
+        else:
+        # Lock is holding
+            locked = True
+    else:
+    # PID is disabled
+        locked = False
+# If locked ---------------------------------------------------------            
+    if locked:
+        '''If the current state passed the previous tests the control script
+        holds off on making a final judgement until the specified interval has
+        passed since lock acquisition.'''
+    # Remove the SRS PID controller from queue ------------
+        dev[device_db]['queue'].remove()
+    # Check lock interval ---------------------------------
+        if (time.time() - timer['find_lock:locked']) > lock_hold_interval:
+            log_str = 'Lock succesful'
+            log.log_info(__name__, 'find_lock', log_str)
+        # Lock is succesful, update state variable
+            current_state[state_db]['compliance'] = True
+            db[state_db].write_record_and_buffer(current_state[state_db])
+# If unlocked -------------------------------------------------------
+    else:
+        '''The current state has failed the lock tests. The PID controller is
+        then broght into a known state, and the DAQ is used to find the lock
+        point.'''
+    # Reset the PID controller ----------------------------
+        settings_list = [
+                {'pid_action':False},
+                {'upper_output_limit':STATES[state_db][current_state[state_db]['state']]['settings'][device_db]['upper_output_limit'],
+                 'lower_output_limit':STATES[state_db][current_state[state_db]['state']]['settings'][device_db]['lower_output_limit']}]
+        update_device_settings(device_db, settings_list)
+    # Reinitialize threshold variables --------------------
+        v_high = (1-v_range_threshold)*dev[device_db]['driver'].upper_limit + v_range_threshold*dev[device_db]['driver'].lower_limit
+        v_low = (1-v_range_threshold)*dev[device_db]['driver'].lower_limit + v_range_threshold*dev[device_db]['driver'].upper_limit
+    # Reset the piezo hysteresis --------------------------
+        dev[device_db]['driver'].manual_output(v_low)
+    # Queue the DAQ ---------------------------------------
+        daq_db = 'mll_fR/DAQ_error_frequency'
+        dev[daq_db]['queue'].queue_and_wait(priority=True)
+    # Get lock point data ---------------------------------
+        to_fit = lambda v, v0, s: s*np.abs(v-v0)
+        x = np.linspace(v_low, v_high, 5)
+        y = np.copy(x)
+        for ind, x_val in enumerate(x):
+        # Touch queue (prevent timeout) ---------
+            dev[device_db]['queue'].touch()
+            dev[daq_db]['queue'].touch()
+        # Change position and trigger DAQ -------
+            dev[device_db]['driver'].manual_output(x_val)
+            data = dev[daq_db]['driver'].read_point()
+            # Find peak frequency -----
+            han_win = np.hanning(dev[daq_db]['driver'].buffer_size)
+            freqs = dev[daq_db]['driver'].rate*np.fft.rfftfreq(dev[daq_db]['driver'].buffer_size)
+            amps = np.abs(np.fft.rfft(han_win*data))
+            peak_ind = np.argmax(amps)
+            y[ind] = freqs[peak_ind]
+        # Release and remove the DAQ from queue -
+        dev[daq_db]['driver'].reserve_point(False)
+        dev[daq_db]['queue'].remove()
+        # Reset the piezo hysteresis ------------
+        dev[device_db]['driver'].manual_output(x[0])
+        # Update monitor DB ---------------------
+        mon['mll_fR/DAQ_error_frequency']['new'] = True
+        mon['mll_fR/DAQ_error_frequency']['data'] = np.array([x, y])
+        db['mll_fR/DAQ_error_frequency'].write_record_and_buffer({'V':x.tolist(), 'Hz':y.tolist()})
+    # Estimate the lock point -----------------------------
+        #Coarse Estimate ------------------------
+        slopes = np.diff(y)/np.diff(x)
+        slope_ind = np.argmax(np.abs(slopes))
+        output_coarse = -y[slope_ind]/slopes[slope_ind] + x[slope_ind]
+        slope_coarse = np.abs(slopes[slope_ind])
+        #Fine Estimate --------------------------
+        try:
+            new_output = curve_fit(to_fit, x, y, [output_coarse, slope_coarse])[0][0]
+        except:
+            log.log_exception(__name__, 'find_lock')
+            # Failure may be because the frequency response was too flat?
+            # The middle is a safe place to go (no TEC adjustment)
+            new_output = dev[device_db]['driver'].center
+    # Get Lock --------------------------------------------
+        if (new_output > v_low) and (new_output < v_high):
+            '''If the new lock point is within the acceptable range between
+            the upper and lower hardware limits, attempt to lock.'''
+            log_str = 'Estimated voltage setpoint = {:.3f}, locking.'.format(new_output)
+            log.log_info(__name__, 'find_lock', log_str)
+        # Update deivice settings ---------------
+            settings_list = [{'manual_output':new_output,
+                              'offset_action':True,
+                              'offset':new_output},
+                             {'pid_action':True}] #TODO: add delay?
+            update_device_settings(device_db, settings_list)
+        # Remove the SRS PID controller from queue
+            dev[device_db]['queue'].remove()
+        # Update lock timer ---------------------
+            timer['find_lock:locked'] = time.time()
+        else:
+            '''If not, try to determine why. This could be that the temperature
+            control is not on, the temperature has not settled at the setpoint,
+            or the temperature setpoint needs adjustment.'''
+        # Remove the SRS PID controller from queue
+            dev[device_db]['queue'].remove()
+        # Queue the ILX TEC controller ----------
+            device_db = 'mll_fR/device_TEC'
+            dev[device_db]['queue'].queue_and_wait(priority=True)
+        # Check TEC settings --------------------
+            if dev[device_db]['driver'].tec_output():
+            # If TEC is on ------------
+                t_setpoint = dev[device_db]['driver'].tec_resistance_setpoint()
+                t_meas = dev[device_db]['driver'].tec_resistance()
+                setpoint_condition = (abs(t_setpoint - t_meas) < t_setpoint_threshold)
+                adjustment_interval_condition = ((time.time()-timer['find_lock:tec_adjust']) > tec_adjust_interval)
+                if (setpoint_condition and adjustment_interval_condition):
+                # Adjust timer
+                    timer['find_lock:tec_adjust'] = timer.time()
+                # Adjust the setpoint
+                    if (new_output < dev[device_db]['driver'].center):
+                        log_str = 'Estimated voltage setpoint = {:.3f}, raising the resistance setpoint'.format(new_output)
+                        log.log_info(__name__, 'find_lock', log_str)
+                    # Raise the resistance setpoint
+                        dev[device_db]['driver'].tec_step(+1)
+                    elif new_output > dev[device_db]['driver'].center:
+                        log_str = 'Estimated voltage setpoint = {:.3f}, lowering the resistance setpoint.'.format(new_output)
+                        log.log_info(__name__, 'find_lock', log_str)
+                    # Lower the resistance setpoint
+                        dev[device_db]['driver'].tec_step(-1)
+                else:
+                # TEC has not settled, wait
+                    log_str = 'Estimated voltage setpoint = {:.3f}, but TEC has not yet settled'.format(new_output)
+                    log.log_debug(__name__, 'find_lock', log_str)
+            else:
+            # TEC output is off, renable
+                update_device_settings(device_db, [{'tec_mode':'R'}, {'tec_output':True}])
+        # Remove the ILX TEC controller from queue ------------
+            dev[device_db]['queue'].remove()
 
-    
+def transfer_to_manual(state_db):
+# Queue the SRS PID controller --------------------------------------
+    device_db = 'mll_fR/device_PID'
+    dev[device_db]['queue'].queue_and_wait()
+# Check if the PID controller is on ---------------------------------
+    if dev[device_db]['driver'].pid_action():
+    # Get current output
+        v_out = dev[device_db]['driver'].output_monitor()
+    # Bumpless transfer to manual
+        settings_list = [
+                {'manual_output':v_out},
+                {'pid_action':False}]
+        update_device_settings(device_db, settings_list)
+# Remove SRS PID from queue -----------------------------------------
+    dev[device_db]['queue'].remove()
+# Update state variable
+    current_state[state_db]['compliance'] = True
+    db[state_db].write_record_and_buffer(current_state[state_db])
+
 # Maintain Functions ----------------------------------------------------------
 '''This section is for defining the methods needed to maintain the system in
     its defined states.'''
+v_std_threshold = 5 # standard deviations
+lock_age_threshold = 10.0 #s
+def keep_lock(state_db):
+    locked = True
+# Queue the SRS PID controller --------------------------------------
+    device_db = 'mll_fR/device_PID'
+    dev[device_db]['queue'].queue_and_wait()
+# Evaluate conditions
+    new_output_condition = mon['mll_fR/PID_voltage']['new']
+    lock_age_condition = ((time.time() - timer['find_lock:locked']) > lock_age_threshold)
+    no_new_limits_condition = not(mon['mll_fR/PID_voltage_limits']['new'])
+# Get most recent values --------------------------------------------
+    if new_output_condition:
+        current_output = mon['mll_fR/PID_voltage']['data'][-1]
+    current_limits = mon['mll_fR/PID_voltage_limits']['data']
+    v_high = (1-v_range_threshold)*current_limits['max'] + v_range_threshold*current_limits['min']
+    v_low = (1-v_range_threshold)*current_limits['min'] + v_range_threshold*current_limits['max']
+    state_limits = {
+            'upper_output_limit':STATES[state_db][current_state[state_db]['state']]['settings'][device_db]['upper_output_limit'],
+            'lower_output_limit':STATES[state_db][current_state[state_db]['state']]['settings'][device_db]['lower_output_limit']}
+# Clear 'new' data flags
+    mon['mll_fR/PID_voltage']['new'] = False
+    mon['mll_fR/PID_voltage_limits']['new'] = False
+# Check if the PID controller is on ---------------------------------
+    if not(dev[device_db]['driver'].pid_action()):
+    # It is not locked
+        locked = False
+# Check if the output is outside the acceptable range ---------------
+    elif new_output_condition:
+        if (current_output < v_low) or (current_output > v_high):
+        # It is not locked
+            locked = False
+    # TODO: check error signal std
+# If not locked -----------------------------------------------------
+    if not(locked):
+    # Remove SRS PID controller from queue
+        dev[device_db]['queue'].remove()
+    # Update state variable
+        current_state[state_db]['compliance'] = False
+        db[state_db].write_record_and_buffer(current_state[state_db])
+    # Check if quick relock is possible
+        if (lock_age_condition and no_new_limits_condition):
+        # Calculate the expected output voltage
+            data = mon['mll_fR/PID_voltage']['data'][:-1]
+            v_avg = np.mean(data)
+            v_avg_slope = np.mean(np.diff(data))/(len(data)-1)
+            v_expected = v_avg + v_avg_slope*len(data)/2
+        # Remove the last point from the local monitor
+            mon['mll_fR/PID_voltage']['data'] = data
+        # Attempt a quick relock
+            find_lock(state_db, last_good_position=v_expected)
+# If locked ---------------------------------------------------------
+    else:
+    # If the system is at a new lock point, reinitialize the local monitors
+        if (not(lock_age_condition) and not(no_new_limits_condition)):
+        # Remove SRS PID controller from queue
+            dev[device_db]['queue'].remove()
+        # Reinitialize the output voltage monitor
+            mon['mll_fR/PID_voltage']['data'] = np.array([])
+            mon['mll_fR/PID_voltage']['new'] = False
+    # If the system is at a stable lock point, adjust the hardware voltage limits
+        elif (lock_age_condition and new_output_condition):
+        # Calculate the new limit thresholds
+            data = mon['mll_fR/PID_voltage']['data']
+            v_avg = np.mean(data)
+            v_avg_slope = np.mean(np.diff(data))/(len(data)-1)
+            v_expected = v_avg + v_avg_slope*len(data)/2
+            v_std = np.std(data - v_avg_slope*np.arange(len(data)))
+            upper_limit = v_expected + (v_std_threshold*v_std)/(1-2*v_range_threshold)
+            lower_limit = v_expected - (v_std_threshold*v_std)/(1-2*v_range_threshold)
+        # Restrict the results
+            update = True
+            if upper_limit == lower_limit:
+                update = False
+            elif (upper_limit >= state_limits['upper_output_limit']) and (lower_limit <= state_limits['lower_output_limit']):
+                update = False
+            elif (upper_limit > state_limits['upper_output_limit']):
+                upper_limit = state_limits['upper_output_limit']
+            elif (lower_limit < state_limits['lower_output_limit']):
+                lower_limit = state_limits['lower_output_limit']
+            if (upper_limit == current_limits['max']) and (lower_limit == current_limits['min']):
+                update = False
+        # Update the hardware limits
+            if not(update):
+            # Remove SRS PID controller from queue
+                dev[device_db]['queue'].remove()
+            else:
+            # Update the limits
+                settings_list = {
+                        'upper_output_limit':upper_limit,
+                        'lower_output_limit':lower_limit}
+                update_device_settings(device_db, settings_list)
+            # Remove SRS PID controller from queue
+                dev[device_db]['queue'].remove()
+            # Update the voltage limit monitor
+                mon['mll_fR/PID_voltage_limits']['new'] = True
+                mon['mll_fR/PID_voltage_limits']['data'] = {'min':lower_limit, 'max':upper_limit}
+                db['mll_fR/PID_voltage_limits'].write_record_and_buffer({'min':lower_limit, 'max':upper_limit})
+            # If approaching the state limits, adjust the temperature setpoint
+                adjustment_interval_condition = ((time.time()-timer['find_lock:tec_adjust']) > tec_adjust_interval)
+                upper_limit_condition = (upper_limit == state_limits['upper_output_limit'])
+                lower_limit_condition = (lower_limit == state_limits['lower_output_limit'])
+                if (adjustment_interval_condition and (upper_limit_condition or lower_limit_condition)):
+                # Queue the ILX TEC controller --------------------------------------
+                    device_db = 'mll_fR/device_TEC'
+                    dev[device_db]['queue'].queue_and_wait()
+                # Adjust timer
+                    timer['find_lock:tec_adjust'] = timer.time()
+                # Adjust the setpoint
+                    if lower_limit_condition:
+                        log_str = 'Lower voltage limit = {:.3f}, raising the resistance setpoint'.format(lower_limit)
+                        log.log_info(__name__, 'keep_lock', log_str)
+                    # Raise the resistance setpoint
+                        dev[device_db]['driver'].tec_step(+1)
+                    elif upper_limit_condition:
+                        log_str = 'Upper voltage limit = {:.3f}, lowering the resistance setpoint'.format(upper_limit)
+                        log.log_info(__name__, 'keep_lock', log_str)
+                    # Lower the resistance setpoint
+                        dev[device_db]['driver'].tec_step(-1)
+                # Remove the ILX TEC controller from queue ------------
+                    dev[device_db]['queue'].remove()
+
+def lock_disabled(state_db):
+# Queue the SRS PID controller --------------------------------------
+    device_db = 'mll_fR/device_PID'
+    dev[device_db]['queue'].queue_and_wait()
+# Check if the PID controller is on ---------------------------------
+    if dev[device_db]['driver'].pid_action():
+    # Turn off
+        dev[device_db]['driver'].pid_action(False)
+# Remove SRS PID from queue -----------------------------------------
+    dev[device_db]['queue'].remove()
 
 
 # Operate Functions -----------------------------------------------------------
@@ -362,6 +1029,7 @@ def nothing():
 
 
 # %% States ===================================================================
+
 '''Defined states are composed of collections of settings, prerequisites,
     and routines:
         settings:
@@ -376,6 +1044,12 @@ def nothing():
             -Dynamic settings should be dealt with in the state's methods.
             -These settings will be applied before the system transitions from
             one state to the next.
+            -Place groups of settings together in lists if the order of the
+            operations matter. The groups of settings will be applied as
+            ordered in the list:
+                'settings':{
+                    <device database path>:[
+                        {<first group>},{<second group>},...]
         prerequisites:
             -Prerequisites should be entered as lists of dictionaries that
             include the database and key:value pair that corresponds to a
@@ -427,19 +1101,22 @@ def nothing():
                     'monitor':<method>, 'search':<method>,
                     'maintain':<method>, 'operate':<method>}
             monitoring:
-                -The monitor method should update all state parameters
-                necessary for the "maintain" methods as well as any secondary
-                parameters useful for passive monitoring.
+                -The monitor method should generally update all state 
+                parameters necessary for the "search" or "maintain" methods as
+                well as any secondary parameters useful for passive monitoring.
                 -Updating state parameters includes getting new values from
                 connected instruments and pulling new values from connected
                 databases. 
                 -New values from instruments should always be saved to their
-                respective databases.
+                respective databases. The main entry in the database 
+                should typically be keyed with the symbols for the units of the
+                measurement (V, Hz, Ohm,...):
+                    db[device_db].write_record_and_buffer({<unit>:<value>})
                 -Suggested refresh times for control loop parameters is 0.2
                 seconds, while a 1.0 second or longer refresh time should be
                 sufficient for passive monitoring parameters.
                 -All values should be stored locally in circular buffers. The
-                sizes of should be controlled within these methods.
+                sizes of which should be controlled within these methods.
             searching:
                 -The search method should be able to bring the system into
                 compliance from any noncompliant state. 
@@ -456,6 +1133,8 @@ def nothing():
                 compliance variable.
                 -The compliance state variable is accessible by calling:
                     current_state[<state database path>]['compliance']
+                -Any important device setting changes should be propogated to
+                their respective databases.
             maintaining:
                 -The maintain method should observe the state parameters and
                 make any needed adjustments to the state settings in order to
@@ -470,6 +1149,8 @@ def nothing():
                 variable to False if it is unable to maintain the state.
                 -The compliance state variable is accessible by calling:
                     current_state[<state database path>]['compliance']
+                -Any important device setting changes should be propogated to
+                their respective databases.
             operating:
                 -The operate method is a catchall function for use cases that
                 are only valid while the state is in compliance. An example
@@ -479,29 +1160,24 @@ STATES = {
         'mll_fR/state':{
                 'lock':{
                         'settings':{
-                                'mll_fR/settings_TEC':{
-                                        'tec_mode':'R', 'tec_output':True},
-                                'mll_fR/settings_PID':{
+                                'mll_fR/device_TEC':[
+                                        {'tec_mode':'R'}, {'tec_output':True}],
+                                'mll_fR/device_PID':{
                                         'proportional_action':True, 'integral_action':True,
-                                        'derivative_action':False, 'offset_action':False,
-                                        'proportional_gain':-3.0e0, 'integral_gain':5.0e2,},
-                                'mll_fR/settings_HV':{
-                                        'x_min':0.00, 'x_max':60.00, 'x_voltage':0.00},
-                                'mll_fR/settings_DAQ_ErrorFrequency':{}},
+                                        'derivative_action':False,
+                                        'proportional_gain':-3.0e0, 'integral_gain':5.0e2,
+                                        'upper_output_limit':8.00, 'lower_output_limit':0.00},
+                                'mll_fR/device_HV':{
+                                        'x_min':0.00, 'x_max':60.00, 'x_voltage':0.00}},
                         'prerequisites':{
-                                'critical':[
-                                        {'db':'', 'key':'entry', 'value':''}],
+                                'critical':[],
                                 'necessary':[],
                                 'optional':[]},
                         'routines':{
                                 'monitor':monitor, 'search':find_lock,
                                 'maintain':keep_lock, 'operate':nothing}},
                 'manual':{
-                        'settings':{
-                                'mll_fR/settings_TEC':{},
-                                'mll_fR/settings_PID':{},
-                                'mll_fR/settings_HV':{},
-                                'mll_fR/settings_DAQ_ErrorFrequency':{}},
+                        'settings':{},
                         'prerequisites':{
                                 'critical':[],
                                 'necessary':[],
@@ -510,141 +1186,45 @@ STATES = {
                                 'monitor':monitor, 'search':transfer_to_manual,
                                 'maintain':nothing, 'operate':nothing}},
                 'safe':{
-                        'settings':{
-                                'mll_fR_settings_TEC':{},
-                                'mll_fR_settings_PID':{'pid_action':False},
-                                'mll_fR_settings_HV':{},
-                                'mll_fR/settings_DAQ_ErrorFrequency':{}},
+                        'settings':{'mll_fR/device_PID':{'pid_action':False}},
                         'prerequisites':{
                                 'critical':[],
                                 'necessary':[],
                                 'optional':[]},
                         'routines':{
-                                'monitor':monitor, 'search':nothing,
+                                'monitor':monitor, 'search':transfer_to_manual,
                                 'maintain':lock_disabled, 'operate':nothing}},
                 'engineering':{
-                        'settings':{
-                                'mll_fR_settings_TEC':{},
-                                'mll_fR_settings_PID':{},
-                                'mll_fR_settings_HV':{},
-                                'mll_fR/settings_DAQ_ErrorFrequency':{}},
+                        'settings':{},
                         'prerequisites':{
                                 'critical':[],
                                 'necessary':[],
                                 'optional':[]},
                         'routines':{
                                 'monitor':nothing, 'search':nothing,
-                                'maintain':nothing, 'operate':nothing}}}
+                                'maintain':nothing, 'operate':nothing}}
+                        }                        
         }
 
 # %% STATE MACHINE ============================================================
-'''The code after this section operates the state machine.
-    -All adjustments to code should be made before this section.'''
-# %% Main Loop Functions ======================================================
 
-# Check the Prerequisites of a Given State ------------------------------------
-def check_prereqs(state_db, state, level):
-    prereqs_pass = True
-    for prereq in STATES[state_db][state]['prerequisites'][level]:
-        prereq_value = from_keys(db[prereq['db']].read_buffer(),prereq['key'])
-        prereqs_pass *= (prereq_value == prereq['value'])
-    return prereqs_pass
+'''The code after this section operates the state machine. This section
+    should not require any alteration. Changes to this section changes the
+    operation of the state machine logic'''
 
-# Update Device Settings ------------------------------------------------------
-def update_device_settings(device_db, setting_list):
-    updated = False
-# Wait for queue
-    queued = dev[device_db]['queue'].queue_and_wait()
-# Push device settings
-    for setting in setting_list:
-    # Log the device, method, and arguments
-        prologue_str = 'device: {:}; method: {:}; args: {:}'.format(device_db, setting, setting_list[setting])
-        log.log_info(__name__, 'update_device_settings', result)
-    # Try sending the command to the device
-        try:
-            result = send_args(getattr(dev[device_db]['driver'], setting),setting_list[setting])
-        except:
-            log.log_exception(__name__, 'update_device_settings')
-        else:
-        # Update the local copy if it exists in the device settings
-            if (setting in local_settings[device_db]):
-                if (local_settings[device_db][setting] != setting_list[setting]):
-                    updated = True
-                    local_settings[device_db][setting] = setting_list[setting]
-        # Log the returned result if stringable
-            try:
-                epilogue_str = 'Returned: {:}'.format(str(result))
-            except:
-                epilogue_str = 'Returned successfully, but result was not stringable'
-            log.log_info(__name__, 'update_device_settings', epilogue_str)
-    # Touch queue (prevent timeout)
-        dev[device_db]['queue'].touch()
-# Remove from queue
-    if not(queued):
-        dev[device_db]['queue'].remove()
-# Update the database if the local copy changed
-    if updated:
-        db[device_db].write_record_and_buffer(local_settings[device_db])
-    
-# Setup the Transition to a New State -----------------------------------------
-def setup_state(state_db, state, critical=True, necessary=True, optional=True):
-# Update the device settings
-    for device_db in STATES[state_db][state]['settings']:
-        update_device_settings(device_db, STATES[state_db][state]['settings'][device_db])
-# Update the state variable
-    current_state[state_db]['state'] = state
-    current_state[state_db]['prerequisites'] = {
-            'critical':critical,
-            'necessary':necessary,
-            'optional':optional}
-    current_state[state_db]['compliance'] = False
-    db[state_db].write_record_and_buffer(current_state[state_db]) # The desired state should be left unaltered
-
-# Parse Messages from the Communications Queue --------------------------------
-def parse_message(message):
-    if ('message' in message):
-        message = message['message']
-        log.log_info(__name__, 'parse_message', str(message))
-    # If requesting to change states,
-        if ('state' in message):
-            for state_db in message['state']:
-                desired_state = message['state'][state_db]['state']
-                if current_state[state_db]['desired_state'] != desired_state:
-                # Update the state variable
-                    current_state[state_db]['desired_state'] = desired_state
-                    db[state_db].write_record_and_buffer(current_state[state_db])
-    # If requesting to change device settings,
-        if ('device_setting' in message):
-            for device_db in message['device_setting']:
-            # Update the device settings
-                if (device_db in DEVICE_DBs):
-                    update_device_settings(device_db, message['device_setting'][device_db])
-    # If requesting to change control parameters,
-        if ('control_parameter' in message):
-            updated = False
-            for method in message['control_parameter']:
-                if (method in local_settings[CONTROL_DB]):
-                    for parameter in message['control_parameter'][method]:
-                    # Update the control parameter
-                        if (parameter in local_settings[CONTROL_DB][method]):
-                        # Convert new parameter to the correct type
-                            parameter_type = local_settings[CONTROL_DB][method][parameter]['type']
-                            try:
-                                result = convert_type(message['control_parameter'][method][parameter], parameter_type)
-                            except:
-                                result_str = 'Could not convert {:} to {:} for control parameter {:}.{:}'.format(message['control_parameter'][method][parameter], parameter_type, method, parameter)
-                                log.log_info(__name__, 'parse_message', result_str)
-                            else:
-                                if (local_settings[CONTROL_DB][method][parameter]['value'] != result):
-                            # Update the local copy
-                                    updated = True
-                                    local_settings[CONTROL_DB][method][parameter]['value'] = result
-        # Update the database if the local copy changed
-            if updated:
-                db[CONTROL_DB].write_record_and_buffer(local_settings[CONTROL_DB])
-
-# %% Main Loop ================================================================
-
+# Initialize failed prereq log timers -----------------------------------------
+'''These are set so that the logs do not become cluttered with repetitions of
+    the same failure. The timer values are used in the check_prerequisites
+    function.'''
+log_failed_prereqs_interval = 60*10 #s
+log_failed_prereqs_timer = {}
+for state_db in STATE_DBs:
+    for state in STATES[state_db]:
+        log_failed_prereqs_timer[state_db][state]['critical'] = 0
+        log_failed_prereqs_timer[state_db][state]['necessary'] = 0
+        log_failed_prereqs_timer[state_db][state]['optional'] = 0
+# Run the main loop -----------------------------------------------------------
+'''Where the magic happens.'''
 loop = True
 while loop:
 # Get the Current State -------------------------------------------------------
@@ -657,7 +1237,7 @@ while loop:
         critical_pass = check_prereqs(
                 state_db,
                 current_state[state_db]['state'],
-                'critical')
+                'critical', log_failures=True)
     # Place into safe state if critical prereqs fail
         if not critical_pass:
             setup_state(state_db, 'safe')
@@ -747,352 +1327,3 @@ for state_db in STATE_DBs:
                         optional=optional_pass)
 
 
-# %% OLD STUFF
-#==============================================================================
-# %% Functions
-
-def start_busy(task):
-    started = False
-    while not started:
-        try:
-            task.StartTask()
-        except DAQError as daq_err:
-            if daq_err.error == -50103: # "The specified resource is reserved."
-                pass
-            else:
-                raise
-        else:
-            started = True
-
-
-class ilx_LDC3900:
-    def __init__(self, visa_id, channel, rm = None):
-        print(time.strftime('%c')+' - Initializing communication with the ILX LDC-3900.')
-        if rm is None:
-            rm = visa.ResourceManager()
-        opened = False
-        while not opened:
-            try:
-                self.ilx = rm.open_resource(visa_id, open_timeout = 5000)
-            except visa.VisaIOError as visa_err:
-                if visa_err[0] == visa.VisaIOError(visa.constants.VI_ERROR_RSRC_BUSY)[0]:
-                    pass
-                else:
-                    raise
-            else:
-                opened = True
-        self.ilx.close()
-        self.las_open_cmd = 'LAS:CHAN {:}'.format(int(channel))
-        self.tec_open_cmd = 'TEC:CHAN {:}'.format(int(channel))
-        self.tec_settling_time = 30 # seconds
-        self.last_tec_change = time.time()
-        self.nominal_tec_r = 7.7
-        self.safe_tec_range = .2
-        print(time.strftime('%c')+' - Initialized.')
-    
-    def get_resistance(self):
-        open_busy(self.ilx)
-        self.ilx.write(self.tec_open_cmd)
-        res = self.ilx.query('TEC:R?').strip()
-        self.ilx.close()
-        return float(res)
-    
-    def set_resistance(self, resistance):
-        open_busy(self.ilx)
-        self.ilx.write(self.tec_open_cmd)
-        self.ilx.write('TEC:R {:.3f}'.format(resistance))
-        self.ilx.close()
-        
-    def get_resistance_setpoint(self):
-        open_busy(self.ilx)
-        self.ilx.write(self.tec_open_cmd)
-        res = self.ilx.query('TEC:SET:R?').strip()
-        self.ilx.close()
-        return float(res)
-    
-    def set_tec_step(self, step):
-        open_busy(self.ilx)
-        self.ilx.write(self.tec_open_cmd)
-        self.ilx.write('TEC:STEP {:}'.format(int(step)))
-        self.ilx.close()
-    
-    def dec_tec(self):
-        open_busy(self.ilx)
-        self.ilx.write(self.tec_open_cmd)
-        self.ilx.write('TEC:DEC')
-        self.ilx.close()
-    
-    def inc_tec(self):
-        open_busy(self.ilx)
-        self.ilx.write(self.tec_open_cmd)
-        self.ilx.write('TEC:INC')
-        self.ilx.close()
-    
-    def change_tec_output(self, direction):
-        now = time.time()
-        if now - self.last_tec_change > 1:
-            old_res = self.get_resistance()
-            new_res = old_res
-            while abs(new_res - old_res) < .002:
-                if direction>0:
-                    if new_res - (self.nominal_tec_r+self.safe_tec_range) < 0:
-                        self.inc_tec()
-                    else:
-                        print(time.strftime('%c')+' - at the limit of the safe TEC range. Raising no farther.')
-                        return
-                elif direction<0:
-                    if new_res - (self.nominal_tec_r-self.safe_tec_range) > 0:
-                        self.dec_tec()
-                    else:
-                        print(time.strftime('%c')+' - at the limit of the safe TEC range. Lowering no farther.')
-                        return
-                time.sleep(.5)
-                new_res = self.get_resistance()
-            self.last_tec_change = time.time()
-        else:
-            print(time.strftime('%c')+' - TEC has not settled. {:.3f}s left'.format(now - self.last_tec_change))
-        #time.sleep(20) #let the temperature settle
-
-
-class ni_USB6361:
-    def __init__(self, dev_channel_id, low_v = -1, high_v = 1):
-        self.NSAMPS = 1000
-        self.read = int32()
-        self.data = np.zeros( (self.NSAMPS,), dtype = np.float64)
-        self.t = Task()
-        self.t.CreateAIVoltageChan(dev_channel_id, "", DAQmx_Val_RSE, low_v, high_v, DAQmx_Val_Volts, None)
-    
-    def read_analog(self):
-        start_busy(self.t)
-        self.t.ReadAnalogF64(self.NSAMPS, 10.0, DAQmx_Val_GroupByChannel, self.data, self.NSAMPS, byref(self.read), None)
-        self.t.StopTask()
-    
-    def get_peak_freq(self):
-        self.read_analog()
-        han_win = np.hanning(self.NSAMPS)
-        freqs = 1e4*np.fft.rfftfreq(self.NSAMPS)
-        amps = np.abs(np.fft.rfft(han_win*self.data))
-        peak_ind = np.argmax(amps)
-        return freqs[peak_ind]
-    
-    def get_rms(self):
-        self.read_analog()
-        rms = np.sqrt(np.mean(np.square(self.data)))
-        return rms
-
-
-class srs_SIM900:
-    def __init__(self, visa_id, channel, rm = None, thrsh_1 = .2, thrsh_2 = .05):
-        print(time.strftime('%c')+' - Initializing communication with the SRS SIM900.')
-        if rm is None:
-            rm = visa.ResourceManager()
-        opened = False
-        while not opened:
-            try:
-                self.srs = rm.open_resource(visa_id, open_timeout = 5000)
-            except visa.VisaIOError as visa_err:
-                if visa_err[0] == visa.VisaIOError(visa.constants.VI_ERROR_RSRC_BUSY)[0]:
-                    pass
-                else:
-                    raise
-            else:
-                opened = True
-        self.srs.close()
-        self.flush()
-        self.open_cmd = 'CONN '+str(channel)+',"xyz"\n'
-        # Get settings (from instrument or database?)
-        self.ulim, self.llim = self.get_output_lims()
-        self.center = np.mean([self.ulim, self.llim])
-        self.threshold_1 = (self.ulim - self.llim)*(1.-thrsh_1*2.)/2.
-        self.threshold_2 = (self.ulim - self.llim)*(1.-thrsh_2*2.)/2.
-        print(time.strftime('%c')+' - Initialized.')
-    
-    def flush(self):
-        open_busy(self.srs)
-        self.srs.flush(visa.constants.VI_READ_BUF)
-        self.srs.close()
-    
-    def get_man_output(self):
-        open_busy(self.srs)
-        self.srs.write(self.open_cmd)
-        man_output = self.srs.query('MOUT?').strip()
-        self.srs.write('xyz')
-        self.srs.close()
-        return float(man_output)
-    
-    def set_man_output(self, output):
-        open_busy(self.srs)
-        self.srs.write(self.open_cmd)
-        self.srs.write('MOUT {:.3f}'.format(output))
-        self.srs.write('xyz')
-        self.srs.close()
-    
-    def get_output(self):
-        open_busy(self.srs)
-        self.srs.write(self.open_cmd)
-        level = self.srs.query('OMON?\n').strip()
-        self.srs.write('xyz')
-        self.srs.close()
-        return float(level)
-    
-    def get_output_cond(self):
-        open_busy(self.srs)
-        self.srs.write(self.open_cmd)
-        u_lim = self.srs.query('INCR? 1').strip()
-        l_lim = self.srs.query('INCR? 2').strip()
-        anti_wind = self.srs.query('INCR? 3').strip()
-        self.srs.write('xyz')
-        self.srs.close()
-        return [int(u_lim), int(l_lim), int(anti_wind)]
-    
-    def get_output_lims(self):
-        open_busy(self.srs)
-        self.srs.write(self.open_cmd)
-        ulim = self.srs.query('ULIM?\n').strip()
-        llim = self.srs.query('LLIM?\n').strip()
-        self.srs.write('xyz')
-        self.srs.close()
-        return [float(ulim), float(llim)]
-    
-    def get_pid_state(self):
-        open_busy(self.srs)
-        self.srs.write(self.open_cmd)
-        state = self.srs.query("AMAN?\n").strip()
-        self.srs.write('xyz')
-        self.srs.close()
-        return int(state)
-    
-    def set_pid_state(self, state):
-        open_busy(self.srs)
-        self.srs.write(self.open_cmd)
-        self.srs.write("AMAN {:}\n".format(int(state)))
-        self.srs.write('xyz')
-        self.srs.close()
-
-
-def get_lock(srs, daq, ilx, last_good_pos = None):
-    #Turn off PID servo
-    srs.set_pid_state(0)
-    srs.set_man_output(srs.center - srs.threshold_2) # reset the hysteresis
-    #Try locking at last good position
-    if last_good_pos is not None:
-        srs.set_man_output(last_good_pos)
-        time.sleep(.1)
-        srs.set_pid_state(1)
-        time.sleep(1)
-        current_output = srs.get_output()
-        if abs(current_output - srs.center) < srs.threshold_2:
-            return
-        else:
-            srs.set_pid_state(0)
-    
-    #Find lock point    
-    to_fit = lambda v, v0, s: s*np.abs(v-v0)
-        #Get Data
-    x = np.linspace(srs.center-srs.threshold_2, srs.center+srs.threshold_2, 4)
-    y =np.copy(x)
-    for ind, x_val in enumerate(x):
-        srs.set_man_output(x_val)
-        y[ind] = daq.get_peak_freq()
-    srs.set_man_output(x[0]) # reset the hysteresis
-        #Coarse Estimate
-    slopes = np.diff(y)/np.diff(x)
-    slope_ind = np.argmax(np.abs(slopes))
-    output_coarse = -y[slope_ind]/slopes[slope_ind] + x[slope_ind]
-    slope_coarse = np.abs(slopes[slope_ind])
-        #Fine Estimate
-    try:
-        new_output = curve_fit(to_fit, x, y, [output_coarse, slope_coarse])[0][0]
-    except:
-        print(time.strftime('%c')+' - Curve fit failed')
-        new_output = srs.center
-    
-    #Get Lock
-    if abs(new_output - srs.center) < srs.threshold_2:
-        print(time.strftime('%c')+' - estimated voltage setpoint = {:.3f}, locking.'.format(new_output))
-        srs.set_man_output(new_output)
-        time.sleep(.1)
-        srs.set_pid_state(1)
-    elif new_output < srs.center:
-        print(time.strftime('%c')+' - estimated voltage setpoint = {:.3f}, raising the resistance setpoint.'.format(new_output))
-        ilx.change_tec_output(+1)
-        #time.sleep(30)
-    elif new_output > srs.center:
-        print(time.strftime('%c')+' - estimated voltage setpoint = {:.3f}, lowering the resistance setpoint.'.format(new_output))
-        ilx.change_tec_output(-1)
-        #time.sleep(30)
-
-
-# %% Setup
-rm = visa.ResourceManager()
-
-fr_pid = srs_SIM900('ASRL9::INSTR', 1, rm)
-fr_err = ni_USB6361('Dev1/ai0')
-fr_tec = ilx_LDC3900(u'GPIB0::20::INSTR', 1, rm)
-
-last_good_pos = None
-
-#pid_ulim, pid_llim = fr_pid.get_output_lims()
-#
-#pid_center = np.mean([pid_ulim, pid_llim])
-#pid_hyst = (pid_ulim - pid_llim)*(1.-.2*2.)/2.
-#pid_hyst2 = (pid_ulim - pid_llim)*(1.-.01*2.)/2.
-
-# %% Test
-
-test = 0
-while test:
-    #Begin Test
-    if fr_pid.get_pid_state():
-        current_output = fr_pid.get_output()
-        current_output_cond = fr_pid.get_output_cond()
-        current_rms = fr_err.get_rms()
-        print current_output
-        print current_output_cond
-        print current_rms
-        if abs(current_output - fr_pid.center) > fr_pid.threshold_2:
-            print(time.strftime('%c')+' - lost fR lock')
-            get_lock(fr_pid, fr_err, fr_tec, last_good_pos)
-        elif abs(current_output - fr_pid.center) > fr_pid.threshold_1:
-            if current_output - fr_pid.center > 0:
-                print(time.strftime('%c')+' - voltage was {:.3f}, lowering the resistance setpoint.'.format(current_output))
-                fr_tec.change_tec_output(-1)
-            elif current_output - fr_pid.center < 0:
-                print(time.strftime('%c')+' - voltage was {:.3f}, raising the resistance setpoint.'.format(current_output))
-                fr_tec.change_tec_output(1)
-        else:
-            last_good_pos = current_output
-    else:
-        get_lock(fr_pid, fr_err, fr_tec)
-    time.sleep(.1)
-    #End Test
-    test = 0
-    
-
-
-# %% Main Loop
-
-while 1:
-    if fr_pid.get_pid_state():
-        current_output = fr_pid.get_output()
-        current_output_cond = fr_pid.get_output_cond()
-        if abs(current_output - fr_pid.center) > fr_pid.threshold_2:
-            print(time.strftime('%c')+' - lost fR lock')
-            get_lock(fr_pid, fr_err, fr_tec, last_good_pos)
-        elif abs(current_output - fr_pid.center) > fr_pid.threshold_1:
-            if current_output - fr_pid.center > 0:
-                print(time.strftime('%c')+' - voltage was {:.3f}, lowering the resistance setpoint.'.format(current_output))
-                fr_tec.change_tec_output(-1)
-            elif current_output - fr_pid.center < 0:
-                print(time.strftime('%c')+' - voltage was {:.3f}, raising the resistance setpoint.'.format(current_output))
-                fr_tec.change_tec_output(+1)
-        else:
-            last_good_pos = current_output
-    else:
-        get_lock(fr_pid, fr_err, fr_tec)
-
-
-print('temperature setpoint is out of range')
-
-
-    

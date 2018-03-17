@@ -132,7 +132,7 @@ class LDC3900(vo.VISA):
                 return False
         else:
         # Limit range
-            z = vo.tf_toggle(z)
+            z = vo.tf_to_10(z)
         # Send command
             self.write('LAS:DIS {:}'.format(['OFF','ON'][z]))
     
@@ -154,7 +154,7 @@ class LDC3900(vo.VISA):
                 return False
         else:
         # Limit range
-            z = vo.tf_toggle(z)
+            z = vo.tf_to_10(z)
         # Send command
             self.write('TEC:DIS {:}'.format(['OFF','ON'][z]))
     
@@ -170,7 +170,7 @@ class LDC3900(vo.VISA):
             return laser_result, tec_result
         else:
         # Limit range
-            z = vo.tf_toggle(z)
+            z = vo.tf_to_10(z)
         # Send command
             self.laser_display(z=z)
             self.tec_display(z=z)
@@ -578,7 +578,7 @@ class LaserModule(LDC3900):
             if set_mode_bandwidth in ['low', 'high']:
                 set_mode_bandwidth = ['low', 'high'].index(set_mode_bandwidth)
             else:
-                set_mode_bandwidth = vo.tf_toggle(set_mode_bandwidth)
+                set_mode_bandwidth = vo.tf_to_10(set_mode_bandwidth)
         # Send command
             self.write_las('MODE:{:}'.format(['ILBW','IHBW'][set_mode_bandwidth]))
     
@@ -612,7 +612,7 @@ class LaserModule(LDC3900):
             return bool(result)
         else:
         # Limit range
-            output = vo.tf_toggle(output)
+            output = vo.tf_to_10(output)
         # Send command
             self.write_las('ONLY:OUT {:}'.format(output))
 
@@ -741,7 +741,7 @@ class TECModule(LDC3900):
         The TEC conditions for the selected TEC channel which are reported to 
         the status byte are set via the TEC:ENABle:EVEnt command. The TEC event
         status is only cleared when the event status is read for the selected 
-        TEC channel, or a *CLS command is issued; while the condition status 
+        TEC channel, or a *CLS command is issued; the condition status 
         is constantly changing.
         '''
     # Send query
@@ -1027,7 +1027,7 @@ class TECModule(LDC3900):
             return bool(result)
         else:
         # Limit range
-            output = vo.tf_toggle(output)
+            output = vo.tf_to_10(output)
         # Send command
             self.write_tec('ONLY:OUT {:}'.format(output))
     

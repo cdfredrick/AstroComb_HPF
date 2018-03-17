@@ -84,6 +84,7 @@ class SRS_SIM960(SIM900):
         self.token_mode(set_mode=0)
         self.lower_limit = self.lower_output_limit()
         self.upper_limit = self.upper_output_limit()
+        self.center = .5*(self.upper_limit + self.lower_limit)
 
     @log.log_this()
     def proportional_action(self, set_action=None):
@@ -97,7 +98,7 @@ class SRS_SIM960(SIM900):
             return bool(result)
         else:
         # Limit range
-            set_action = vo.tf_toggle(set_action)
+            set_action = vo.tf_to_10(set_action)
         # Send command
             self.write('PCTL {:}'.format(['OFF','ON'][set_action]))
     
@@ -113,7 +114,7 @@ class SRS_SIM960(SIM900):
             return bool(result)
         else:
         # Limit range
-            set_action = vo.tf_toggle(set_action)
+            set_action = vo.tf_to_10(set_action)
         # Send command
             self.write('ICTL {:}'.format(['OFF','ON'][set_action]))
     
@@ -129,7 +130,7 @@ class SRS_SIM960(SIM900):
             return bool(result)
         else:
         # Limit range
-            set_action = vo.tf_toggle(set_action)
+            set_action = vo.tf_to_10(set_action)
         # Send command
             self.write('DCTL {:}'.format(['OFF','ON'][set_action]))
     
@@ -145,7 +146,7 @@ class SRS_SIM960(SIM900):
             return bool(result)
         else:
         # Limit range
-            set_action = vo.tf_toggle(set_action)
+            set_action = vo.tf_to_10(set_action)
         # Send command
             self.write('OCTL {:}'.format(['OFF','ON'][set_action]))
     
@@ -185,7 +186,7 @@ class SRS_SIM960(SIM900):
             return bool(result)
         else:
         # Limit range
-            set_polarity = vo.tf_toggle(set_polarity)
+            set_polarity = vo.tf_to_10(set_polarity)
         # Send command
             self.write('APOL {:}'.format(['NEG','POS'][set_polarity]))
     
@@ -264,12 +265,12 @@ class SRS_SIM960(SIM900):
             return bool(result)
         else:
         # Limit range
-            set_action = vo.tf_toggle(set_action)
+            set_action = vo.tf_to_10(set_action)
         # Send command
             self.write('AMAN {:}'.format(['MAN','PID'][set_action]))
     
     @log.log_this()
-    def setpoint_action(self, set_action=None):
+    def external_setpoint_action(self, set_action=None):
         '''
         The setpoint input state.
         '''
@@ -279,7 +280,7 @@ class SRS_SIM960(SIM900):
             return bool(result)
         else:
         # Limit range
-            set_action = vo.tf_toggle(set_action)
+            set_action = vo.tf_to_10(set_action)
         # Send command
             self.write('INPT {:}'.format(['INT','EXT'][set_action]))
     
@@ -315,7 +316,7 @@ class SRS_SIM960(SIM900):
             return bool(result)
         else:
         # Limit range
-            set_action = vo.tf_toggle(set_action)
+            set_action = vo.tf_to_10(set_action)
         # Send command
             self.write('RAMP {:}'.format(['OFF','ON'][set_action]))
     
@@ -365,7 +366,7 @@ class SRS_SIM960(SIM900):
             return float(result)
         else:
         # Limit range
-            if set_output<self.lower_limit.:
+            if set_output<self.lower_limit:
                 set_output=self.lower_limit
             elif set_output>self.upper_limit:
                 set_output=self.upper_limit
@@ -393,6 +394,7 @@ class SRS_SIM960(SIM900):
         # Send command
             self.write('ULIM {:.2f}'.format(set_limit))
             self.upper_limit = set_limit
+            self.center = .5*(self.upper_limit + self.lower_limit)
     
     @log.log_this()
     def lower_output_limit(self, set_limit=None):
@@ -415,6 +417,7 @@ class SRS_SIM960(SIM900):
         # Send command
             self.write('LLIM {:.2f}'.format(set_limit))
             self.lower_limit = set_limit
+            self.center = .5*(self.upper_limit + self.lower_limit)
     
     @log.log_this()
     def setpoint_monitor(self):
@@ -459,6 +462,17 @@ class SRS_SIM960(SIM900):
         return float(result)
     
     @log.log_this()
+    def new_output_monitor(self):
+        '''
+        Query the Analog to Digital Status Register for a completed output
+        monitor measurement. This only the requested bit is by reading. The 
+        output monitor is the 3rd bit.
+        '''
+    # Send query
+        result = self.query('ADSR? 3')
+        return bool(result)
+    
+    @log.log_this()
     def power_line_frequency(self, set_frequency=None):
         '''
         The power line cycle frequency in Hz. FPLC is used to program the
@@ -501,7 +515,7 @@ class SRS_SIM960(SIM900):
             return bool(result)
         else:
         # Limit range
-            set_mode = vo.tf_toggle(set_mode)
+            set_mode = vo.tf_to_10(set_mode)
         # Send command
             self.write('TOKN {:}'.format(['OFF','ON'][set_mode]))
     
@@ -517,7 +531,7 @@ class SRS_SIM960(SIM900):
             return bool(result)
         else:
         # Limit range
-            set_display = vo.tf_toggle(set_display)
+            set_display = vo.tf_to_10(set_display)
         # Send command
             self.write('DISX {:}'.format(['OFF','ON'][set_display]))
 

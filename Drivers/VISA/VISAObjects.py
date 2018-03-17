@@ -14,7 +14,7 @@ and pyvisa into the drivers for other visa devices
 
 List of public functions:
 
-0/1 = tf_toggle(var)
+0/1 = tf_to_10(var)
 method = handle_timeout(method)
 
 
@@ -45,7 +45,7 @@ SB_ONE = visa.constants.StopBits.one
 
 
 # %% Public functions
-def tf_toggle(var):
+def tf_to_10(var):
     """Returns 0 or 1 in place of T/F variable."""
     if var == True:
         binary = 1

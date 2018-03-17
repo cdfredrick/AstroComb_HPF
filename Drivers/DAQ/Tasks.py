@@ -275,16 +275,16 @@ class AiTask(InTask):
                     min_val=config['min_val'],
                     max_val=config['max_val'])
         # Configure timing
-        rate = float(max_rate)/len(config_list)
-        buffer_size = int(cont_buffer_size)
+        self.rate = float(max_rate)/len(config_list)
+        self.buffer_size = int(cont_buffer_size)
         self.task_cont.timing.cfg_samp_clk_timing(
-                rate,
+                self.rate,
                 sample_mode=SAMP_CONTINUOUS,
-                samps_per_chan=buffer_size)
+                samps_per_chan=self.buffer_size)
         self.task_point.timing.cfg_samp_clk_timing(
-                rate,
+                self.rate,
                 sample_mode=SAMP_FINITE,
-                samps_per_chan=buffer_size)
+                samps_per_chan=self.buffer_size)
     
     @_handle_daq_error
     @log.log_this()
@@ -302,7 +302,7 @@ class AiTask(InTask):
     
     @_handle_daq_error
     @log.log_this()
-    def read_point(self, samples_per_channel=1):
+    def read_point(self, samples_per_channel=None):
         '''
         This method retrieves the most recent point measurement(s) from the
         DAQ. The result contains a list of point measurements of each
@@ -312,9 +312,13 @@ class AiTask(InTask):
         samples_per_channel:
             -The number of samples per channel to retrieve. This value may be
             as high as the buffer given during initialization.
+            -The default count is the buffer size
         '''
         self.stop_cont()
-        samples_per_channel = int(samples_per_channel)
+        if samples_per_channel is None:
+            samples_per_channel = self.buffer_size
+        else:
+            samples_per_channel = int(samples_per_channel)
         if samples_per_channel <= 1:
             result = self.task_point.read()
         else:

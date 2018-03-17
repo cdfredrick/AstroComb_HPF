@@ -53,7 +53,7 @@ class MDT639B(vo.VISA):
                 return True
         else:
         # Limit range
-            set_echo = vo.tf_toggle(set_echo)
+            set_echo = vo.tf_to_10(set_echo)
         # Send command
             self.query('echo={:}'.format(set_echo))
     
@@ -95,7 +95,7 @@ class MDT639B(vo.VISA):
             return bool(result)
         else:
         #Limit range
-            set_action = vo.tf_toggle(set_action)
+            set_action = vo.tf_to_10(set_action)
         # Send command
             self.query('msenable={:}'.format(set_action))
     
@@ -140,8 +140,8 @@ class MDT639B(vo.VISA):
     @log.log_this()
     def x_voltage(self, set_voltage=None):
         '''
-        The output voltage for the x axis. The external modulation signal is
-        summed with the setpoint.
+        The output voltage for the x axis. When set, the external modulation 
+        signal is summed with the setpoint.
         '''
         if set_voltage is None:
         # Send query
@@ -197,8 +197,8 @@ class MDT639B(vo.VISA):
     @log.log_this()
     def y_voltage(self, set_voltage=None):
         '''
-        The output voltage for the y axis. The external modulation signal is
-        summed with the setpoint.
+        The output voltage for the y axis. When set, the external modulation 
+        signal is summed with the setpoint.
         '''
         if set_voltage is None:
         # Send query
@@ -254,8 +254,8 @@ class MDT639B(vo.VISA):
     @log.log_this()
     def z_voltage(self, set_voltage=None):
         '''
-        The output voltage for the z axis. The external modulation signal is
-        summed with the setpoint.
+        The output voltage for the z axis. When set, the external modulation 
+        signal is summed with the setpoint.
         '''
         if set_voltage is None:
         # Send query

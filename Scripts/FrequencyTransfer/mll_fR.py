@@ -5,7 +5,8 @@ Created on Fri Jul 21 15:51:36 2017
 @author: Connor
 """
 
-# %% Import Moduless ==========================================================
+
+# %% Import Modules ===========================================================
 
 import numpy as np
 import time
@@ -293,7 +294,8 @@ COMMS = 'mll_fR'
             -The entries in monitor databases should contain secondary 
             variables used to determine compliance with the state of the 
             system, and to determine any actions required to maintain
-            compliance. In general, data for use in control loops should have
+            compliance. 
+            -In general, data for use in control loops should have
             an updated value every 0.2 seconds. Data for passive monitoring
             should have a relaxed 1.0 second or longer update period.
         log:
@@ -306,10 +308,10 @@ STATE_DBs = [
     'mll_fR/state']
 DEVICE_DBs =[
     'mll_fR/device_TEC', 'mll_fR/device_PID',
-    'mll_fR/device_HV', 'mll_fR/device_DAQ_error_frequency']
+    'mll_fR/device_HV', 'mll_fR/device_DAQ_Vout_vs_freq']
 MONITOR_DBs = [
-    'mll_fR/TEC_temperature', 'mll_fR/TEC_current', 'mll_fR/PID_voltage',
-    'mll_fR/PID_voltage_limits', 'mll_fR/HV_output', 'mll_fR/DAQ_error_frequency',
+    'mll_fR/TEC_temperature', 'mll_fR/TEC_current', 'mll_fR/PID_output',
+    'mll_fR/PID_output_limits', 'mll_fR/HV_output', 'mll_fR/DAQ_Vout_vs_freq',
     'mll_fR/TEC_event_status']
 LOG_DB = 'mll_fR/log'
 CONTROL_DB = 'mll_fR/control'
@@ -432,7 +434,7 @@ DEVICE_SETTINGS = {
                 '__init__':'<visa address>', 'master_scan_action':False,
                 'x_min':0.00, 'x_max':60.00, 'x_voltage':0.00},
         # DAQ settings
-        'mll_fR/device_DAQ_error_frequency':{
+        'mll_fR/device_DAQ_Vout_vs_freq':{
                 '__init__':[
                     [[{'physical_channel':'Dev1/ai0', 'terminal_config':'NRSE',
                        'min_val':-1.0, 'max_val':1.0}],
@@ -491,8 +493,8 @@ dev['mll_fR/device_HV'] = {
         'driver':send_args(MDT639B, DEVICE_SETTINGS['mll_fR/device_HV']['__init__']),
         'queue':CouchbaseDB.PriorityQueue('<visa address>')}
     # DAQ drivers
-dev['mll_fR/device_DAQ_error_frequency'] = {
-        'driver':send_args(AiTask, DEVICE_SETTINGS['mll_fR/device_DAQ_error_frequency']['__init__']),
+dev['mll_fR/device_DAQ_Vout_vs_freq'] = {
+        'driver':send_args(AiTask, DEVICE_SETTINGS['mll_fR/device_DAQ_Vout_vs_freq']['__init__']),
         'queue':CouchbaseDB.PriorityQueue('<daq type and/or channels>')}
 
 # Initialize Local Copy of Monitors -------------------------------------------
@@ -524,11 +526,11 @@ mon['mll_fR/TEC_event_status'] = {
         'device':dev['mll_fR/device_TEC'],
         'new':False}
     # SRS -----------------------------
-mon['mll_fR/PID_voltage'] = {
+mon['mll_fR/PID_output'] = {
         'data':np.array([]),
         'device':dev['mll_fR/device_PID'],
         'new':False}
-mon['mll_fR/PID_voltage_limits'] = {
+mon['mll_fR/PID_output_limits'] = {
         'data':np.array([]),
         'device':dev['mll_fR/device_PID'],
         'new':False}
@@ -538,9 +540,9 @@ mon['mll_fR/HV_output'] = {
         'device':dev['mll_fR/device_HV'],
         'new':False}
     # DAQ -----------------------------
-mon['mll_fR/DAQ_error_frequency'] = {
+mon['mll_fR/DAQ_Vout_vs_freq'] = {
         'data':np.array([]),
-        'device':dev['mll_fR/device_DAQ_error_frequency'],
+        'device':dev['mll_fR/device_DAQ_Vout_vs_freq'],
         'new':False}
     # External ------------------------
 for database in R_MONITOR_DBs:
@@ -619,16 +621,16 @@ def monitor(state_db):
         # Update buffers and databases ----------
             # Output voltage ----------
         if new_v_out:
-            mon['mll_fR/PID_voltage']['new'] = True
-            mon['mll_fR/PID_voltage']['data'] = update_buffer(
-                    mon['mll_fR/PID_voltage']['data'],
+            mon['mll_fR/PID_output']['new'] = True
+            mon['mll_fR/PID_output']['data'] = update_buffer(
+                    mon['mll_fR/PID_output']['data'],
                     v_out, 500)
-            db['mll_fR/PID_voltage'].write_record_and_buffer({'V':v_out})
+            db['mll_fR/PID_output'].write_record_and_buffer({'V':v_out})
             # Voltage limits ----------
-        if (mon['mll_fR/PID_voltage_limits']['data'] != {'min':v_min, 'max':v_max}):
-            mon['mll_fR/PID_voltage_limits']['new'] = True
-            mon['mll_fR/PID_voltage_limits']['data'] = {'min':v_min, 'max':v_max}
-            db['mll_fR/PID_voltage_limits'].write_record_and_buffer({'min':v_min, 'max':v_max})
+        if (mon['mll_fR/PID_output_limits']['data'] != {'min':v_min, 'max':v_max}):
+            mon['mll_fR/PID_output_limits']['new'] = True
+            mon['mll_fR/PID_output_limits']['data'] = {'min':v_min, 'max':v_max}
+            db['mll_fR/PID_output_limits'].write_record_and_buffer({'min':v_min, 'max':v_max})
     # Pull data from external databases -------------------
         new_data = []
         for doc in mon['mll_fR/DAQ_error_signal']['cursor']:
@@ -681,7 +683,7 @@ def monitor(state_db):
         mon['mll_fR/HV_output']['new'] = True
         mon['mll_fR/HV_output']['data'] = update_buffer(
                 mon['mll_fR/HV_output']['data'],
-                hv_out, 300)
+                hv_out, 100)
         db['mll_fR/HV_output'].write_record_and_buffer({'V':hv_out})
 # Propogate lap numbers ---------------------------------------------
     timer['monitor:control'] = new_control_lap
@@ -768,7 +770,7 @@ def find_lock(state_db, last_good_position=None):
     # Reset the piezo hysteresis --------------------------
         dev[device_db]['driver'].manual_output(v_low)
     # Queue the DAQ ---------------------------------------
-        daq_db = 'mll_fR/DAQ_error_frequency'
+        daq_db = 'mll_fR/DAQ_Vout_vs_freq'
         dev[daq_db]['queue'].queue_and_wait(priority=True)
     # Get lock point data ---------------------------------
         to_fit = lambda v, v0, s: s*np.abs(v-v0)
@@ -793,9 +795,9 @@ def find_lock(state_db, last_good_position=None):
         # Reset the piezo hysteresis ------------
         dev[device_db]['driver'].manual_output(x[0])
         # Update monitor DB ---------------------
-        mon['mll_fR/DAQ_error_frequency']['new'] = True
-        mon['mll_fR/DAQ_error_frequency']['data'] = np.array([x, y])
-        db['mll_fR/DAQ_error_frequency'].write_record_and_buffer({'V':x.tolist(), 'Hz':y.tolist()})
+        mon['mll_fR/DAQ_Vout_vs_freq']['new'] = True
+        mon['mll_fR/DAQ_Vout_vs_freq']['data'] = np.array([x, y])
+        db['mll_fR/DAQ_Vout_vs_freq'].write_record_and_buffer({'V':x.tolist(), 'Hz':y.tolist()})
     # Estimate the lock point -----------------------------
         #Coarse Estimate ------------------------
         slopes = np.diff(y)/np.diff(x)
@@ -896,21 +898,21 @@ def keep_lock(state_db):
     device_db = 'mll_fR/device_PID'
     dev[device_db]['queue'].queue_and_wait()
 # Evaluate conditions
-    new_output_condition = mon['mll_fR/PID_voltage']['new']
+    new_output_condition = mon['mll_fR/PID_output']['new']
     lock_age_condition = ((time.time() - timer['find_lock:locked']) > lock_age_threshold)
-    no_new_limits_condition = not(mon['mll_fR/PID_voltage_limits']['new'])
+    no_new_limits_condition = not(mon['mll_fR/PID_output_limits']['new'])
 # Get most recent values --------------------------------------------
     if new_output_condition:
-        current_output = mon['mll_fR/PID_voltage']['data'][-1]
-    current_limits = mon['mll_fR/PID_voltage_limits']['data']
+        current_output = mon['mll_fR/PID_output']['data'][-1]
+    current_limits = mon['mll_fR/PID_output_limits']['data']
     v_high = (1-v_range_threshold)*current_limits['max'] + v_range_threshold*current_limits['min']
     v_low = (1-v_range_threshold)*current_limits['min'] + v_range_threshold*current_limits['max']
     state_limits = {
             'upper_output_limit':STATES[state_db][current_state[state_db]['state']]['settings'][device_db]['upper_output_limit'],
             'lower_output_limit':STATES[state_db][current_state[state_db]['state']]['settings'][device_db]['lower_output_limit']}
 # Clear 'new' data flags
-    mon['mll_fR/PID_voltage']['new'] = False
-    mon['mll_fR/PID_voltage_limits']['new'] = False
+    mon['mll_fR/PID_output']['new'] = False
+    mon['mll_fR/PID_output_limits']['new'] = False
 # Check if the PID controller is on ---------------------------------
     if not(dev[device_db]['driver'].pid_action()):
     # It is not locked
@@ -931,12 +933,12 @@ def keep_lock(state_db):
     # Check if quick relock is possible
         if (lock_age_condition and no_new_limits_condition):
         # Calculate the expected output voltage
-            data = mon['mll_fR/PID_voltage']['data'][:-1]
+            data = mon['mll_fR/PID_output']['data'][:-1]
             v_avg = np.mean(data)
             v_avg_slope = np.mean(np.diff(data))/(len(data)-1)
             v_expected = v_avg + v_avg_slope*len(data)/2
         # Remove the last point from the local monitor
-            mon['mll_fR/PID_voltage']['data'] = data
+            mon['mll_fR/PID_output']['data'] = data
         # Attempt a quick relock
             find_lock(state_db, last_good_position=v_expected)
 # If locked ---------------------------------------------------------
@@ -946,12 +948,12 @@ def keep_lock(state_db):
         # Remove SRS PID controller from queue
             dev[device_db]['queue'].remove()
         # Reinitialize the output voltage monitor
-            mon['mll_fR/PID_voltage']['data'] = np.array([])
-            mon['mll_fR/PID_voltage']['new'] = False
+            mon['mll_fR/PID_output']['data'] = np.array([])
+            mon['mll_fR/PID_output']['new'] = False
     # If the system is at a stable lock point, adjust the hardware voltage limits
         elif (lock_age_condition and new_output_condition):
         # Calculate the new limit thresholds
-            data = mon['mll_fR/PID_voltage']['data']
+            data = mon['mll_fR/PID_output']['data']
             v_avg = np.mean(data)
             v_avg_slope = np.mean(np.diff(data))/(len(data)-1)
             v_expected = v_avg + v_avg_slope*len(data)/2
@@ -983,9 +985,9 @@ def keep_lock(state_db):
             # Remove SRS PID controller from queue
                 dev[device_db]['queue'].remove()
             # Update the voltage limit monitor
-                mon['mll_fR/PID_voltage_limits']['new'] = True
-                mon['mll_fR/PID_voltage_limits']['data'] = {'min':lower_limit, 'max':upper_limit}
-                db['mll_fR/PID_voltage_limits'].write_record_and_buffer({'min':lower_limit, 'max':upper_limit})
+                mon['mll_fR/PID_output_limits']['new'] = True
+                mon['mll_fR/PID_output_limits']['data'] = {'min':lower_limit, 'max':upper_limit}
+                db['mll_fR/PID_output_limits'].write_record_and_buffer({'min':lower_limit, 'max':upper_limit})
             # If approaching the state limits, adjust the temperature setpoint
                 adjustment_interval_condition = ((time.time()-timer['find_lock:tec_adjust']) > tec_adjust_interval)
                 upper_limit_condition = (upper_limit == state_limits['upper_output_limit'])

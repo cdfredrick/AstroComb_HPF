@@ -12,6 +12,10 @@ import numpy as np
 import time
 import logging
 
+import os
+import sys
+sys.path.append(os.getcwd())
+
 from Drivers.Logging import EventLog as log
 
 from Drivers.Database import MongoDB
@@ -54,7 +58,7 @@ def check_prereqs(state_db, state, level, log_failures=None):
 
 # Update Device Settings ------------------------------------------------------
 @log.log_this()
-def update_device_settings(device_db, settings_list):
+def update_device_settings(device_db, settings_list, write_log=True):
     updated = False
 # Check settings_list type
     if isinstance(settings_list, dict):
@@ -66,8 +70,9 @@ def update_device_settings(device_db, settings_list):
     for settings_group in settings_list:
         for setting in settings_group:
         # Log the device, method, and arguments
-            prologue_str = 'device: {:}; method: {:}; args: {:}'.format(device_db, setting, settings_group[setting])
-            log.log_info(__name__, 'update_device_settings', prologue_str)
+            if write_log:
+                prologue_str = 'device: {:}; method: {:}; args: {:}'.format(device_db, setting, settings_group[setting])
+                log.log_info(__name__, 'update_device_settings', prologue_str)
         # Try sending the command to the device
             try:
                 result = send_args(getattr(dev[device_db]['driver'], setting),settings_group[setting])
@@ -90,7 +95,8 @@ def update_device_settings(device_db, settings_list):
                     epilogue_str = 'Returned: {:}'.format(str(result))
                 except:
                     epilogue_str = 'Returned successfully, but result was not stringable'
-                log.log_info(__name__, 'update_device_settings', epilogue_str)
+                if write_log:
+                    log.log_info(__name__, 'update_device_settings', epilogue_str)
         # Touch queue (prevent timeout)
             dev[device_db]['queue'].touch()
 # Remove from queue
@@ -186,7 +192,7 @@ def send_args(func, obj=None):
             args = []
             kwargs = obj[0]
         else:
-            args = obj
+            args = [obj]
             kwargs = {}
     elif (obj_length == 2):
     # Check for both an internal list and dictionary
@@ -198,7 +204,7 @@ def send_args(func, obj=None):
                 args = obj[1]
                 kwargs = obj[2]
         else:
-            args = obj
+            args = [obj]
             kwargs = {}
     else:
     # Check if no input
@@ -206,7 +212,7 @@ def send_args(func, obj=None):
             args = []
             kwargs = {}
         else:
-            args = obj
+            args = [obj]
             kwargs = {}
     result = func(*args, **kwargs)
     return result
@@ -302,19 +308,19 @@ COMMS = 'monitor_DAQ'
             -This should be a single database that contains all control loop 
             variables accessible to commands from the comms queue.'''
 STATE_DBs = [
-        'monitor_DAQ/state_analog', 'monitor_DAQ/state_digital']
+        'monitor_DAQ/state_analog']#, 'monitor_DAQ/state_digital']
 DEVICE_DBs =[
-        'monitor_DAQ/device_DAQ_analog_in', 'monitor_DAQ/device_DAQ_digital_in']
+        'monitor_DAQ/device_DAQ_analog_in']#, 'monitor_DAQ/device_DAQ_digital_in']
 MONITOR_DBs = [
         # Analog In
         'mll_fR/DAQ_error_signal',
         'filter_cavity/DAQ_error_signal', 'filter_cavity/heater_temperature',
-        'ambience/rack_temperature_0', 'ambience/box_temperature_0', 'ambience/box_temperature_1',
-        'dc_power/12V_0', 'dc_power/12V_1', 'dc_power/12V_2', 'dc_power/12V_3',
-        'dc_power/8V_0', 'dc_power/15V_0', 'dc_power/24V_0', 'dc_power/24V_1',
+        'ambience/box_temperature_0', 'ambience/box_temperature_1', 'ambience/rack_temperature_0']
+        #'dc_power/12V_0', 'dc_power/12V_1', 'dc_power/12V_2', 'dc_power/12V_3',
+        #'dc_power/8V_0', 'dc_power/15V_0', 'dc_power/24V_0', 'dc_power/24V_1',
         # Digital In
-        'rf_osc/100MHz_alarm', 'rf_osc/1GHz_alarm', 'rf_osc/10GHz_alarm',
-        'chiller/system_alarm', 'chiller/pump_alarm']
+        #'rf_osc/100MHz_alarm', 'rf_osc/1GHz_alarm', 'rf_osc/10GHz_alarm',
+        #'chiller/system_alarm', 'chiller/pump_alarm']
 LOG_DB = 'monitor_DAQ/log'
 CONTROL_DB = 'monitor_DAQ/control'
 MASTER_DBs = STATE_DBs + DEVICE_DBs + MONITOR_DBs + [LOG_DB] + [CONTROL_DB]
@@ -416,47 +422,47 @@ STATE_SETTINGS = {
                         'optional':False},
                 'compliance':False,
                 'desired_state':'read',
-                'initialized':False},
-        'monitor_DAQ/state_digital':{
-                'state':'engineering',
-                'prerequisites':{
-                        'critical':False,
-                        'necessary':False,
-                        'optional':False},
-                'compliance':False,
-                'desired_state':'read',
                 'initialized':False}}
+#        'monitor_DAQ/state_digital':{
+#                'state':'engineering',
+#                'prerequisites':{
+#                        'critical':False,
+#                        'necessary':False,
+#                        'optional':False},
+#                'compliance':False,
+#                'desired_state':'read',
+#                'initialized':False}}
 DEVICE_SETTINGS = {
         # DAQ settings
         'monitor_DAQ/device_DAQ_analog_in':{
                 '__init__':[
                     [[{'physical_channel':'Dev1/ai0', 'terminal_config':'NRSE','min_val':-1.0, 'max_val':1.0}, # 'mll_fR/DAQ_error_signal', V
-                      {'physical_channel':'Dev1/ai1', 'terminal_config':'NRSE','min_val':-1.0, 'max_val':1.0}, # 'filter_cavity/DAQ_error_signal', V
-                      {'physical_channel':'Dev1/ai2', 'terminal_config':'NRSE','min_val':-1.0, 'max_val':1.0}, # 'filter_cavity/heater_temperature', V_meas
-                      {'physical_channel':'Dev1/ai3', 'terminal_config':'NRSE','min_val':-1.0, 'max_val':1.0}, # 'filter_cavity/heater_temperature', V_set
-                      {'physical_channel':'Dev1/ai4', 'terminal_config':'NRSE','min_val':-1.0, 'max_val':1.0}, # 'ambience/rack_temperature_0'
-                      {'physical_channel':'Dev1/ai5', 'terminal_config':'NRSE','min_val':-1.0, 'max_val':1.0}, # 'ambience/box_temperature_0'
-                      {'physical_channel':'Dev1/ai6', 'terminal_config':'NRSE','min_val':-1.0, 'max_val':1.0}, # 'ambience/box_temperature_1'
-                      {'physical_channel':'Dev1/ai7', 'terminal_config':'NRSE','min_val':-1.0, 'max_val':1.0},
-                      {'physical_channel':'Dev1/ai8', 'terminal_config':'NRSE','min_val':-1.0, 'max_val':1.0}, # 'dc_power/12V_0'
-                      {'physical_channel':'Dev1/ai9', 'terminal_config':'NRSE','min_val':-1.0, 'max_val':1.0}, # 'dc_power/12V_1'
-                      {'physical_channel':'Dev1/ai10', 'terminal_config':'NRSE','min_val':-1.0, 'max_val':1.0}, # 'dc_power/12V_2'
-                      {'physical_channel':'Dev1/ai11', 'terminal_config':'NRSE','min_val':-1.0, 'max_val':1.0}, # 'dc_power/12V_3'
-                      {'physical_channel':'Dev1/ai12', 'terminal_config':'NRSE','min_val':-1.0, 'max_val':1.0}, # 'dc_power/8V_0'
-                      {'physical_channel':'Dev1/ai13', 'terminal_config':'NRSE','min_val':-1.0, 'max_val':1.0}, # 'dc_power/15V_0'
-                      {'physical_channel':'Dev1/ai14', 'terminal_config':'NRSE','min_val':-1.0, 'max_val':1.0}, # 'dc_power/24V_0'
-                      {'physical_channel':'Dev1/ai15', 'terminal_config':'NRSE','min_val':-1.0, 'max_val':1.0}], # 'dc_power/24V_1'
+                      {'physical_channel':'Dev1/ai1', 'terminal_config':'NRSE','min_val':0, 'max_val':10.0}, # 'filter_cavity/DAQ_error_signal', V
+                      {'physical_channel':'Dev1/ai2', 'terminal_config':'NRSE','min_val':0, 'max_val':2.0}, # 'filter_cavity/heater_temperature', V_meas
+                      {'physical_channel':'Dev1/ai3', 'terminal_config':'NRSE','min_val':0, 'max_val':2.0}, # 'filter_cavity/heater_temperature', V_set
+                      {'physical_channel':'Dev1/ai4', 'terminal_config':'NRSE','min_val':0, 'max_val':1.0}, # 'ambience/box_temperature_0'
+                      {'physical_channel':'Dev1/ai5', 'terminal_config':'NRSE','min_val':0, 'max_val':1.0}, # 'ambience/box_temperature_1'
+                      {'physical_channel':'Dev1/ai6', 'terminal_config':'NRSE','min_val':0, 'max_val':1.0}], # 'ambience/rack_temperature_0'
+#                      {'physical_channel':'Dev1/ai7', 'terminal_config':'NRSE','min_val':-1.0, 'max_val':1.0},
+#                      {'physical_channel':'Dev1/ai8', 'terminal_config':'NRSE','min_val':-1.0, 'max_val':1.0}, # 'dc_power/12V_0'
+#                      {'physical_channel':'Dev1/ai9', 'terminal_config':'NRSE','min_val':-1.0, 'max_val':1.0}, # 'dc_power/12V_1'
+#                      {'physical_channel':'Dev1/ai10', 'terminal_config':'NRSE','min_val':-1.0, 'max_val':1.0}, # 'dc_power/12V_2'
+#                      {'physical_channel':'Dev1/ai11', 'terminal_config':'NRSE','min_val':-1.0, 'max_val':1.0}, # 'dc_power/12V_3'
+#                      {'physical_channel':'Dev1/ai12', 'terminal_config':'NRSE','min_val':-1.0, 'max_val':1.0}, # 'dc_power/8V_0'
+#                      {'physical_channel':'Dev1/ai13', 'terminal_config':'NRSE','min_val':-1.0, 'max_val':1.0}, # 'dc_power/15V_0'
+#                      {'physical_channel':'Dev1/ai14', 'terminal_config':'NRSE','min_val':-1.0, 'max_val':1.0}, # 'dc_power/24V_0'
+#                      {'physical_channel':'Dev1/ai15', 'terminal_config':'NRSE','min_val':-1.0, 'max_val':1.0}], # 'dc_power/24V_1'
                     250e3, int(250e3*0.2*3)],{'timeout':5.0}],
-                'reserve_cont':False, 'reserve_point':False},
-        'monitor_DAQ/device_DAQ_digital_in':{
-                '__init__':[
-                    [[{'physical_channel':'Dev1/port0/line0'}, # 'rf_osc/100MHz_alarm'
-                      {'physical_channel':'Dev1/port0/line1'}, # 'rf_osc/1GHz_alarm'
-                      {'physical_channel':'Dev1/port0/line2'}, # 'rf_osc/10GHz_alarm'
-                      {'physical_channel':'Dev1/port0/line3'}, # 'chiller/system_alarm'
-                      {'physical_channel':'Dev1/port0/line4'}]], # 'chiller/pump_alarm'
-                      {'timeout':5.0}],
                 'reserve_cont':False, 'reserve_point':False}}
+#        'monitor_DAQ/device_DAQ_digital_in':{
+#                '__init__':[
+#                    [[{'physical_channel':'Dev1/port0/line0'}, # 'rf_osc/100MHz_alarm'
+#                      {'physical_channel':'Dev1/port0/line1'}, # 'rf_osc/1GHz_alarm'
+#                      {'physical_channel':'Dev1/port0/line2'}, # 'rf_osc/10GHz_alarm'
+#                      {'physical_channel':'Dev1/port0/line3'}, # 'chiller/system_alarm'
+#                      {'physical_channel':'Dev1/port0/line4'}]], # 'chiller/pump_alarm'
+#                      {'timeout':5.0}],
+#                'reserve_cont':False, 'reserve_point':False}}
 CONTROL_PARAMS = {
         'monitor_DAQ/control':{ }}
 SETTINGS = dict(list(STATE_SETTINGS.items()) + list(DEVICE_SETTINGS.items()) + list(CONTROL_PARAMS.items()))
@@ -503,9 +509,9 @@ dev = {}
 dev['monitor_DAQ/device_DAQ_analog_in'] = {
         'driver':send_args(AiTask, DEVICE_SETTINGS['monitor_DAQ/device_DAQ_analog_in']['__init__']),
         'queue':CouchbaseDB.PriorityQueue('<daq type and/or channels>')}
-dev['monitor_DAQ/device_DAQ_digital_in'] = {
-        'driver':send_args(AiTask, DEVICE_SETTINGS['monitor_DAQ/device_DAQ_digital_in']['__init__']),
-        'queue':CouchbaseDB.PriorityQueue('<daq type and/or channels>')}
+#dev['monitor_DAQ/device_DAQ_digital_in'] = {
+#        'driver':send_args(AiTask, DEVICE_SETTINGS['monitor_DAQ/device_DAQ_digital_in']['__init__']),
+#        'queue':CouchbaseDB.PriorityQueue('<daq type and/or channels>')}
 
 # Initialize Local Copy of Monitors -------------------------------------------
 '''Monitors should associate the monitor databases with the local, circular
@@ -522,14 +528,9 @@ dev['monitor_DAQ/device_DAQ_digital_in'] = {
                           'cursor':<tailable cursor object>,
                           'new':<bool>}'''
 mon = {}
-',
-        , ,
-        , , ,
-        , , , ,
-        , , , ,
-        # Digital In
-        'rf_osc/100MHz_alarm', 'rf_osc/1GHz_alarm', 'rf_osc/10GHz_alarm',
-        'chiller/system_alarm', 'chiller/pump_alarm'
+#        # Digital In
+#        'rf_osc/100MHz_alarm', 'rf_osc/1GHz_alarm', 'rf_osc/10GHz_alarm',
+#        'chiller/system_alarm', 'chiller/pump_alarm'
     # DAQ analog ----------------------
 mon['mll_fR/DAQ_error_signal'] = {
         'data':np.array([]),
@@ -543,10 +544,6 @@ mon['filter_cavity/heater_temperature'] = {
         'data':np.array([]),
         'device':dev['monitor_DAQ/device_DAQ_analog_in'],
         'new':False}
-mon['ambience/rack_temperature_0'] = {
-        'data':np.array([]),
-        'device':dev['monitor_DAQ/device_DAQ_analog_in'],
-        'new':False}
 mon['ambience/box_temperature_0'] = {
         'data':np.array([]),
         'device':dev['monitor_DAQ/device_DAQ_analog_in'],
@@ -555,38 +552,42 @@ mon['ambience/box_temperature_1'] = {
         'data':np.array([]),
         'device':dev['monitor_DAQ/device_DAQ_analog_in'],
         'new':False}
-mon['dc_power/12V_0'] = {
+mon['ambience/rack_temperature_0'] = {
         'data':np.array([]),
         'device':dev['monitor_DAQ/device_DAQ_analog_in'],
         'new':False}
-mon['dc_power/12V_1'] = {
-        'data':np.array([]),
-        'device':dev['monitor_DAQ/device_DAQ_analog_in'],
-        'new':False}
-mon['dc_power/12V_2'] = {
-        'data':np.array([]),
-        'device':dev['monitor_DAQ/device_DAQ_analog_in'],
-        'new':False}
-mon['dc_power/12V_3'] = {
-        'data':np.array([]),
-        'device':dev['monitor_DAQ/device_DAQ_analog_in'],
-        'new':False}
-mon['dc_power/8V_0'] = {
-        'data':np.array([]),
-        'device':dev['monitor_DAQ/device_DAQ_analog_in'],
-        'new':False}
-mon['dc_power/15V_0'] = {
-        'data':np.array([]),
-        'device':dev['monitor_DAQ/device_DAQ_analog_in'],
-        'new':False}
-mon['dc_power/24V_0'] = {
-        'data':np.array([]),
-        'device':dev['monitor_DAQ/device_DAQ_analog_in'],
-        'new':False}
-mon['dc_power/24V_1'] = {
-        'data':np.array([]),
-        'device':dev['monitor_DAQ/device_DAQ_analog_in'],
-        'new':False}
+#mon['dc_power/12V_0'] = {
+#        'data':np.array([]),
+#        'device':dev['monitor_DAQ/device_DAQ_analog_in'],
+#        'new':False}
+#mon['dc_power/12V_1'] = {
+#        'data':np.array([]),
+#        'device':dev['monitor_DAQ/device_DAQ_analog_in'],
+#        'new':False}
+#mon['dc_power/12V_2'] = {
+#        'data':np.array([]),
+#        'device':dev['monitor_DAQ/device_DAQ_analog_in'],
+#        'new':False}
+#mon['dc_power/12V_3'] = {
+#        'data':np.array([]),
+#        'device':dev['monitor_DAQ/device_DAQ_analog_in'],
+#        'new':False}
+#mon['dc_power/8V_0'] = {
+#        'data':np.array([]),
+#        'device':dev['monitor_DAQ/device_DAQ_analog_in'],
+#        'new':False}
+#mon['dc_power/15V_0'] = {
+#        'data':np.array([]),
+#        'device':dev['monitor_DAQ/device_DAQ_analog_in'],
+#        'new':False}
+#mon['dc_power/24V_0'] = {
+#        'data':np.array([]),
+#        'device':dev['monitor_DAQ/device_DAQ_analog_in'],
+#        'new':False}
+#mon['dc_power/24V_1'] = {
+#        'data':np.array([]),
+#        'device':dev['monitor_DAQ/device_DAQ_analog_in'],
+#        'new':False}
     # External ------------------------
 for database in R_MONITOR_DBs:
     cursor = db[database].read_buffer(tailable_cursor=True, no_cursor_timeout=True)
@@ -1195,7 +1196,9 @@ STATES = {
 log_failed_prereqs_interval = 60*10 #s
 log_failed_prereqs_timer = {}
 for state_db in STATE_DBs:
+    log_failed_prereqs_timer[state_db] = {}
     for state in STATES[state_db]:
+        log_failed_prereqs_timer[state_db][state] = {}
         log_failed_prereqs_timer[state_db][state]['critical'] = 0
         log_failed_prereqs_timer[state_db][state]['necessary'] = 0
         log_failed_prereqs_timer[state_db][state]['optional'] = 0
@@ -1219,8 +1222,8 @@ while loop:
             setup_state(state_db, 'safe')
 
 # Monitor the Current State ---------------------------------------------------
-for state_db in STATE_DBs:
-    STATES[state_db][current_state[state_db]]['routines']['monitor'](state_db)
+    for state_db in STATE_DBs:
+        STATES[state_db][current_state[state_db]['state']]['routines']['monitor'](state_db)
 
 # Maintain the Current State --------------------------------------------------
     for state_db in STATE_DBs:
@@ -1237,7 +1240,7 @@ for state_db in STATE_DBs:
                     current_state[state_db]['prerequisites']['optional'] = optional_pass
                     db[state_db].write_record_and_buffer(current_state[state_db])
         # Maintain compliance
-            STATES[state_db][current_state[state_db]]['routines']['maintain'](state_db)
+            STATES[state_db][current_state[state_db]['state']]['routines']['maintain'](state_db)
     # If out of compliance, 
         else:
         # Check necessary and optional prerequisites
@@ -1258,7 +1261,7 @@ for state_db in STATE_DBs:
                 db[state_db].write_record_and_buffer(current_state[state_db])
         # Search for the compliant state
             if necessary_pass:
-                STATES[state_db][current_state[state_db]]['routines']['search'](state_db)
+                STATES[state_db][current_state[state_db]['state']]['routines']['search'](state_db)
     # Set the state initialization if necessary
         if not(current_state[state_db]['initialized']):
         # Update the state variable
@@ -1269,7 +1272,7 @@ for state_db in STATE_DBs:
     for state_db in STATE_DBs:
     # If compliant,
         if current_state[state_db]['compliance'] == True:
-            STATES[state_db][current_state[state_db]]['routines']['operate'](state_db)
+            STATES[state_db][current_state[state_db]['state']]['routines']['operate'](state_db)
 
 # Check the Communications Queue ----------------------------------------------
     for message in range(len(comms.get_queue())):

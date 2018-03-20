@@ -437,8 +437,8 @@ DEVICE_SETTINGS = {
         'monitor_DAQ/device_DAQ_analog_in':{
                 '__init__':[
                     [[{'physical_channel':'Dev1/ai0', 'terminal_config':'NRSE','min_val':-1.0, 'max_val':1.0}, # 'mll_fR/DAQ_error_signal', V
-                      {'physical_channel':'Dev1/ai1', 'terminal_config':'NRSE','min_val':0, 'max_val':10.0}, # 'filter_cavity/DAQ_error_signal', V
-                      {'physical_channel':'Dev1/ai2', 'terminal_config':'NRSE','min_val':0, 'max_val':2.0}, # 'filter_cavity/heater_temperature', V_meas
+                      {'physical_channel':'Dev1/ai1', 'terminal_config':'NRSE','min_val':0, 'max_val':2.0}, # 'filter_cavity/DAQ_error_signal', V
+                      {'physical_channel':'Dev1/ai2', 'terminal_config':'NRSE','min_val':0, 'max_val':2.0}, # 'filter_cavity/heater_temperature', V_act
                       {'physical_channel':'Dev1/ai3', 'terminal_config':'NRSE','min_val':0, 'max_val':2.0}, # 'filter_cavity/heater_temperature', V_set
                       {'physical_channel':'Dev1/ai4', 'terminal_config':'NRSE','min_val':0, 'max_val':1.0}, # 'ambience/box_temperature_0'
                       {'physical_channel':'Dev1/ai5', 'terminal_config':'NRSE','min_val':0, 'max_val':1.0}, # 'ambience/box_temperature_1'
@@ -487,7 +487,7 @@ for database in READ_DBs:
     buffer and the other logs warnings and above to the permanent log database.
     The threshold for the base logger, and the two handlers, may be set in the
     following command.'''
-log.start_logging(logger_level=logging.DEBUG) #database=db[LOG_DB])
+log.start_logging(logger_level=logging.INFO) #database=db[LOG_DB])
 
 # Connect to the Communications Queue -----------------------------------------
 '''Creates a handle for the queue object defined in COMMS'''
@@ -508,7 +508,7 @@ dev = {}
     # DAQ drivers
 dev['monitor_DAQ/device_DAQ_analog_in'] = {
         'driver':send_args(AiTask, DEVICE_SETTINGS['monitor_DAQ/device_DAQ_analog_in']['__init__']),
-        'queue':CouchbaseDB.PriorityQueue('<daq type and/or channels>')}
+        'queue':CouchbaseDB.PriorityQueue('DAQ_ai')}
 #dev['monitor_DAQ/device_DAQ_digital_in'] = {
 #        'driver':send_args(AiTask, DEVICE_SETTINGS['monitor_DAQ/device_DAQ_digital_in']['__init__']),
 #        'queue':CouchbaseDB.PriorityQueue('<daq type and/or channels>')}
@@ -645,366 +645,142 @@ def nothing(state_db):
 
 # Monitor Functions -----------------------------------------------------------
 '''This section is for defining the methods needed to monitor the system.'''
-control_interval = 0.2 # s
-passive_interval = 1.0 # s
-timer['monitor:control'] = get_lap(control_interval)
-timer['monitor:passive'] = get_lap(passive_interval)
-def monitor(state_db):
-# Get lap number
-    new_control_lap = get_lap(control_interval)
-    new_passive_lap = get_lap(passive_interval)
-# Update control loop variables -------------------------------------
-    if (new_control_lap > timer['monitor:control']):
-    # Pull data from SRS ----------------------------------
-        device_db = 'monitor_DAQ/device_PID'
-        # Wait for queue
-        dev[device_db]['queue'].queue_and_wait()
-        # Get values
-        new_v_out = dev[device_db]['driver'].new_output_monitor()
-        if new_v_out:
-            v_out = dev[device_db]['driver'].output_monitor()
-        v_min = dev[device_db]['driver'].lower_limit
-        v_max = dev[device_db]['driver'].upper_limit
-        # Remove from queue
-        dev[device_db]['queue'].remove()
-        # Update buffers and databases ----------
-            # Output voltage ----------
-        if new_v_out:
-            mon['monitor_DAQ/PID_output']['new'] = True
-            mon['monitor_DAQ/PID_output']['data'] = update_buffer(
-                    mon['monitor_DAQ/PID_output']['data'],
-                    v_out, 500)
-            db['monitor_DAQ/PID_output'].write_record_and_buffer({'V':v_out})
-            # Voltage limits ----------
-        if (mon['monitor_DAQ/PID_voltage_limits']['data'] != {'min':v_min, 'max':v_max}):
-            mon['monitor_DAQ/PID_voltage_limits']['new'] = True
-            mon['monitor_DAQ/PID_voltage_limits']['data'] = {'min':v_min, 'max':v_max}
-            db['monitor_DAQ/PID_voltage_limits'].write_record_and_buffer({'min':v_min, 'max':v_max})
-    # Pull data from external databases -------------------
-        new_data = []
-        for doc in mon['monitor_DAQ/DAQ_error_signal']['cursor']:
-            new_data.append(doc['V'])
-         # Update buffers -----------------------
-        if len(new_data) > 0:
-            mon['monitor_DAQ/DAQ_error_signal']['new'] = True
-            mon['monitor_DAQ/DAQ_error_signal']['data'] = update_buffer(
-                mon['monitor_DAQ/DAQ_error_signal']['data'],
-                new_data, 500)
-# Update passive monitoring variables -------------------------------
-    if (new_passive_lap > timer['monitor:passive']):
-    # Pull data from Thorlabs 3-axis piezo controller -----
-        device_db = 'monitor_DAQ/device_HV'
-        # Wait for queue
-        dev[device_db]['queue'].queue_and_wait()
-        # Get values
-        hv_out = dev[device_db]['driver'].y_voltage()
-        # Remove from queue
-        dev[device_db]['queue'].remove()
-        # Update buffers and databases ----------
-        mon['monitor_DAQ/HV_output']['new'] = True
-        mon['monitor_DAQ/HV_output']['data'] = update_buffer(
-                mon['monitor_DAQ/HV_output']['data'],
-                hv_out, 100)
-        db['monitor_DAQ/HV_output'].write_record_and_buffer({'V':hv_out})
-    # Pull data from external databases -------------------
-        new_data = []
-        for doc in mon['monitor_DAQ/TEC_temperature']['cursor']:
-            new_data.append(doc['V'])
-         # Update buffers -----------------------
-        if len(new_data) > 0:
-            mon['monitor_DAQ/TEC_temperature']['new'] = True
-            mon['monitor_DAQ/TEC_temperature']['data'] = update_buffer(
-                mon['monitor_DAQ/TEC_temperature']['data'],
-                new_data, 500)
-# Propogate lap numbers ---------------------------------------------
-    timer['monitor:control'] = new_control_lap
-    timer['monitor:passive'] = new_passive_lap
+
 
 # Search Functions ------------------------------------------------------------
 '''This section is for defining the methods needed to bring the system into
     its defined states.'''
-from scipy.interpolate import UnivariateSpline
-from scipy.optimize import minimize
-v_range_threshold = 0.1 #(limit-threshold)/(upper - lower limits)
-log_setpoint_error_interval = 60*10 #s
-lock_hold_interval = 1.0 #s
-timer['find_lock:locked'] = time.time()
-timer['find_lock:log_setpoint_error'] = time.time()
-def find_lock(state_db, last_good_position=None):
-# Queue the SRS PID controller --------------------------------------
-    device_db = 'monitor_DAQ/device_PID'
-    dev[device_db]['queue'].queue_and_wait(priority=True)
-# Initialize threshold variables ------------------------------------
-    v_high = (1-v_range_threshold)*dev[device_db]['driver'].upper_limit + v_range_threshold*dev[device_db]['driver'].lower_limit
-    v_low = (1-v_range_threshold)*dev[device_db]['driver'].lower_limit + v_range_threshold*dev[device_db]['driver'].upper_limit
-# Quick relock ------------------------------------------------------
-    # Re-engage the lock at the last know position --------
-    if last_good_position is not None:
-        '''This is used to quicklyre-engage the lock starting from a known
-        posistion. This is only activated if "last_good_position" is given as a 
-        keyword argument to this function call. The state then skips the first
-        round of lock tests.'''
-        settings_list = [
-                {'manual_output':last_good_position},
-                {'pid_action':False},
-                {'offset_action':True,'offset':last_good_position},
-                {'pid_action':True}] # TODO: add delay?
-        update_device_settings(device_db, settings_list)
-    # Update lock timer -----------------------------------
-        timer['find_lock:locked'] = time.time()
-        locked = True
-# Check if locked ---------------------------------------------------
-    elif dev[device_db]['driver'].pid_action():
-        '''This is the main logic used to determine if the current state is
-        locked. The main check is that the current output is within the
-        accepted range between the upper and lower hardware limits.'''
-    # PID is enabled
-        current_output = dev[device_db]['driver'].output_monitor()
-        if (current_output < v_low) or (current_output > v_high):
-        # Output is beyond voltage thresholds
-            locked = False
-        # TODO: elif reflect error signal is high -> locked = False
-        else:
-        # Lock is holding
-            locked = True
-    else:
-    # PID is disabled
-        locked = False
-# If locked ---------------------------------------------------------            
-    if locked:
-        '''If the current state passed the previous tests the control script
-        holds off on making a final judgement until the specified interval has
-        passed since lock acquisition.'''
-    # Remove the SRS PID controller from queue ------------
-        dev[device_db]['queue'].remove()
-    # Check lock interval ---------------------------------
-        if (time.time() - timer['find_lock:locked']) > lock_hold_interval:
-            log_str = 'Lock succesful'
-            log.log_info(__name__, 'find_lock', log_str)
-        # Lock is succesful, update state variable
+def queue_and_reserve(state_db):
+# add to queue, loop until the top of the queue (no touch). When queued, reserve cont.
+    # have a switch for each state_db, either analog in or diggital in
+    if (state_db == 'monitor_DAQ/state_analog'):
+        device_db ='monitor_DAQ/device_DAQ_analog_in'
+        queue_position = dev[device_db]['queue'].position()
+        if (queue_position < 0):
+        # Add to queue
+            dev[device_db]['queue'].push()
+        elif (queue_position == 0):
+        # Reserve and start the DAQ
+            dev[device_db]['driver'].reserve_cont(True)
+        # Update the state variable
             current_state[state_db]['compliance'] = True
             db[state_db].write_record_and_buffer(current_state[state_db])
-# If unlocked -------------------------------------------------------
-    else:
-        '''The current state has failed the lock tests. The PID controller is
-        then broght into a known state, and the DAQ is used to find the lock
-        point.'''
-    # Reset the PID controller ----------------------------
-        settings_list = [
-                {'pid_action':False},
-                {'upper_output_limit':STATES[state_db][current_state[state_db]['state']]['settings'][device_db]['upper_output_limit'],
-                 'lower_output_limit':STATES[state_db][current_state[state_db]['state']]['settings'][device_db]['lower_output_limit']}]
-        update_device_settings(device_db, settings_list)
-    # Reinitialize threshold variables --------------------
-        v_high = (1-v_range_threshold)*dev[device_db]['driver'].upper_limit + v_range_threshold*dev[device_db]['driver'].lower_limit
-        v_low = (1-v_range_threshold)*dev[device_db]['driver'].lower_limit + v_range_threshold*dev[device_db]['driver'].upper_limit
-    # Reset the piezo hysteresis --------------------------
-        dev[device_db]['driver'].manual_output(v_low)
-    # Queue the DAQ ---------------------------------------
-        daq_db = 'monitor_DAQ/DAQ_Vout_vs_reflect'
-        dev[daq_db]['queue'].queue_and_wait(priority=True)
-    # Get lock point data ---------------------------------
-        x = np.linspace(v_low, v_high, 50)
-        y = np.copy(x)
-        w = np.copy(x)
-        for ind, x_val in enumerate(x):
-        # Touch queue (prevent timeout) ---------
-            dev[device_db]['queue'].touch()
-            dev[daq_db]['queue'].touch()
-        # Change position and trigger DAQ -------
-            dev[device_db]['driver'].manual_output(x_val)
-            data = dev[daq_db]['driver'].read_point()
-            # Average and Std ---------
-            y[ind] = np.mean(data)
-            w[ind] = 1/np.std(data)
-        # Release and remove the DAQ from queue -
-        dev[daq_db]['driver'].reserve_point(False)
-        dev[daq_db]['queue'].remove()
-        # Reset the piezo hysteresis ------------
-        dev[device_db]['driver'].manual_output(x[0])
-        # Update monitor DB ---------------------
-        mon['monitor_DAQ/DAQ_Vout_vs_reflect']['new'] = True
-        mon['monitor_DAQ/DAQ_Vout_vs_reflect']['data'] = np.array([x, y])
-        db['monitor_DAQ/DAQ_Vout_vs_reflect'].write_record_and_buffer({'V_out':x.tolist(), 'V_ref':y.tolist()})
-    # Estimate the lock point -----------------------------
-        #Coarse Estimate ------------------------
-        min_index = np.argmin(y)
-        output_coarse = x[min_index]
-        #Fine Estimate --------------------------
-        try:
-            spline = UnivariateSpline(x, y, w=w)
-            min_result = minimize(spline, output_coarse, bounds=(x[0], x[-1]))
-            new_output = min_result['x']
-        except:
-            log.log_exception(__name__, 'find_lock')
-            # Failure may be because the frequency response was too flat?
-            # The middle is a safe place to go (no TEC adjustment)
-            new_output = dev[device_db]['driver'].center
-    # Get Lock --------------------------------------------
-        if (new_output > v_low) and (new_output < v_high):
-            '''If the new lock point is within the acceptable range between
-            the upper and lower hardware limits, attempt to lock.'''
-            log_str = 'Estimated voltage setpoint = {:.3f}, locking.'.format(new_output)
-            log.log_info(__name__, 'find_lock', log_str)
-        # Update deivice settings ---------------
-            settings_list = [{'manual_output':new_output,
-                              'offset_action':True,
-                              'offset':new_output},
-                             {'pid_action':True}] #TODO: add delay?
-            update_device_settings(device_db, settings_list)
-        # Remove the SRS PID controller from queue
-            dev[device_db]['queue'].remove()
-        # Update lock timer ---------------------
-            timer['find_lock:locked'] = time.time()
-        else:
-            '''If not, something is wrong. This could be that the temperature
-            control is not on, the temperature has not settled at the setpoint,
-            or the temperature setpoint needs adjustment. Either way, there is
-            no method to adjust those parameters'''
-            log_setpoint_error_condition = ((time.time() - timer['find_lock:log_setpoint_error']) > log_setpoint_error_interval)
-            if log_setpoint_error_condition:
-                log_str = 'Estimated voltage setpoint = {:.3f}, lock unobtainable.'.format(new_output)
-                log.log_critical(__name__, 'find_lock', log_str)
-            # Update timer
-                timer['find_lock:log_setpoint_error'] = time.time()
-
-def transfer_to_manual(state_db):
-# Queue the SRS PID controller --------------------------------------
-    device_db = 'monitor_DAQ/device_PID'
-    dev[device_db]['queue'].queue_and_wait()
-# Check if the PID controller is on ---------------------------------
-    if dev[device_db]['driver'].pid_action():
-    # Get current output
-        v_out = dev[device_db]['driver'].output_monitor()
-    # Bumpless transfer to manual
-        settings_list = [
-                {'manual_output':v_out},
-                {'pid_action':False}]
-        update_device_settings(device_db, settings_list)
-# Remove SRS PID from queue -----------------------------------------
-    dev[device_db]['queue'].remove()
-# Update state variable
-    current_state[state_db]['compliance'] = True
-    db[state_db].write_record_and_buffer(current_state[state_db])
 
 # Maintain Functions ----------------------------------------------------------
 '''This section is for defining the methods needed to maintain the system in
     its defined states.'''
-v_std_threshold = 5 # standard deviations
-lock_age_threshold = 10.0 #s
-def keep_lock(state_db):
-    locked = True
-# Queue the SRS PID controller --------------------------------------
-    device_db = 'monitor_DAQ/device_PID'
-    dev[device_db]['queue'].queue_and_wait()
-# Evaluate conditions
-    new_output_condition = mon['monitor_DAQ/PID_output']['new']
-    lock_age_condition = ((time.time() - timer['find_lock:locked']) > lock_age_threshold)
-    no_new_limits_condition = not(mon['monitor_DAQ/PID_voltage_limits']['new'])
-# Get most recent values --------------------------------------------
-    if new_output_condition:
-        current_output = mon['monitor_DAQ/PID_output']['data'][-1]
-    current_limits = mon['monitor_DAQ/PID_voltage_limits']['data']
-    v_high = (1-v_range_threshold)*current_limits['max'] + v_range_threshold*current_limits['min']
-    v_low = (1-v_range_threshold)*current_limits['min'] + v_range_threshold*current_limits['max']
-    state_limits = {
-            'upper_output_limit':STATES[state_db][current_state[state_db]['state']]['settings'][device_db]['upper_output_limit'],
-            'lower_output_limit':STATES[state_db][current_state[state_db]['state']]['settings'][device_db]['lower_output_limit']}
-# Clear 'new' data flags
-    mon['monitor_DAQ/PID_output']['new'] = False
-    mon['monitor_DAQ/PID_voltage_limits']['new'] = False
-# Check if the PID controller is on ---------------------------------
-    if not(dev[device_db]['driver'].pid_action()):
-    # It is not locked
-        locked = False
-# Check if the output is outside the acceptable range ---------------
-    elif new_output_condition:
-        if (current_output < v_low) or (current_output > v_high):
-        # It is not locked
-            locked = False
-    # TODO: check error signal std
-# If not locked -----------------------------------------------------
-    if not(locked):
-    # Remove SRS PID controller from queue
-        dev[device_db]['queue'].remove()
-    # Update state variable
-        current_state[state_db]['compliance'] = False
-        db[state_db].write_record_and_buffer(current_state[state_db])
-    # Check if quick relock is possible
-        if (lock_age_condition and no_new_limits_condition):
-        # Calculate the expected output voltage
-            data = mon['monitor_DAQ/PID_output']['data'][:-1]
-            v_avg = np.mean(data)
-            v_avg_slope = np.mean(np.diff(data))/(len(data)-1)
-            v_expected = v_avg + v_avg_slope*len(data)/2
-        # Remove the last point from the local monitor
-            mon['monitor_DAQ/PID_output']['data'] = data
-        # Attempt a quick relock
-            find_lock(state_db, last_good_position=v_expected)
-# If locked ---------------------------------------------------------
-    else:
-    # If the system is at a new lock point, reinitialize the local monitors
-        if (not(lock_age_condition) and not(no_new_limits_condition)):
-        # Remove SRS PID controller from queue
-            dev[device_db]['queue'].remove()
-        # Reinitialize the output voltage monitor
-            mon['monitor_DAQ/PID_output']['data'] = np.array([])
-            mon['monitor_DAQ/PID_output']['new'] = False
-    # If the system is at a stable lock point, adjust the hardware voltage limits
-        elif (lock_age_condition and new_output_condition):
-        # Calculate the new limit thresholds
-            data = mon['monitor_DAQ/PID_output']['data']
-            v_avg = np.mean(data)
-            v_avg_slope = np.mean(np.diff(data))/(len(data)-1)
-            v_expected = v_avg + v_avg_slope*len(data)/2
-            v_std = np.std(data - v_avg_slope*np.arange(len(data)))
-            upper_limit = v_expected + (v_std_threshold*v_std)/(1-2*v_range_threshold)
-            lower_limit = v_expected - (v_std_threshold*v_std)/(1-2*v_range_threshold)
-        # Restrict the results
-            update = True
-            if upper_limit == lower_limit:
-                update = False
-            elif (upper_limit >= state_limits['upper_output_limit']) and (lower_limit <= state_limits['lower_output_limit']):
-                update = False
-            elif (upper_limit > state_limits['upper_output_limit']):
-                upper_limit = state_limits['upper_output_limit']
-            elif (lower_limit < state_limits['lower_output_limit']):
-                lower_limit = state_limits['lower_output_limit']
-            if (upper_limit == current_limits['max']) and (lower_limit == current_limits['min']):
-                update = False
-        # Update the hardware limits
-            if not(update):
-            # Remove SRS PID controller from queue
-                dev[device_db]['queue'].remove()
-            else:
-            # Update the limits
-                settings_list = {
-                        'upper_output_limit':upper_limit,
-                        'lower_output_limit':lower_limit}
-                update_device_settings(device_db, settings_list)
-            # Remove SRS PID controller from queue
-                dev[device_db]['queue'].remove()
-            # Update the voltage limit monitor
-                mon['monitor_DAQ/PID_voltage_limits']['new'] = True
-                mon['monitor_DAQ/PID_voltage_limits']['data'] = {'min':lower_limit, 'max':upper_limit}
-                db['monitor_DAQ/PID_voltage_limits'].write_record_and_buffer({'min':lower_limit, 'max':upper_limit})
-
-def lock_disabled(state_db):
-# Queue the SRS PID controller --------------------------------------
-    device_db = 'monitor_DAQ/device_PID'
-    dev[device_db]['queue'].queue_and_wait()
-# Check if the PID controller is on ---------------------------------
-    if dev[device_db]['driver'].pid_action():
-    # Turn off
-        dev[device_db]['driver'].pid_action(False)
-# Remove SRS PID from queue -----------------------------------------
-    dev[device_db]['queue'].remove()
-
+def touch(state_db):
+# if alone in the queue, touch. otherwise  if at the top of the queue, unreserve cont. and remove from queue 
+    # have a switch for each state_db, either analog in or diggital in
+    if (state_db == 'monitor_DAQ/state_analog'):
+        device_db ='monitor_DAQ/device_DAQ_analog_in'
+        queue_size = len(dev[device_db]['queue'].get_queue())
+        if (queue_size != 1):
+        # Unreserve DAQ
+            dev[device_db]['driver'].reserve_cont(False)
+        # Update state variable
+            current_state[state_db]['compliance'] = False
+            db[state_db].write_record_and_buffer(current_state[state_db])
+        else:
+        # Touch queue (prevent timeout)
+            dev[device_db]['queue'].touch()
 
 # Operate Functions -----------------------------------------------------------
 '''This section is for defining the methods called only when the system is in
     its defined states.'''
-
+control_interval = 0.2 # s
+for state_db in STATE_DBs:
+    timer['state_db'] = get_lap(control_interval)
+def read_DAQ(state_db):
+    # have a switch for each state_db, either analog in or diggital in
+    if (state_db == 'monitor_DAQ/state_analog'):
+    # Get lap number
+        new_control_lap = get_lap(control_interval)
+    # Read DAQ ------------------------------------------------------
+        if (new_control_lap > timer[state_db]):
+            device_db = 'monitor_DAQ/device_DAQ_analog_in'
+            # Double check queue
+            dev[device_db]['queue'].queue_and_wait()
+            # Get values
+            multi_channel_reading = dev[device_db]['driver'].read_cont()
+            # Update buffers and databases ----------
+                # ai0, 'mll_fR/DAQ_error_signal'
+            monitor_db = 'mll_fR/DAQ_error_signal'
+            data = multi_channel_reading[0] # ai0
+            data_mean = np.mean(data)
+            data_std = np.std(data)
+            data_ste = data_std/np.sqrt(len(data))
+            mon[monitor_db]['new'] = True
+            mon[monitor_db]['data'] = update_buffer(
+                    mon[monitor_db]['data'],
+                    data_mean, 500)
+            db[monitor_db].write_record_and_buffer({'V':data_mean, 'std':data_std, 'ste':data_ste})
+                # ai1, 'filter_cavity/DAQ_error_signal'
+            monitor_db = 'filter_cavity/DAQ_error_signal'
+            data = multi_channel_reading[1] # ai1
+            data_mean = np.mean(data)
+            data_std = np.std(data)
+            data_ste = data_std/np.sqrt(len(data))
+            mon[monitor_db]['new'] = True
+            mon[monitor_db]['data'] = update_buffer(
+                    mon[monitor_db]['data'],
+                    data_mean, 500)
+            db[monitor_db].write_record_and_buffer({'V':data_mean, 'std':data_std, 'ste':data_ste})
+                # ai2, V_set, 'filter_cavity/heater_temperature'
+                # ai3, V_act, 'filter_cavity/heater_temperature'
+            monitor_db = 'filter_cavity/heater_temperature'
+                    # ai2
+            data_set = multi_channel_reading[2] # ai2
+            data_set_mean = np.mean(data_set)
+            data_set_std = np.std(data_set)
+            data_set_ste = data_set_std/np.sqrt(len(data_set))
+                    # ai3
+            data_act = multi_channel_reading[3] # ai3
+            data_act_mean = np.mean(data_act)
+            data_act_std = np.std(data_act)
+            data_act_ste = data_act_std/np.sqrt(len(data_act))
+            mon[monitor_db]['new'] = True
+            mon[monitor_db]['data'] = update_buffer(
+                    mon[monitor_db]['data'],
+                    data_mean, 500)
+            db[monitor_db].write_record_and_buffer(
+                    {'V_set':data_set_mean, 'set_std':data_set_std, 'set_ste':data_set_ste,
+                     'V_act':data_act_mean, 'act_std':data_act_std, 'act_ste':data_act_ste})
+                # ai4, 'ambience/box_temperature_0'
+            monitor_db = 'ambience/box_temperature_0'
+            data = multi_channel_reading[4] # ai4
+            data_mean = np.mean(data)
+            data_std = np.std(data)
+            data_ste = data_std/np.sqrt(len(data))
+            mon[monitor_db]['new'] = True
+            mon[monitor_db]['data'] = update_buffer(
+                    mon[monitor_db]['data'],
+                    data_mean, 500)
+            db[monitor_db].write_record_and_buffer({'V':data_mean, 'std':data_std, 'ste':data_ste})
+                # ai5, 'ambience/box_temperature_1'
+            monitor_db = 'ambience/box_temperature_1'
+            data = multi_channel_reading[5] # ai5
+            data_mean = np.mean(data)
+            data_std = np.std(data)
+            data_ste = data_std/np.sqrt(len(data))
+            mon[monitor_db]['new'] = True
+            mon[monitor_db]['data'] = update_buffer(
+                    mon[monitor_db]['data'],
+                    data_mean, 500)
+            db[monitor_db].write_record_and_buffer({'V':data_mean, 'std':data_std, 'ste':data_ste})
+                # ai6, 'ambience/rack_temperature_0'
+            monitor_db = 'ambience/rack_temperature_0'
+            data = multi_channel_reading[6] # ai6
+            data_mean = np.mean(data)
+            data_std = np.std(data)
+            data_ste = data_std/np.sqrt(len(data))
+            mon[monitor_db]['new'] = True
+            mon[monitor_db]['data'] = update_buffer(
+                    mon[monitor_db]['data'],
+                    data_mean, 500)
+            db[monitor_db].write_record_and_buffer({'V':data_mean, 'std':data_std, 'ste':data_ste})
+    # Propogate lap numbers ---------------------------------------------
+        timer[state_db] = new_control_lap
 
 
 # %% States ===================================================================
@@ -1136,41 +912,25 @@ def lock_disabled(state_db):
                 could be to only read values from an instrument buffer while
                 the instrument's data collection state is active.'''
 STATES = {
-        'monitor_DAQ/state':{
-                'lock':{
-                        'settings':{
-                                'monitor_DAQ/device_PID':{
-                                        'proportional_action':True, 'integral_action':True,
-                                        'derivative_action':False,
-                                        'proportional_gain':-3.0e0, 'integral_gain':5.0e2,
-                                        'upper_output_limit':8.00, 'lower_output_limit':0.00},
-                                'monitor_DAQ/device_HV':{
-                                        'y_min':0.00, 'y_max':60.00, 'y_voltage':0.00}},
-                        'prerequisites':{
-                                'critical':[],
-                                'necessary':[],
-                                'optional':[]},
-                        'routines':{
-                                'monitor':monitor, 'search':find_lock,
-                                'maintain':keep_lock, 'operate':nothing}},
-                'manual':{
+        'monitor_DAQ/state_analog':{
+                'read':{
                         'settings':{},
                         'prerequisites':{
                                 'critical':[],
                                 'necessary':[],
                                 'optional':[]},
                         'routines':{
-                                'monitor':monitor, 'search':transfer_to_manual,
-                                'maintain':nothing, 'operate':nothing}},
+                                'monitor':nothing, 'search':queue_and_reserve,
+                                'maintain':touch, 'operate':read_DAQ}},
                 'safe':{
-                        'settings':{'monitor_DAQ/device_PID':{'pid_action':False}},
+                        'settings':{},
                         'prerequisites':{
                                 'critical':[],
                                 'necessary':[],
                                 'optional':[]},
                         'routines':{
-                                'monitor':monitor, 'search':transfer_to_manual,
-                                'maintain':lock_disabled, 'operate':nothing}},
+                                'monitor':nothing, 'search':nothing,
+                                'maintain':nothing, 'operate':nothing}},
                 'engineering':{
                         'settings':{},
                         'prerequisites':{

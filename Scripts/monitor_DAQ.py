@@ -613,6 +613,9 @@ for database in SETTINGS:
     db_initialized = True
     settings_list = []
     for setting in SETTINGS[database]:
+    # Check that there is anything at all
+        if (local_settings[database]==None):
+            local_settings[database]={}
     # Check that the key exists in the database
         if not(setting in local_settings[database]):
             db_initialized = False
@@ -621,10 +624,6 @@ for database in SETTINGS:
                 settings_list.append({setting:SETTINGS[database][setting]})
         elif (device_db_condition and (setting != '__init__')):
             settings_list.append({setting:None})
-        elif (device_db_condition and (setting == '__init__')):
-            if local_settings[database][setting] != SETTINGS[database][setting]:
-                db_initialized = False
-                local_settings[database][setting] = SETTINGS[database][setting]
     if device_db_condition:
         update_device_settings(database, settings_list)
     if not(db_initialized):
@@ -690,7 +689,7 @@ def touch(state_db):
     its defined states.'''
 control_interval = 0.2 # s
 for state_db in STATE_DBs:
-    timer['state_db'] = get_lap(control_interval)
+    timer[state_db] = get_lap(control_interval)
 def read_DAQ(state_db):
     # have a switch for each state_db, either analog in or diggital in
     if (state_db == 'monitor_DAQ/state_analog'):

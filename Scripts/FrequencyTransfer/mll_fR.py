@@ -1012,7 +1012,7 @@ def keep_lock(state_db):
                     device_db = 'mll_fR/device_TEC'
                     dev[device_db]['queue'].queue_and_wait()
                 # Adjust timer
-                    timer['find_lock:tec_adjust'] = timer.time()
+                    timer['find_lock:tec_adjust'] = time.time()
                 # Adjust the setpoint
                     if lower_limit_condition:
                         log_str = 'Lower voltage limit = {:.3f}, raising the resistance setpoint'.format(lower_limit)

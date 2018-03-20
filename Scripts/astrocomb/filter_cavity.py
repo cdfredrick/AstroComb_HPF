@@ -422,7 +422,7 @@ STATE_SETTINGS = {
 DEVICE_SETTINGS = {
         # VISA device settings
         'filter_cavity/device_PID':{
-                '__init__':[['visa address', 'port']],
+                '__init__':[['ASRL1::INSTR', 3]],
                 'proportional_action':True, 'integral_action':True,
                 'derivative_action':False, 'offset_action':None, 'offset':None,
                 'proportional_gain':None, 'integral_gain':None, 'pid_action':None,
@@ -430,12 +430,12 @@ DEVICE_SETTINGS = {
                 'ramp_action':False, 'manual_output':None, 'upper_output_limit':None,
                 'lower_output_limit':None, 'power_line_frequency':60},
         'filter_cavity/device_HV':{
-                '__init__':'<visa address>', 'master_scan_action':False,
-                'y_min':0.00, 'y_max':150.00, 'y_voltage':None},
+                '__init__':[['ASRL30::INSTR']], 'master_scan_action':False,
+                'y_min_limit':0.00, 'y_max_limit':150.00, 'y_voltage':None},
         # DAQ settings
         'filter_cavity/device_DAQ_Vout_vs_reflect':{
                 '__init__':[
-                    [[{'physical_channel':'Dev1/ai0', 'terminal_config':'NRSE',
+                    [[{'physical_channel':'Dev1/ai1', 'terminal_config':'NRSE',
                        'min_val':-1.0, 'max_val':1.0}],
                         250e3, int(250e3*0.01)],{'timeout':5.0}],
                 'reserve_cont':False, 'reserve_point':False}}
@@ -463,7 +463,7 @@ for database in READ_DBs:
     buffer and the other logs warnings and above to the permanent log database.
     The threshold for the base logger, and the two handlers, may be set in the
     following command.'''
-log.start_logging(logger_level=logging.DEBUG) #database=db[LOG_DB])
+log.start_logging(logger_level=logging.INFO) #database=db[LOG_DB])
 
 # Connect to the Communications Queue -----------------------------------------
 '''Creates a handle for the queue object defined in COMMS'''
@@ -484,14 +484,14 @@ dev = {}
     # VISA drivers
 dev['filter_cavity/device_PID'] = {
         'driver':send_args(SIM960, DEVICE_SETTINGS['filter_cavity/device_PID']['__init__']),
-        'queue':CouchbaseDB.PriorityQueue('<visa address>')}
+        'queue':CouchbaseDB.PriorityQueue('ASRL1')}
 dev['filter_cavity/device_HV'] = {
         'driver':send_args(MDT639B, DEVICE_SETTINGS['filter_cavity/device_HV']['__init__']),
-        'queue':CouchbaseDB.PriorityQueue('<visa address>')}
+        'queue':CouchbaseDB.PriorityQueue('ASRL30')}
     # DAQ drivers
 dev['filter_cavity/device_DAQ_Vout_vs_reflect'] = {
         'driver':send_args(AiTask, DEVICE_SETTINGS['filter_cavity/device_DAQ_Vout_vs_reflect']['__init__']),
-        'queue':CouchbaseDB.PriorityQueue('<daq type and/or channels>')}
+        'queue':CouchbaseDB.PriorityQueue('DAQ_ai')}
 
 # Initialize Local Copy of Monitors -------------------------------------------
 '''Monitors should associate the monitor databases with the local, circular
@@ -738,7 +738,7 @@ def find_lock(state_db, last_good_position=None):
     # Reset the piezo hysteresis --------------------------
         dev[device_db]['driver'].manual_output(v_low)
     # Queue the DAQ ---------------------------------------
-        daq_db = 'filter_cavity/DAQ_Vout_vs_reflect'
+        daq_db = 'filter_cavity/device_DAQ_Vout_vs_reflect'
         dev[daq_db]['queue'].queue_and_wait(priority=True)
     # Get lock point data ---------------------------------
         x = np.linspace(v_low, v_high, 50)
@@ -770,8 +770,8 @@ def find_lock(state_db, last_good_position=None):
         #Fine Estimate --------------------------
         try:
             spline = UnivariateSpline(x, y, w=w)
-            min_result = minimize(spline, output_coarse, bounds=(x[0], x[-1]))
-            new_output = min_result['x']
+            min_result = minimize(spline, output_coarse)
+            new_output = min_result['x'][0]
         except:
             log.log_exception(__name__, 'find_lock')
             # Failure may be because the frequency response was too flat?
@@ -1084,7 +1084,7 @@ STATES = {
                                         'proportional_gain':-3.0e0, 'integral_gain':5.0e2,
                                         'upper_output_limit':8.00, 'lower_output_limit':0.00},
                                 'filter_cavity/device_HV':{
-                                        'y_min':0.00, 'y_max':60.00, 'y_voltage':0.00}},
+                                        'y_min_limit':0.00, 'y_max_limit':60.00, 'y_voltage':0.00}},
                         'prerequisites':{
                                 'critical':[],
                                 'necessary':[],

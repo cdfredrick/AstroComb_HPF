@@ -34,12 +34,12 @@ def _handle_daq_error(func):
         try:
             result = func(self, *args, **kwargs)
             return result
-        except:
+        except Exception as first_error:
             try:
                 self._close_tasks()
             except:
                 pass
-            raise
+            raise first_error
     return wrapper
 
 

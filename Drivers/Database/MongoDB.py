@@ -64,6 +64,8 @@ class DatabaseRead():
     def get_collections(self, mongo_client, database):
     # Get the MongoDB client
         self.client = mongo_client.client
+        self.COLLECTION_KEYS = mongo_client.COLLECTION_KEYS
+        self.DOCUMENT_KEYS = mongo_client.DOCUMENT_KEYS
     # Parse database name
         database = database.split('/')
         if len(database) is 2:
@@ -85,8 +87,7 @@ class DatabaseRead():
     # Get the log buffer
         self.log_buffer = self.database[self.collection_name+'log_buffer']
     # Set constants
-        self.COLLECTION_KEYS = [self.collection_name+key for key in self.client.COLLECTION_KEYS]
-        self.DOCUMENT_KEYS = self.client.DOCUMENT_KEYS
+        self.COLLECTION_KEYS = [self.collection_name+key for key in self.COLLECTION_KEYS]
     
     def read_buffer(self, number_of_documents=1, sort_ascending=False, tailable_cursor=False, no_cursor_timeout=False):
         '''

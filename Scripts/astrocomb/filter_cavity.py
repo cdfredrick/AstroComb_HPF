@@ -12,6 +12,10 @@ import numpy as np
 import time
 import logging
 
+import os
+import sys
+sys.path.append(os.getcwd())
+
 from Drivers.Logging import EventLog as log
 
 from Drivers.Database import MongoDB
@@ -56,7 +60,7 @@ def check_prereqs(state_db, state, level, log_failures=None):
 
 # Update Device Settings ------------------------------------------------------
 @log.log_this()
-def update_device_settings(device_db, settings_list):
+def update_device_settings(device_db, settings_list, write_log=True):
     updated = False
 # Check settings_list type
     if isinstance(settings_list, dict):
@@ -68,8 +72,9 @@ def update_device_settings(device_db, settings_list):
     for settings_group in settings_list:
         for setting in settings_group:
         # Log the device, method, and arguments
-            prologue_str = 'device: {:}; method: {:}; args: {:}'.format(device_db, setting, settings_group[setting])
-            log.log_info(__name__, 'update_device_settings', prologue_str)
+            if write_log:
+                prologue_str = 'device: {:}; method: {:}; args: {:}'.format(device_db, setting, settings_group[setting])
+                log.log_info(__name__, 'update_device_settings', prologue_str)
         # Try sending the command to the device
             try:
                 result = send_args(getattr(dev[device_db]['driver'], setting),settings_group[setting])
@@ -92,7 +97,8 @@ def update_device_settings(device_db, settings_list):
                     epilogue_str = 'Returned: {:}'.format(str(result))
                 except:
                     epilogue_str = 'Returned successfully, but result was not stringable'
-                log.log_info(__name__, 'update_device_settings', epilogue_str)
+                if write_log:
+                    log.log_info(__name__, 'update_device_settings', epilogue_str)
         # Touch queue (prevent timeout)
             dev[device_db]['queue'].touch()
 # Remove from queue
@@ -188,7 +194,7 @@ def send_args(func, obj=None):
             args = []
             kwargs = obj[0]
         else:
-            args = obj
+            args = [obj]
             kwargs = {}
     elif (obj_length == 2):
     # Check for both an internal list and dictionary
@@ -200,7 +206,7 @@ def send_args(func, obj=None):
                 args = obj[1]
                 kwargs = obj[2]
         else:
-            args = obj
+            args = [obj]
             kwargs = {}
     else:
     # Check if no input
@@ -208,7 +214,7 @@ def send_args(func, obj=None):
             args = []
             kwargs = {}
         else:
-            args = obj
+            args = [obj]
             kwargs = {}
     result = func(*args, **kwargs)
     return result
@@ -416,7 +422,7 @@ STATE_SETTINGS = {
 DEVICE_SETTINGS = {
         # VISA device settings
         'filter_cavity/device_PID':{
-                '__init__':[['visa address', 'port']],
+                '__init__':[['ASRL1::INSTR', 3]],
                 'proportional_action':True, 'integral_action':True,
                 'derivative_action':False, 'offset_action':None, 'offset':None,
                 'proportional_gain':None, 'integral_gain':None, 'pid_action':None,
@@ -424,12 +430,12 @@ DEVICE_SETTINGS = {
                 'ramp_action':False, 'manual_output':None, 'upper_output_limit':None,
                 'lower_output_limit':None, 'power_line_frequency':60},
         'filter_cavity/device_HV':{
-                '__init__':'<visa address>', 'master_scan_action':False,
-                'y_min':0.00, 'y_max':150.00, 'y_voltage':None},
+                '__init__':[['ASRL30::INSTR']], 'master_scan_action':False,
+                'y_min_limit':0.00, 'y_max_limit':150.00, 'y_voltage':None},
         # DAQ settings
         'filter_cavity/device_DAQ_Vout_vs_reflect':{
                 '__init__':[
-                    [[{'physical_channel':'Dev1/ai0', 'terminal_config':'NRSE',
+                    [[{'physical_channel':'Dev1/ai1', 'terminal_config':'NRSE',
                        'min_val':-1.0, 'max_val':1.0}],
                         250e3, int(250e3*0.01)],{'timeout':5.0}],
                 'reserve_cont':False, 'reserve_point':False}}
@@ -457,7 +463,7 @@ for database in READ_DBs:
     buffer and the other logs warnings and above to the permanent log database.
     The threshold for the base logger, and the two handlers, may be set in the
     following command.'''
-log.start_logging(logger_level=logging.DEBUG) #database=db[LOG_DB])
+log.start_logging(logger_level=logging.INFO) #database=db[LOG_DB])
 
 # Connect to the Communications Queue -----------------------------------------
 '''Creates a handle for the queue object defined in COMMS'''
@@ -478,14 +484,14 @@ dev = {}
     # VISA drivers
 dev['filter_cavity/device_PID'] = {
         'driver':send_args(SIM960, DEVICE_SETTINGS['filter_cavity/device_PID']['__init__']),
-        'queue':CouchbaseDB.PriorityQueue('<visa address>')}
+        'queue':CouchbaseDB.PriorityQueue('ASRL1')}
 dev['filter_cavity/device_HV'] = {
         'driver':send_args(MDT639B, DEVICE_SETTINGS['filter_cavity/device_HV']['__init__']),
-        'queue':CouchbaseDB.PriorityQueue('<visa address>')}
+        'queue':CouchbaseDB.PriorityQueue('ASRL30')}
     # DAQ drivers
 dev['filter_cavity/device_DAQ_Vout_vs_reflect'] = {
         'driver':send_args(AiTask, DEVICE_SETTINGS['filter_cavity/device_DAQ_Vout_vs_reflect']['__init__']),
-        'queue':CouchbaseDB.PriorityQueue('<daq type and/or channels>')}
+        'queue':CouchbaseDB.PriorityQueue('DAQ_ai')}
 
 # Initialize Local Copy of Monitors -------------------------------------------
 '''Monitors should associate the monitor databases with the local, circular
@@ -546,6 +552,9 @@ for database in SETTINGS:
     db_initialized = True
     settings_list = []
     for setting in SETTINGS[database]:
+    # Check that there is anything at all
+        if (local_settings[database]==None):
+            local_settings[database]={}
     # Check that the key exists in the database
         if not(setting in local_settings[database]):
             db_initialized = False
@@ -729,7 +738,7 @@ def find_lock(state_db, last_good_position=None):
     # Reset the piezo hysteresis --------------------------
         dev[device_db]['driver'].manual_output(v_low)
     # Queue the DAQ ---------------------------------------
-        daq_db = 'filter_cavity/DAQ_Vout_vs_reflect'
+        daq_db = 'filter_cavity/device_DAQ_Vout_vs_reflect'
         dev[daq_db]['queue'].queue_and_wait(priority=True)
     # Get lock point data ---------------------------------
         x = np.linspace(v_low, v_high, 50)
@@ -761,8 +770,8 @@ def find_lock(state_db, last_good_position=None):
         #Fine Estimate --------------------------
         try:
             spline = UnivariateSpline(x, y, w=w)
-            min_result = minimize(spline, output_coarse, bounds=(x[0], x[-1]))
-            new_output = min_result['x']
+            min_result = minimize(spline, output_coarse)
+            new_output = min_result['x'][0]
         except:
             log.log_exception(__name__, 'find_lock')
             # Failure may be because the frequency response was too flat?
@@ -818,8 +827,8 @@ def transfer_to_manual(state_db):
 # Maintain Functions ----------------------------------------------------------
 '''This section is for defining the methods needed to maintain the system in
     its defined states.'''
-v_std_threshold = 5 # standard deviations
-lock_age_threshold = 10.0 #s
+v_std_threshold = 10 # standard deviations
+lock_age_threshold = 30.0 #s
 def keep_lock(state_db):
     locked = True
 # Queue the SRS PID controller --------------------------------------
@@ -832,7 +841,9 @@ def keep_lock(state_db):
 # Get most recent values --------------------------------------------
     if new_output_condition:
         current_output = mon['filter_cavity/PID_output']['data'][-1]
-    current_limits = mon['filter_cavity/PID_voltage_limits']['data']
+    current_limits = {}
+    current_limits['min'] = dev[device_db]['driver'].lower_limit
+    current_limits['max'] = dev[device_db]['driver'].upper_limit
     v_high = (1-v_range_threshold)*current_limits['max'] + v_range_threshold*current_limits['min']
     v_low = (1-v_range_threshold)*current_limits['min'] + v_range_threshold*current_limits['max']
     state_limits = {
@@ -886,8 +897,8 @@ def keep_lock(state_db):
             v_avg_slope = np.mean(np.diff(data))/(len(data)-1)
             v_expected = v_avg + v_avg_slope*len(data)/2
             v_std = np.std(data - v_avg_slope*np.arange(len(data)))
-            upper_limit = v_expected + (v_std_threshold*v_std)/(1-2*v_range_threshold)
-            lower_limit = v_expected - (v_std_threshold*v_std)/(1-2*v_range_threshold)
+            upper_limit = round(v_expected + (v_std_threshold*v_std)/(1-2*v_range_threshold),2)
+            lower_limit = round(v_expected - (v_std_threshold*v_std)/(1-2*v_range_threshold),2)
         # Restrict the results
             update = True
             if upper_limit == lower_limit:
@@ -909,7 +920,7 @@ def keep_lock(state_db):
                 settings_list = {
                         'upper_output_limit':upper_limit,
                         'lower_output_limit':lower_limit}
-                update_device_settings(device_db, settings_list)
+                update_device_settings(device_db, settings_list, write_log=False)
             # Remove SRS PID controller from queue
                 dev[device_db]['queue'].remove()
             # Update the voltage limit monitor
@@ -1073,7 +1084,7 @@ STATES = {
                                         'proportional_gain':-3.0e0, 'integral_gain':5.0e2,
                                         'upper_output_limit':8.00, 'lower_output_limit':0.00},
                                 'filter_cavity/device_HV':{
-                                        'y_min':0.00, 'y_max':60.00, 'y_voltage':0.00}},
+                                        'y_min_limit':0.00, 'y_max_limit':60.00, 'y_voltage':0.00}},
                         'prerequisites':{
                                 'critical':[],
                                 'necessary':[],
@@ -1124,7 +1135,9 @@ STATES = {
 log_failed_prereqs_interval = 60*10 #s
 log_failed_prereqs_timer = {}
 for state_db in STATE_DBs:
+    log_failed_prereqs_timer[state_db] = {}
     for state in STATES[state_db]:
+        log_failed_prereqs_timer[state_db][state] = {}
         log_failed_prereqs_timer[state_db][state]['critical'] = 0
         log_failed_prereqs_timer[state_db][state]['necessary'] = 0
         log_failed_prereqs_timer[state_db][state]['optional'] = 0
@@ -1148,8 +1161,8 @@ while loop:
             setup_state(state_db, 'safe')
 
 # Monitor the Current State ---------------------------------------------------
-for state_db in STATE_DBs:
-    STATES[state_db][current_state[state_db]]['routines']['monitor'](state_db)
+    for state_db in STATE_DBs:
+        STATES[state_db][current_state[state_db]['state']]['routines']['monitor'](state_db)
 
 # Maintain the Current State --------------------------------------------------
     for state_db in STATE_DBs:
@@ -1166,7 +1179,7 @@ for state_db in STATE_DBs:
                     current_state[state_db]['prerequisites']['optional'] = optional_pass
                     db[state_db].write_record_and_buffer(current_state[state_db])
         # Maintain compliance
-            STATES[state_db][current_state[state_db]]['routines']['maintain'](state_db)
+            STATES[state_db][current_state[state_db]['state']]['routines']['maintain'](state_db)
     # If out of compliance, 
         else:
         # Check necessary and optional prerequisites
@@ -1187,7 +1200,7 @@ for state_db in STATE_DBs:
                 db[state_db].write_record_and_buffer(current_state[state_db])
         # Search for the compliant state
             if necessary_pass:
-                STATES[state_db][current_state[state_db]]['routines']['search'](state_db)
+                STATES[state_db][current_state[state_db]['state']]['routines']['search'](state_db)
     # Set the state initialization if necessary
         if not(current_state[state_db]['initialized']):
         # Update the state variable
@@ -1198,7 +1211,7 @@ for state_db in STATE_DBs:
     for state_db in STATE_DBs:
     # If compliant,
         if current_state[state_db]['compliance'] == True:
-            STATES[state_db][current_state[state_db]]['routines']['operate'](state_db)
+            STATES[state_db][current_state[state_db]['state']]['routines']['operate'](state_db)
 
 # Check the Communications Queue ----------------------------------------------
     for message in range(len(comms.get_queue())):

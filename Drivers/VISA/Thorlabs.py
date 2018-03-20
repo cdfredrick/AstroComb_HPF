@@ -7,9 +7,30 @@ Created on Mon Dec 18 2017
 """
 
 #Astrocomb imports
-import VisaObjects as vo
-import EventLog as log
-import AcExceptions
+import Drivers.VISA.VISAObjects as vo
+from Drivers.Logging import ACExceptions
+from Drivers.Logging import EventLog as log
+
+from functools import wraps
+
+
+# %% Local Functions
+
+@log.log_this()
+def _auto_connect(func):
+    """A function decorator that handles automatic connections."""
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        """Wrapped function"""
+        if self.auto_connect:
+            self.open_resource()
+            result = func(self, *args, **kwargs)
+            self.close_resource()
+            return result
+        else:
+            result = func(self, *args, **kwargs)
+            return result
+    return wrapper
 
 
 # %% Thorlabs MDT693B
@@ -19,16 +40,27 @@ class MDT639B(vo.VISA):
     def __init__(self, visa_address, res_manager=None):
         super(MDT639B, self).__init__(visa_address, res_manager=res_manager)
         if self.resource is None:
-            raise AcExceptions.VirtualDeviceError(
+            raise ACExceptions.VirtualDeviceError(
                 'Could not create piezo instrument!', self.__init__)
-        self.resource.read_termination = '\r>'
+        self.open_resource()
+        self.read_termination = r'>'
+        self.write_termination = '\r'
+        self.close_resource()
         self.echo(set_echo=False)
-        self.x_min()
-        self.x_max()
-        self.y_min()
-        self.y_max()
-        self.z_min()
-        self.z_max()
+        self.x_min_limit()
+        self.x_max_limit()
+        self.y_min_limit()
+        self.y_max_limit()
+        self.z_min_limit()
+        self.z_max_limit()
+    
+    @vo._handle_visa_error
+    @_auto_connect
+    @log.log_this()
+    def query(self, message, delay=None):
+        self.resource.write(message, termination=self.write_termination)
+        result = self.resource.read(termination=self.read_termination).strip()
+        return result
     
     @log.log_this()
     def identification(self):
@@ -63,7 +95,7 @@ class MDT639B(vo.VISA):
         Gets output voltage limit switch setting (0=75V, 1=100V, 2=150V).
         '''
     # Send query
-        result = self.query()
+        result = self.query('vlimit?')
         return float(result.strip('[]'))
     
     @log.log_this()
@@ -92,7 +124,7 @@ class MDT639B(vo.VISA):
         if set_action is None:
         # Send query
             result = self.query('msenable?')
-            return bool(result)
+            return bool(float(result))
         else:
         #Limit range
             set_action = vo.tf_to_10(set_action)
@@ -100,7 +132,7 @@ class MDT639B(vo.VISA):
             self.query('msenable={:}'.format(set_action))
     
     @log.log_this()
-    def x_min(self, set_min=None):
+    def x_min_limit(self, set_min=None):
         '''
         The minimum output voltage limit for the x axis
         '''
@@ -119,7 +151,7 @@ class MDT639B(vo.VISA):
             self.query('xmin={:f}'.format(set_min))
     
     @log.log_this()
-    def x_max(self, set_max=None):
+    def x_max_limit(self, set_max=None):
         '''
         The maximum output voltage limit for the x axis
         '''
@@ -157,7 +189,7 @@ class MDT639B(vo.VISA):
             self.query('xvoltage={:f}'.format(set_voltage))
     
     @log.log_this()
-    def y_min(self, set_min=None):
+    def y_min_limit(self, set_min=None):
         '''
         The minimum output voltage limit for the y axis
         '''
@@ -176,7 +208,7 @@ class MDT639B(vo.VISA):
             self.query('ymin={:f}'.format(set_min))
     
     @log.log_this()
-    def y_max(self, set_max=None):
+    def y_max_limit(self, set_max=None):
         '''
         The maximum output voltage limit for the y axis
         '''
@@ -214,7 +246,7 @@ class MDT639B(vo.VISA):
             self.query('yvoltage={:f}'.format(set_voltage))
     
     @log.log_this()
-    def z_min(self, set_min=None):
+    def z_min_limit(self, set_min=None):
         '''
         The minimum output voltage limit for the z axis
         '''
@@ -233,7 +265,7 @@ class MDT639B(vo.VISA):
             self.query('zmin={:f}'.format(set_min))
     
     @log.log_this()
-    def z_max(self, set_max=None):
+    def z_max_limit(self, set_max=None):
         '''
         The maximum output voltage limit for the z axis
         '''

@@ -1010,7 +1010,7 @@
         <item row="0" column="0">
          <widget class="QTabWidget" name="tabWidget_3">
           <property name="currentIndex">
-           <number>1</number>
+           <number>0</number>
           </property>
           <widget class="QWidget" name="tab_6">
            <attribute name="title">
@@ -2839,7 +2839,7 @@
                     <item row="3" column="0">
                      <widget class="QLabel" name="label_2">
                       <property name="text">
-                       <string>Setpoint</string>
+                       <string>Feedback</string>
                       </property>
                      </widget>
                     </item>
@@ -3266,7 +3266,7 @@
             <item row="0" column="0">
              <widget class="QTabWidget" name="tabWidget_5">
               <property name="currentIndex">
-               <number>0</number>
+               <number>5</number>
               </property>
               <widget class="QWidget" name="tab_15">
                <attribute name="title">

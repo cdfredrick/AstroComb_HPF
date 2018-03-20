@@ -254,10 +254,11 @@ class AiTask(InTask):
             -The max_rate is the fixed rate of samples per second. This rate is
             evenly split between the channels in the task.
         cont_buffer_size:
-            -The size of the sample buffer per channel. This value must be 
+            -The size of the sample buffer. This value must be 
             larger than the number of samples obtained by the DAQ between calls
             to the "read" function during continuous acquisition or an
-            error will be thrown.
+            error will be thrown. This buffer is evenly split between the
+            channels in the task.
         timeout:
             -The time in seconds before trying to start the task times out.
         '''
@@ -276,7 +277,7 @@ class AiTask(InTask):
                     max_val=config['max_val'])
         # Configure timing
         self.rate = float(max_rate)/len(config_list)
-        self.buffer_size = int(cont_buffer_size)
+        self.buffer_size = int(cont_buffer_size/len(config_list))
         self.task_cont.timing.cfg_samp_clk_timing(
                 self.rate,
                 sample_mode=SAMP_CONTINUOUS,

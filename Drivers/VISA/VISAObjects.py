@@ -37,7 +37,7 @@ from pyvisa import errors as visa_errors # for error handling
 
 #Astrocomb imports
 from Drivers.Logging import EventLog as log
-from Drivers.Logging import AcExceptions
+from Drivers.Logging import ACExceptions
 
 
 # %% Constants
@@ -63,9 +63,8 @@ def _handle_visa_error(func):
         try:
             result = func(self, *args, **kwargs)
             return result
-        except:
+        except Exception as first_error:
             try:
-                self.auto_connect = False
                 self.clear_resource()
             except:
                 pass
@@ -73,7 +72,7 @@ def _handle_visa_error(func):
                 self.close_resource()
             except:
                 pass
-            raise
+            raise first_error
     return wrapper
 
 @log.log_this()
@@ -152,7 +151,7 @@ class VISA(object):
             self.valid_resource = True
         else:
             self.valid_resource = False
-            raise AcExceptions.VisaConnectionError('No device at {:}'.format(self.address), self.check_resource)
+            raise ACExceptions.VisaConnectionError('No device at {:}'.format(self.address), self.check_resource)
     
     @_handle_visa_error
     @log.log_this()
@@ -214,7 +213,6 @@ class VISA(object):
         '''
         self.resource.write(message, termination=termination, encoding=encoding)
     
-    @_handle_visa_error
     @_auto_connect
     @log.log_this()
     def clear_resource(self):

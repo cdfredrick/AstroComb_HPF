@@ -52,9 +52,9 @@ Set TEC:
 
 # %% Modules
 #Astrocomb imports
-import VisaObjects as vo
-import EventLog as log
-import AcExceptions
+import Drivers.VISA.VISAObjects as vo
+from Drivers.Logging import ACExceptions
+from Drivers.Logging import EventLog as log
 
 from functools import wraps
 
@@ -104,7 +104,7 @@ class LDC3900(vo.VISA):
     def __init__(self, visa_address, res_manager=None):
         super(LDC3900, self).__init__(visa_address, res_manager=res_manager)
         if self.resource is None:
-            raise AcExceptions.VirtualDeviceError(
+            raise ACExceptions.VirtualDeviceError(
                 'Could not create ILX instrument!', self.__init__)
         self.radix(set_radix='DEC')
     
@@ -213,27 +213,27 @@ class LaserModule(LDC3900):
         self.las_channel = laser_channel
         self.las_open_command = 'LAS:CHAN {:}'.format(self.las_channel)
     
-    @vo.handle_visa_error
+    @vo._handle_visa_error
     @log.log_this()
     def open_las(self):
         self.open_resource()
         self.resource.write(self.las_open_command)
     
-    @vo.handle_visa_error
+    @vo._handle_visa_error
     @_auto_connect_las
     @log.log_this()
     def query_las(self, message, delay=None):
-        result = self.resource.query('LAS:'+message, delay=delay)
+        result = self.resource.query('LAS:'+message, delay=delay).strip()
         return result
     
-    @vo.handle_visa_error
+    @vo._handle_visa_error
     @_auto_connect_las
     @log.log_this()
     def write_las(self, message, termination=None, encoding=None):
         self.resource.write('LAS:'+message, termination=termination, encoding=encoding)
     
     @log.log_this()
-    def laser_channel(self):
+    def get_laser_channel(self):
         '''
         The LASer:CHAN? query returns the channel number of the LASER module
         which has been selected for display and adjustment. If no LASER channels
@@ -243,7 +243,7 @@ class LaserModule(LDC3900):
         '''
     # Send query
         result = self.write_las('CHAN?')
-        return int(result)
+        return int(float(result))
     
     @log.log_this()
     def laser_status(self):
@@ -532,7 +532,7 @@ class LaserModule(LDC3900):
         if set_limit is None:
         # Send query
             result = self.query_las('LIM:I?')
-            return int(result)
+            return int(float(result))
         else:
         # Limit range
             set_limit = int(abs(set_limit))
@@ -553,7 +553,7 @@ class LaserModule(LDC3900):
         if set_limit is None:
         # Send query
             result = self.query_las('LIM:MDP?')
-            return int(result)
+            return int(float(result))
         else:
         # Limit range
             set_limit = int(abs(set_limit))
@@ -609,7 +609,7 @@ class LaserModule(LDC3900):
         if output is None:
         # Send query
             result = self.query_las('OUT?')
-            return bool(result)
+            return bool(float(result))
         else:
         # Limit range
             output = vo.tf_to_10(output)
@@ -625,27 +625,27 @@ class TECModule(LDC3900):
         self.tec_open_command = 'LAS:CHAN {:}'.format(self.tec_channel)
         self.tec_step_size = self.tec_step()
     
-    @vo.handle_visa_error
+    @vo._handle_visa_error
     @log.log_this()
     def open_tec(self):
         self.open_resource()
         self.resource.write(self.tec_open_command)
     
-    @vo.handle_visa_error
+    @vo._handle_visa_error
     @_auto_connect_tec
     @log.log_this()
     def query_tec(self, message, delay=None):
-        result = self.resource.query('TEC:'+message, delay=delay)
+        result = self.resource.query('TEC:'+message, delay=delay).strip()
         return result
     
-    @vo.handle_visa_error
+    @vo._handle_visa_error
     @_auto_connect_tec
     @log.log_this()
     def write_tec(self, message, termination=None, encoding=None):
         self.resource.write('TEC:'+message, termination=termination, encoding=encoding)
     
     @log.log_this()
-    def tec_channel(self):
+    def get_tec_channel(self):
         '''
         The TEC:CHAN? query returns the channel number of the TEC module which 
         has been selected for display and adjustment. The response is the 
@@ -654,7 +654,7 @@ class TECModule(LDC3900):
         '''
     # Send query
         result = self.query_tec('CHAN?')
-        return int(result)
+        return int(float(result))
     
     @log.log_this()
     def tec_status(self):
@@ -783,7 +783,7 @@ class TECModule(LDC3900):
          at power−up (as they were at power−down) unless the power−on status 
          clear flag is set true.
         '''
-        if enable_bits:
+        if enable_bits is None:
         # Send query
             result = self.query_tec('ENAB:COND?')
         # Parse result
@@ -909,7 +909,7 @@ class TECModule(LDC3900):
         if set_gain is None:
         # Send query
             result = self.query_tec('GAIN?')
-            return int(result)
+            return int(float(result))
         else:
         # Send command
             self.write_tec('GAIN {:}'.format(int(set_gain)))
@@ -1024,7 +1024,7 @@ class TECModule(LDC3900):
         if output is None:
         # Send query
             result = self.query_tec('OUT?')
-            return bool(result)
+            return bool(float(result))
         else:
         # Limit range
             output = vo.tf_to_10(output)
@@ -1052,7 +1052,7 @@ class TECModule(LDC3900):
         '''
     # Send query
         result = self.query_tec('SEN?')
-        return int(result)
+        return int(float(result))
     
     @log.log_this()
     def tec_resistance_setpoint(self, set_resistance=None):
@@ -1217,7 +1217,7 @@ class TECModule(LDC3900):
         if step is None:
         # Send query
             result = self.query_tec('STEP?')
-            return int(result)
+            return int(float(result))
         else:
         # Limit range
             if step < -9999:

@@ -5,8 +5,8 @@ Created on Tue Nov 28 13:14:23 2017
 @author: cdf1
 """
 # %% Modules
-import Drivers.VISA.VisaObjects as vo
-from Drivers.Logging import AcExceptions
+import Drivers.VISA.VISAObjects as vo
+from Drivers.Logging import ACExceptions
 from Drivers.Logging import EventLog as log
 import math
 
@@ -37,7 +37,7 @@ class SIM900(vo.VISA):
     def __init__(self, visa_address, port, res_manager=None):
         super(SIM900, self).__init__(visa_address, res_manager=res_manager)
         if self.resource is None:
-            raise AcExceptions.VirtualDeviceError('Could not create SRS SIM900 instrument!', self.__init__)
+            raise ACExceptions.VirtualDeviceError('Could not create SRS SIM900 instrument!', self.__init__)
         self.clear_resource()
         self.port = port
         self.open_command = 'CONN '+str(self.port)+',"xyz"'
@@ -59,14 +59,14 @@ class SIM900(vo.VISA):
     @_auto_connect
     @log.log_this()
     def query(self, message, delay=None):
-        result = self.resource.query(message, delay=delay)
+        result = self.resource.query(message, delay=delay).strip()
         return result
 
     @vo._handle_visa_error
     @_auto_connect
     @log.log_this()
     def read(self, termination=None, encoding=None):
-        result = self.resource.read(termination=termination, encoding=encoding)
+        result = self.resource.read(termination=termination, encoding=encoding).strip()
         return result
     
     @vo._handle_visa_error
@@ -77,10 +77,10 @@ class SIM900(vo.VISA):
 
 
 # %% SIM960 PID Controller
-class SRS_SIM960(SIM900):
+class SIM960(SIM900):
     @log.log_this()
     def __init__(self, visa_address, port, res_manager=None):
-        super(SRS_SIM960, self).__init__(visa_address, port, res_manager=res_manager)
+        super(SIM960, self).__init__(visa_address, port, res_manager=res_manager)
         self.token_mode(set_mode=0)
         self.lower_limit = self.lower_output_limit()
         self.upper_limit = self.upper_output_limit()
@@ -95,7 +95,7 @@ class SRS_SIM960(SIM900):
         if set_action is None:
         # Send query
             result = self.query('PCTL?')
-            return bool(result)
+            return bool(float(result))
         else:
         # Limit range
             set_action = vo.tf_to_10(set_action)
@@ -111,7 +111,7 @@ class SRS_SIM960(SIM900):
         if set_action is None:
         # Send query
             result = self.query('ICTL?')
-            return bool(result)
+            return bool(float(result))
         else:
         # Limit range
             set_action = vo.tf_to_10(set_action)
@@ -127,7 +127,7 @@ class SRS_SIM960(SIM900):
         if set_action is None:
         # Send query
             result = self.query('DCTL?')
-            return bool(result)
+            return bool(float(result))
         else:
         # Limit range
             set_action = vo.tf_to_10(set_action)
@@ -143,7 +143,7 @@ class SRS_SIM960(SIM900):
         if set_action is None:
         # Send query
             result = self.query('OCTL?')
-            return bool(result)
+            return bool(float(result))
         else:
         # Limit range
             set_action = vo.tf_to_10(set_action)
@@ -183,7 +183,7 @@ class SRS_SIM960(SIM900):
         if set_polarity is None:
         # Send query
             result = self.query('APOL?')
-            return bool(result)
+            return bool(float(result))
         else:
         # Limit range
             set_polarity = vo.tf_to_10(set_polarity)
@@ -262,7 +262,7 @@ class SRS_SIM960(SIM900):
         if set_action is None:
         # Send query
             result = self.query('AMAN?')
-            return bool(result)
+            return bool(float(result))
         else:
         # Limit range
             set_action = vo.tf_to_10(set_action)
@@ -277,7 +277,7 @@ class SRS_SIM960(SIM900):
         if set_action is None:
         # Send query
             result = self.query('INPT?')
-            return bool(result)
+            return bool(float(result))
         else:
         # Limit range
             set_action = vo.tf_to_10(set_action)
@@ -313,7 +313,7 @@ class SRS_SIM960(SIM900):
         if set_action is None:
         # Send query
             result = self.query('RAMP?')
-            return bool(result)
+            return bool(float(result))
         else:
         # Limit range
             set_action = vo.tf_to_10(set_action)
@@ -536,10 +536,10 @@ class SRS_SIM960(SIM900):
             self.write('DISX {:}'.format(['OFF','ON'][set_display]))
 
 # %% SIM940 10 MHz Rubidium Oscillator
-class SRS_SIM940(SIM900):
+class SIM940(SIM900):
     @log.log_this()
     def __init__(self, visa_address, port, res_manager=None):
-        super(SRS_SIM940, self).__init__(visa_address, port, res_manager=res_manager)
+        super(SIM940, self).__init__(visa_address, port, res_manager=res_manager)
         self.resource.open_resource()
         self.resource.read_termination = '\r'
         self.resource.write_termination = '\r'

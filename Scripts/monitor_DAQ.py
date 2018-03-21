@@ -656,14 +656,20 @@ def queue_and_reserve(state_db):
         device_db ='monitor_DAQ/device_DAQ_analog_in'
         queue_position = dev[device_db]['queue'].position()
         if (queue_position < 0):
+            queue_size = len(dev[device_db]['queue'].get_queue())
         # Add to queue
             dev[device_db]['queue'].push()
         elif (queue_position == 0):
-        # Reserve and start the DAQ
-            dev[device_db]['driver'].reserve_cont(True)
-        # Update the state variable
-            current_state[state_db]['compliance'] = True
-            db[state_db].write_record_and_buffer(current_state[state_db])
+            queue_size = len(dev[device_db]['queue'].get_queue())
+            if (queue_size == 1):
+            # Reserve and start the DAQ
+                dev[device_db]['driver'].reserve_cont(True)
+            # Update the state variable
+                current_state[state_db]['compliance'] = True
+                db[state_db].write_record_and_buffer(current_state[state_db])
+            else:
+            # Start over if something else is in the queue
+                dev[device_db]['queue'].remove()
 
 # Maintain Functions ----------------------------------------------------------
 '''This section is for defining the methods needed to maintain the system in
@@ -675,8 +681,9 @@ def touch(state_db):
         device_db ='monitor_DAQ/device_DAQ_analog_in'
         queue_size = len(dev[device_db]['queue'].get_queue())
         if (queue_size != 1):
-        # Unreserve DAQ
+        # Unreserve and dequeue DAQ
             dev[device_db]['driver'].reserve_cont(False)
+            dev[device_db]['queue'].remove()
         # Update state variable
             current_state[state_db]['compliance'] = False
             db[state_db].write_record_and_buffer(current_state[state_db])

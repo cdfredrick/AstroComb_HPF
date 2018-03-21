@@ -425,13 +425,13 @@ DEVICE_SETTINGS = {
                 '__init__':[['ASRL1::INSTR', 3]],
                 'proportional_action':True, 'integral_action':True,
                 'derivative_action':False, 'offset_action':None, 'offset':None,
-                'proportional_gain':None, 'integral_gain':None, 'pid_action':None,
+                'proportional_gain':-0.2, 'integral_gain':1.0e2, 'pid_action':None,
                 'external_setpoint_action':False, 'internal_setpoint':0.000,
-                'ramp_action':False, 'manual_output':None, 'upper_output_limit':None,
-                'lower_output_limit':None, 'power_line_frequency':60},
+                'ramp_action':False, 'manual_output':None,
+                'upper_output_limit':2.00, 'lower_output_limit':0.00, 'power_line_frequency':60},
         'filter_cavity/device_HV':{
                 '__init__':[['ASRL30::INSTR']], 'master_scan_action':False,
-                'y_min_limit':0.00, 'y_max_limit':150.00, 'y_voltage':None},
+                'y_min_limit':0.00, 'y_max_limit':150.00, 'y_voltage':99.1},
         # DAQ settings
         'filter_cavity/device_DAQ_Vout_vs_reflect':{
                 '__init__':[
@@ -732,6 +732,11 @@ def find_lock(state_db, last_good_position=None):
                 {'upper_output_limit':STATES[state_db][current_state[state_db]['state']]['settings'][device_db]['upper_output_limit'],
                  'lower_output_limit':STATES[state_db][current_state[state_db]['state']]['settings'][device_db]['lower_output_limit']}]
         update_device_settings(device_db, settings_list)
+        settings_list = [
+                {'y_min_limit':STATES[state_db][current_state[state_db]['state']]['settings']['filter_cavity/device_HV']['y_min_limit'],
+                 'y_max_limit':STATES[state_db][current_state[state_db]['state']]['settings']['filter_cavity/device_HV']['y_max_limit']},
+                 {'y_voltage':STATES[state_db][current_state[state_db]['state']]['settings']['filter_cavity/device_HV']['y_voltage']}]
+        update_device_settings('filter_cavity/device_HV', settings_list)
     # Reinitialize threshold variables --------------------
         v_high = (1-v_range_threshold)*dev[device_db]['driver'].upper_limit + v_range_threshold*dev[device_db]['driver'].lower_limit
         v_low = (1-v_range_threshold)*dev[device_db]['driver'].lower_limit + v_range_threshold*dev[device_db]['driver'].upper_limit
@@ -741,7 +746,7 @@ def find_lock(state_db, last_good_position=None):
         daq_db = 'filter_cavity/device_DAQ_Vout_vs_reflect'
         dev[daq_db]['queue'].queue_and_wait(priority=True)
     # Get lock point data ---------------------------------
-        x = np.linspace(v_low, v_high, 50)
+        x = np.linspace(v_low, v_high, 200)
         y = np.copy(x)
         w = np.copy(x)
         for ind, x_val in enumerate(x):
@@ -767,6 +772,7 @@ def find_lock(state_db, last_good_position=None):
         #Coarse Estimate ------------------------
         min_index = np.argmin(y)
         output_coarse = x[min_index]
+        #new_output = output_coarse
         #Fine Estimate --------------------------
         try:
             spline = UnivariateSpline(x, y, w=w)
@@ -827,7 +833,7 @@ def transfer_to_manual(state_db):
 # Maintain Functions ----------------------------------------------------------
 '''This section is for defining the methods needed to maintain the system in
     its defined states.'''
-v_std_threshold = 10 # standard deviations
+v_std_threshold = 5 # standard deviations
 lock_age_threshold = 30.0 #s
 def keep_lock(state_db):
     locked = True
@@ -899,6 +905,9 @@ def keep_lock(state_db):
             v_std = np.std(data - v_avg_slope*np.arange(len(data)))
             upper_limit = round(v_expected + (v_std_threshold*v_std)/(1-2*v_range_threshold),2)
             lower_limit = round(v_expected - (v_std_threshold*v_std)/(1-2*v_range_threshold),2)
+            if (upper_limit - lower_limit) < 0.5:
+                upper_limit = round(v_expected + 0.25,2)
+                lower_limit = round(v_expected - 0.25,2)
         # Restrict the results
             update = True
             if upper_limit == lower_limit:
@@ -1081,10 +1090,10 @@ STATES = {
                                 'filter_cavity/device_PID':{
                                         'proportional_action':True, 'integral_action':True,
                                         'derivative_action':False,
-                                        'proportional_gain':-3.0e0, 'integral_gain':5.0e2,
-                                        'upper_output_limit':8.00, 'lower_output_limit':0.00},
+                                        'proportional_gain':-0.2, 'integral_gain':1.0e2,
+                                        'upper_output_limit':2.00, 'lower_output_limit':0.00},
                                 'filter_cavity/device_HV':{
-                                        'y_min_limit':0.00, 'y_max_limit':60.00, 'y_voltage':0.00}},
+                                        'y_min_limit':0.00, 'y_max_limit':150.00, 'y_voltage':99.1}},
                         'prerequisites':{
                                 'critical':[],
                                 'necessary':[],

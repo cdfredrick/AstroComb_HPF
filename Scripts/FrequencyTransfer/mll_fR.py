@@ -708,7 +708,7 @@ def monitor(state_db):
 from scipy.optimize import curve_fit
 v_range_threshold = 0.1 #(limit-threshold)/(upper - lower limits)
 t_setpoint_threshold = 0.02 #kOhm
-tec_adjust_interval = 0.5 #s
+tec_adjust_interval = 1.0 #s
 lock_hold_interval = 1.0 #s
 timer['find_lock:locked'] = time.time()
 timer['find_lock:tec_adjust'] = time.time()
@@ -903,7 +903,7 @@ def transfer_to_manual(state_db):
 # Maintain Functions ----------------------------------------------------------
 '''This section is for defining the methods needed to maintain the system in
     its defined states.'''
-v_std_threshold = 10 # standard deviations
+v_std_threshold = 5 # standard deviations
 lock_age_threshold = 30.0 #s
 def keep_lock(state_db):
     locked = True
@@ -975,6 +975,9 @@ def keep_lock(state_db):
             v_std = np.std(data - v_avg_slope*np.arange(len(data)))
             upper_limit = round(v_expected + (v_std_threshold*v_std)/(1-2*v_range_threshold),2)
             lower_limit = round(v_expected - (v_std_threshold*v_std)/(1-2*v_range_threshold),2)
+            if (upper_limit - lower_limit) < 0.5:
+                upper_limit = round(v_expected + 0.25,2)
+                lower_limit = round(v_expected - 0.25,2)
         # Restrict the results
             update = True
             if upper_limit == lower_limit:

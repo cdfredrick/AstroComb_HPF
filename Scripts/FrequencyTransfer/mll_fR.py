@@ -922,6 +922,8 @@ def keep_lock(state_db):
     current_limits['max'] = dev[device_db]['driver'].upper_limit
     v_high = (1-v_range_threshold)*current_limits['max'] + v_range_threshold*current_limits['min']
     v_low = (1-v_range_threshold)*current_limits['min'] + v_range_threshold*current_limits['max']
+    v_high2 = (1-v_range_threshold*2)*current_limits['max'] + v_range_threshold*2*current_limits['min']
+    v_low2 = (1-v_range_threshold*2)*current_limits['min'] + v_range_threshold*2*current_limits['max']
     state_limits = {
             'upper_output_limit':STATES[state_db][current_state[state_db]['state']]['settings'][device_db]['upper_output_limit'],
             'lower_output_limit':STATES[state_db][current_state[state_db]['state']]['settings'][device_db]['lower_output_limit']}
@@ -938,10 +940,10 @@ def keep_lock(state_db):
         # It is not locked
             locked = False
     # TODO: check error signal std
+# Remove SRS PID controller from queue
+    dev[device_db]['queue'].remove()
 # If not locked -----------------------------------------------------
     if not(locked):
-    # Remove SRS PID controller from queue
-        dev[device_db]['queue'].remove()
     # Update state variable
         current_state[state_db]['compliance'] = False
         db[state_db].write_record_and_buffer(current_state[state_db])
@@ -960,56 +962,22 @@ def keep_lock(state_db):
     else:
     # If the system is at a new lock point, reinitialize the local monitors
         if (not(lock_age_condition) and not(no_new_limits_condition)):
-        # Remove SRS PID controller from queue
-            dev[device_db]['queue'].remove()
         # Reinitialize the output voltage monitor
             mon['mll_fR/PID_output']['data'] = np.array([])
             mon['mll_fR/PID_output']['new'] = False
-    # If the system is at a stable lock point, adjust the hardware voltage limits
+    # If the system is at a stable lock point, adjust the temperature if necessary
         elif (lock_age_condition and new_output_condition):
-        # Calculate the new limit thresholds
-            data = mon['mll_fR/PID_output']['data']
-            v_avg = np.mean(data)
-            v_avg_slope = np.mean(np.diff(data))/(len(data)-1)
-            v_expected = v_avg + v_avg_slope*len(data)/2
-            v_std = np.std(data - v_avg_slope*np.arange(len(data)))
-            upper_limit = round(v_expected + (v_std_threshold*v_std)/(1-2*v_range_threshold),2)
-            lower_limit = round(v_expected - (v_std_threshold*v_std)/(1-2*v_range_threshold),2)
-            if (upper_limit - lower_limit) < 0.5:
-                upper_limit = round(v_expected + 0.25,2)
-                lower_limit = round(v_expected - 0.25,2)
-        # Restrict the results
-            update = True
-            if upper_limit == lower_limit:
-                update = False
-            elif (upper_limit >= state_limits['upper_output_limit']) and (lower_limit <= state_limits['lower_output_limit']):
-                update = False
-            elif (upper_limit > state_limits['upper_output_limit']):
-                upper_limit = state_limits['upper_output_limit']
-            elif (lower_limit < state_limits['lower_output_limit']):
-                lower_limit = state_limits['lower_output_limit']
-            if (upper_limit == current_limits['max']) and (lower_limit == current_limits['min']):
-                update = False
-        # Update the hardware limits
+            update = False
+            upper_limit_condition = (current_output > v_high2)
+            lower_limit_condition = (current_output < v_low2)
+            if upper_limit_condition or lower_limit_condition:
+                update = True
+        # Update the temperature setpoint
             if not(update):
-            # Remove SRS PID controller from queue
-                dev[device_db]['queue'].remove()
+                pass
             else:
-            # Update the limits
-                settings_list = {
-                        'upper_output_limit':upper_limit,
-                        'lower_output_limit':lower_limit}
-                update_device_settings(device_db, settings_list, write_log=False)
-            # Remove SRS PID controller from queue
-                dev[device_db]['queue'].remove()
-            # Update the voltage limit monitor
-                mon['mll_fR/PID_output_limits']['new'] = True
-                mon['mll_fR/PID_output_limits']['data'] = {'min':lower_limit, 'max':upper_limit}
-                db['mll_fR/PID_output_limits'].write_record_and_buffer({'min':lower_limit, 'max':upper_limit})
             # If approaching the state limits, adjust the temperature setpoint
                 adjustment_interval_condition = ((time.time()-timer['find_lock:tec_adjust']) > tec_adjust_interval)
-                upper_limit_condition = (upper_limit == state_limits['upper_output_limit'])
-                lower_limit_condition = (lower_limit == state_limits['lower_output_limit'])
                 if (adjustment_interval_condition and (upper_limit_condition or lower_limit_condition)):
                 # Queue the ILX TEC controller --------------------------------------
                     device_db = 'mll_fR/device_TEC'
@@ -1018,12 +986,12 @@ def keep_lock(state_db):
                     timer['find_lock:tec_adjust'] = time.time()
                 # Adjust the setpoint
                     if lower_limit_condition:
-                        log_str = 'Lower voltage limit = {:.3f}, raising the resistance setpoint'.format(lower_limit)
+                        log_str = 'Voltage = {:.3f}, raising the resistance setpoint'.format(current_output)
                         log.log_info(__name__, 'keep_lock', log_str)
                     # Raise the resistance setpoint
                         dev[device_db]['driver'].tec_step(+1)
                     elif upper_limit_condition:
-                        log_str = 'Upper voltage limit = {:.3f}, lowering the resistance setpoint'.format(upper_limit)
+                        log_str = 'Voltage = {:.3f}, lowering the resistance setpoint'.format(current_output)
                         log.log_info(__name__, 'keep_lock', log_str)
                     # Lower the resistance setpoint
                         dev[device_db]['driver'].tec_step(-1)

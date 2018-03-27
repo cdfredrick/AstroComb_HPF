@@ -1,0 +1,61 @@
+--------------------------------------------------------------------------------
+TRIPPLITE WEB/SNMP CARD MIBS
+Version:    15.00
+Date:       July 1,2016
+Copyright <cp> 2016 TRIPP LITE  All Rights Reserved.
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+NOTE:
+--------------------------------------------------------------------------------
+
+Please consult the Owner's Manual of your WEBCARDLX, SNMPWEBCARD or 
+Network-ready Tripp Lite product for further information about using SNMP.  
+
+The latest versions of Owner's Manuals and MIBs are always available for 
+download from www.tripplite.com.
+
+
+This distribution contains the MIB files used by most Tripp Lite Products.
+
+--------------------------------------------------------------------------------
+DESCRIPTION OF THE INCLUDED MIB FILES:
+--------------------------------------------------------------------------------
+
+    TRIPPLITE.MIB
+    This is the base MIB for Tripp Lite WEBCARDLX, SNMPWEBCARD and network-ready
+    Tripp Lite products. Load this MIB before loading other TRIPP LITE MIBs.
+
+    TRIPPLITE_PRODUCTS.MIB
+    This MIB is used with the WEBCARDLX family of products
+
+    TRIPPLITE_12X.MIB
+    This MIB is used with the SNMPWEBCARD family of products
+
+    RFC-1628-UPS.MIB
+    Industry standard MIB for managing uninterruptible power supply (UPS) 
+    systems
+    
+
+--------------------------------------------------------------------------------
+INSTRUCTIONS FOR LOADING THE TRIPP LITE WEB/SNMP CARD MIBS AND RFC1628 MIB:
+--------------------------------------------------------------------------------
+
+1)  Download and uncompress the appropriate MIB package for your operating 
+    system (either TRIPPLITE-MIB.zip or TRIPPLITE-MIB.tar.gz) onto your NMS.
+
+    This operation will yield four individual MIB files and this README.TXT
+    file.
+
+2)  Load/compile the four individual MIB files onto your NMS in 
+    the following order:
+
+    TRIPPLITE.MIB            (Load First)
+    TRIPPLITE_PRODUCTS.MIB   (If WEBCARDLX family SNMP/Web Interface 
+                              cards will be monitored)
+    TRIPPLITE_12X.MIB        (If SNMPWEBCARD family SNMP/Web Interface 
+                              cards will be monitored)       
+    RFC-1628-UPS.MIB         (Load last, if desired)
+
+    The order is important. Please be sure to load the appropriate MIB files for
+    your system in the correct order.

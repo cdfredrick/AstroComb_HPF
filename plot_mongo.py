@@ -18,7 +18,7 @@ central_tz = pytz.timezone('US/Central')
 utc_tz = pytz.utc
 
 # %% Choose data
-start_time = central_tz.localize(datetime.datetime(2018, 3, 23, 12))
+start_time = central_tz.localize(datetime.datetime(2018, 3, 26, 12))
 stop_time = central_tz.localize(datetime.datetime.now())
 DBs = {
         'ambience/box_temperature_0':{
@@ -71,11 +71,11 @@ for database in DBs:
 plt.legend()
 
 # %% 
-start = 0
-stop = -1
-db = 'ambience/rack_temperature_0'
-freqs = np.fft.rfftfreq(len(data[db]['_timestamp'][start:stop]), d=np.mean(np.diff(data[db]['_timestamp'][start:stop])).total_seconds())
-amps = np.fft.rfft((data[db]['V'][start:stop]-np.mean(data[db]['V'][start:stop]))*np.hanning(len(data[db]['V'][start:stop])))
-
-plt.clf()
-plt.plot(freqs*60*60, np.abs(amps)**2)
+#start = 0
+#stop = -1
+#db = 'ambience/rack_temperature_0'
+#freqs = np.fft.rfftfreq(len(data[db]['_timestamp'][start:stop]), d=np.mean(np.diff(data[db]['_timestamp'][start:stop])).total_seconds())
+#amps = np.fft.rfft((data[db]['V'][start:stop]-np.mean(data[db]['V'][start:stop]))*np.hanning(len(data[db]['V'][start:stop])))
+#
+#plt.clf()
+#plt.plot(freqs*60*60, np.abs(amps)**2)

@@ -635,6 +635,8 @@ for database in SETTINGS:
 
 # Global Timing Variable ------------------------------------------------------
 timer = {}
+for state_db in STATE_DBs:
+    timer[state_db] = {}
 
 # Do nothing function ---------------------------------------------------------
 '''A functional placeholder for cases where nothing should happen.'''
@@ -674,36 +676,47 @@ def queue_and_reserve(state_db):
 # Maintain Functions ----------------------------------------------------------
 '''This section is for defining the methods needed to maintain the system in
     its defined states.'''
+touch_interval = 1 # second
+queue_interval = 0.2 # seconds
+for state_db in STATE_DBs:
+    timer[state_db]['touch'] = get_lap(touch_interval)
+    timer[state_db]['queue'] = get_lap(queue_interval)
 def touch(state_db):
 # if alone in the queue, touch. otherwise  if at the top of the queue, unreserve cont. and remove from queue 
     # have a switch for each state_db, either analog in or diggital in
     if (state_db == 'monitor_DAQ/state_analog'):
-        device_db ='monitor_DAQ/device_DAQ_analog_in'
-        queue_size = len(dev[device_db]['queue'].get_queue())
-        if (queue_size != 1):
-        # Unreserve and dequeue DAQ
-            dev[device_db]['driver'].reserve_cont(False)
-            dev[device_db]['queue'].remove()
-        # Update state variable
-            current_state[state_db]['compliance'] = False
-            db[state_db].write_record_and_buffer(current_state[state_db])
-        else:
-        # Touch queue (prevent timeout)
-            dev[device_db]['queue'].touch()
+        queue_lap = get_lap(queue_interval)
+        if queue_lap > timer[state_db]['queue']:
+            timer[state_db]['queue'] = queue_lap
+            device_db ='monitor_DAQ/device_DAQ_analog_in'
+            queue_size = len(dev[device_db]['queue'].get_queue())
+            if (queue_size != 1):
+            # Unreserve and dequeue DAQ
+                dev[device_db]['driver'].reserve_cont(False)
+                dev[device_db]['queue'].remove()
+            # Update state variable
+                current_state[state_db]['compliance'] = False
+                db[state_db].write_record_and_buffer(current_state[state_db])
+            else:
+            # Touch queue (prevent timeout)
+                touch_lap = get_lap(touch_interval)
+                if touch_lap > timer[state_db]['touch']:
+                    timer[state_db]['touch'] = touch_lap
+                    dev[device_db]['queue'].touch()
 
 # Operate Functions -----------------------------------------------------------
 '''This section is for defining the methods called only when the system is in
     its defined states.'''
 control_interval = 0.2 # s
 for state_db in STATE_DBs:
-    timer[state_db] = get_lap(control_interval)
+    timer[state_db]['data'] = get_lap(control_interval)
 def read_DAQ(state_db):
-    # have a switch for each state_db, either analog in or diggital in
+    # have a switch for each state_db, either analog in or digital in
     if (state_db == 'monitor_DAQ/state_analog'):
     # Get lap number
         new_control_lap = get_lap(control_interval)
     # Read DAQ ------------------------------------------------------
-        if (new_control_lap > timer[state_db]):
+        if (new_control_lap > timer[state_db]['data']):
             device_db = 'monitor_DAQ/device_DAQ_analog_in'
             # Double check queue
             dev[device_db]['queue'].queue_and_wait()
@@ -786,7 +799,7 @@ def read_DAQ(state_db):
                     data_mean, 500)
             db[monitor_db].write_record_and_buffer({'V':data_mean, 'std':data_std, 'ste':data_ste})
     # Propogate lap numbers ---------------------------------------------
-        timer[state_db] = new_control_lap
+        timer[state_db]['data'] = new_control_lap
 
 
 # %% States ===================================================================

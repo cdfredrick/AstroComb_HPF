@@ -1201,8 +1201,8 @@ STATES = {
     operation of the state machine logic'''
 
 # Initialize state machine timer ----------------------------------------------
-main_loop_interval = 0.2 # seconds
-main_loop_timer = get_lap(main_loop_interval)
+main_loop_interval = 0.5 # seconds
+main_loop_timer = get_lap(main_loop_interval)+1
 
 # Initialize failed prereq log timers -----------------------------------------
 '''These are set so that the logs do not become cluttered with repetitions of
@@ -1328,6 +1328,6 @@ while loop:
         main_loop_timer += 1
     else:
         log_str = "Execution time exceeded the set loop interval {:}s by {:.2g}s".format(main_loop_interval, abs(pause))
-        log.log_warning(__name__, 'main_loop', log_str)
-        main_loop_timer = get_lap(main_loop_interval)
+        log.log_debug(__name__, 'main_loop', log_str)
+        main_loop_timer = get_lap(main_loop_interval)+1
 

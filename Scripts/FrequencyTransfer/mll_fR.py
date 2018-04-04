@@ -1200,11 +1200,15 @@ STATES = {
     should not require any alteration. Changes to this section changes the
     operation of the state machine logic'''
 
+# Initialize state machine timer ----------------------------------------------
+main_loop_interval = 0.2 # seconds
+main_loop_timer = get_lap(main_loop_interval)
+
 # Initialize failed prereq log timers -----------------------------------------
 '''These are set so that the logs do not become cluttered with repetitions of
     the same failure. The timer values are used in the check_prerequisites
     function.'''
-log_failed_prereqs_interval = 60*10 #s
+log_failed_prereqs_interval = 60*10 # seconds
 log_failed_prereqs_timer = {}
 for state_db in STATE_DBs:
     log_failed_prereqs_timer[state_db] = {}
@@ -1213,6 +1217,7 @@ for state_db in STATE_DBs:
         log_failed_prereqs_timer[state_db][state]['critical'] = 0
         log_failed_prereqs_timer[state_db][state]['necessary'] = 0
         log_failed_prereqs_timer[state_db][state]['optional'] = 0
+
 # Run the main loop -----------------------------------------------------------
 '''Where the magic happens.'''
 loop = True
@@ -1316,4 +1321,13 @@ while loop:
                         necessary=necessary_pass,
                         optional=optional_pass)
 
+# Pause -----------------------------------------------------------------------
+    pause = (main_loop_timer+1)*main_loop_interval - time.time()
+    if pause > 0:
+        time.sleep(pause)
+        main_loop_timer += 1
+    else:
+        log_str = "Execution time exceeded the set loop interval {:}s by {:.2g}s".format(main_loop_interval, abs(pause))
+        log.log_warning(__name__, 'main_loop', log_str)
+        main_loop_timer = get_lap(main_loop_interval)
 

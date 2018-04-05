@@ -966,7 +966,7 @@ def keep_lock(state_db):
                 db['filter_cavity/PID_output_limits'].write_record_and_buffer({'min':new_lower_limit, 'max':new_upper_limit})
 
 def lock_disabled(state_db):
-if (mon['filter_cavity/PID_action']['data'] != False):
+    if (mon['filter_cavity/PID_action']['data'] != False):
     # Update state variable
         current_state[state_db]['compliance'] = False
         db[state_db].write_record_and_buffer(current_state[state_db])

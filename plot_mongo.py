@@ -19,29 +19,36 @@ utc_tz = pytz.utc
 
 # %% Choose data
 start_time = central_tz.localize(datetime.datetime(2018, 3, 26, 12))
-stop_time = central_tz.localize(datetime.datetime.now())
+stop_time = central_tz.localize(datetime.datetime(2018, 3, 29, 12))
 DBs = {
-        'ambience/box_temperature_0':{
-                'start':start_time,
-                'stop':stop_time,
-                'keys':{
-                        '_timestamp':lambda dt: utc_tz.localize(dt).astimezone(central_tz),
-                        'V':lambda v: v*100,
-                        'ste':lambda v: v*100}},
-        'ambience/box_temperature_1':{
-                'start':start_time,
-                'stop':stop_time,
-                'keys':{
-                        '_timestamp':lambda dt: utc_tz.localize(dt).astimezone(central_tz),
-                        'V':lambda v: v*100,
-                        'ste':lambda v: v*100}},
-        'ambience/rack_temperature_0':{
-                'start':start_time,
-                'stop':stop_time,
-                'keys':{
-                        '_timestamp':lambda dt: utc_tz.localize(dt).astimezone(central_tz),
-                        'V':lambda v: v*100,
-                        'ste':lambda v: v*100}}}
+        'filter_cavity/HV_output':{
+        'start':start_time,
+        'stop':stop_time,
+        'keys':{
+                '_timestamp':lambda dt: utc_tz.localize(dt).astimezone(central_tz),
+                'V':lambda v: v}}
+#        'ambience/box_temperature_0':{
+#                'start':start_time,
+#                'stop':stop_time,
+#                'keys':{
+#                        '_timestamp':lambda dt: utc_tz.localize(dt).astimezone(central_tz),
+#                        'V':lambda v: v*100,
+#                        'ste':lambda v: v*100}},
+#        'ambience/box_temperature_1':{
+#                'start':start_time,
+#                'stop':stop_time,
+#                'keys':{
+#                        '_timestamp':lambda dt: utc_tz.localize(dt).astimezone(central_tz),
+#                        'V':lambda v: v*100,
+#                        'ste':lambda v: v*100}},
+#        'ambience/rack_temperature_0':{
+#                'start':start_time,
+#                'stop':stop_time,
+#                'keys':{
+#                        '_timestamp':lambda dt: utc_tz.localize(dt).astimezone(central_tz),
+#                        'V':lambda v: v*100,
+#                        'ste':lambda v: v*100}}
+}
 
 
 # %% Connect to database and pull results

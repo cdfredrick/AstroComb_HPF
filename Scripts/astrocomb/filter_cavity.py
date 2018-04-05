@@ -685,7 +685,7 @@ def get_HV_data():
         timer['hv:record'] = new_record_lap
 thread['get_HV_data'] = threading.Thread(target=get_HV_data, daemon=True)
 
-control_interval = 0.2 # s
+control_interval = 0.5 # s
 passive_interval = 1.0 # s
 timer['monitor:control'] = get_lap(control_interval)
 timer['monitor:passive'] = get_lap(passive_interval)
@@ -695,7 +695,7 @@ def monitor(state_db):
     new_passive_lap = get_lap(passive_interval)
 # Update control loop variables -------------------------------------
     if (new_control_lap > timer['monitor:control']):
-        if not(thread['get_srs_data_'].is_alive()):
+        if not(thread['get_srs_data'].is_alive()):
         # Start new thread
             thread['get_srs_data'] = threading.Thread(target=get_srs_data, daemon=True)
             thread['get_srs_data'].start()
@@ -1215,7 +1215,7 @@ STATES = {
     operation of the state machine logic'''
 
 # Initialize state machine timer ----------------------------------------------
-main_loop_interval = 0.2 # seconds
+main_loop_interval = 0.5 # seconds
 main_loop_timer = get_lap(main_loop_interval)+1
 
 # Initialize failed prereq log timers -----------------------------------------

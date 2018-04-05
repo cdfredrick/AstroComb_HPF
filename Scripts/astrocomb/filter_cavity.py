@@ -584,6 +584,7 @@ for database in R_MONITOR_DBs:
 # Global Variables ------------------------------------------------------------
 timer = {}
 array = {}
+thread = {}
 
 # Do nothing function ---------------------------------------------------------
 '''A functional placeholder for cases where nothing should happen.'''
@@ -647,8 +648,7 @@ def get_srs_data():
     # Propogate lap numbers ---------------------------------------------
     if new_record_lap > timer['srs:record']:
         timer['srs:record'] = new_record_lap
-get_srs_data_d = threading.Thread(target=get_srs_data, daemon=True)
-get_srs_data_d.start()
+thread['get_srs_data'] = threading.Thread(target=get_srs_data, daemon=True)
 
 array['hv:v_out'] = np.array([])
 hv_record_interval = 10 # seconds
@@ -683,8 +683,7 @@ def get_HV_data():
     # Propogate lap numbers ---------------------------------------------
     if new_record_lap > timer['hv:record']:
         timer['hv:record'] = new_record_lap
-get_HV_data_d = threading.Thread(target=get_HV_data, daemon=True)
-get_HV_data_d.start()
+thread['get_HV_data'] = threading.Thread(target=get_HV_data, daemon=True)
 
 control_interval = 0.2 # s
 passive_interval = 1.0 # s
@@ -696,8 +695,10 @@ def monitor(state_db):
     new_passive_lap = get_lap(passive_interval)
 # Update control loop variables -------------------------------------
     if (new_control_lap > timer['monitor:control']):
-        if not(get_srs_data_d.is_alive()):
-            get_srs_data_d.run()
+        if not(thread['get_srs_data_'].is_alive()):
+        # Start new thread
+            thread['get_srs_data'] = threading.Thread(target=get_srs_data, daemon=True)
+            thread['get_srs_data'].start()
     # Pull data from external databases -------------------
         new_data = []
         for doc in mon['filter_cavity/DAQ_error_signal']['cursor']:
@@ -712,8 +713,10 @@ def monitor(state_db):
         timer['monitor:control'] = new_control_lap
 # Update passive monitoring variables -------------------------------
     if (new_passive_lap > timer['monitor:passive']):
-        if not(get_HV_data_d.is_alive()):
-            get_HV_data_d.run()
+        if not(thread['get_HV_data'].is_alive()):
+        # Start new thread
+            thread['get_HV_data'] = threading.Thread(target=get_HV_data, daemon=True)
+            thread['get_HV_data'].start()
     # Pull data from external databases -------------------
         new_data = []
         for doc in mon['filter_cavity/TEC_temperature']['cursor']:

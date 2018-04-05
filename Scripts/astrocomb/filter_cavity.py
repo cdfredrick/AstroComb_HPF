@@ -315,8 +315,9 @@ DEVICE_DBs =[
     'filter_cavity/device_PID', 'filter_cavity/device_HV',
     'filter_cavity/device_DAQ_Vout_vs_reflect']
 MONITOR_DBs = [
-    'filter_cavity/PID_output',
-    'filter_cavity/PID_voltage_limits', 'filter_cavity/HV_output', 'filter_cavity/DAQ_Vout_vs_reflect']
+    'filter_cavity/PID_output', 'filter_cavity/PID_voltage_limits',
+    'filter_cavity/PID_action', 'filter_cavity/HV_output',
+    'filter_cavity/DAQ_Vout_vs_reflect']
 LOG_DB = 'filter_cavity/log'
 CONTROL_DB = 'filter_cavity/control'
 MASTER_DBs = STATE_DBs + DEVICE_DBs + MONITOR_DBs + [LOG_DB] + [CONTROL_DB]
@@ -509,6 +510,10 @@ dev['filter_cavity/device_DAQ_Vout_vs_reflect'] = {
                           'new':<bool>}'''
 mon = {}
     # SRS -----------------------------
+mon['filter_cavity/PID_action'] = {
+        'data':np.array([]),
+        'device':dev['filter_cavity/device_PID'],
+        'new':False}
 mon['filter_cavity/PID_output'] = {
         'data':np.array([]),
         'device':dev['filter_cavity/device_PID'],
@@ -597,11 +602,15 @@ def monitor(state_db):
         # Wait for queue
         dev[device_db]['queue'].queue_and_wait()
         # Get values
+             # Current output voltage
         new_v_out = dev[device_db]['driver'].new_output_monitor()
         if new_v_out:
             v_out = dev[device_db]['driver'].output_monitor()
+            # Output voltage limits
         v_min = dev[device_db]['driver'].lower_limit
         v_max = dev[device_db]['driver'].upper_limit
+            # PID action
+        pid_action = dev[device_db]['driver'].pid_action()
         # Remove from queue
         dev[device_db]['queue'].remove()
         # Update buffers and databases ----------
@@ -617,6 +626,11 @@ def monitor(state_db):
             mon['filter_cavity/PID_voltage_limits']['new'] = True
             mon['filter_cavity/PID_voltage_limits']['data'] = {'min':v_min, 'max':v_max}
             db['filter_cavity/PID_voltage_limits'].write_record_and_buffer({'min':v_min, 'max':v_max})
+            # PID action --------------
+        if (mon['filter_cavity/PID_action']['data'] != pid_action):
+            mon['filter_cavity/PID_action']['new'] = True
+            mon['filter_cavity/PID_action']['data'] = pid_action
+            db['filter_cavity/PID_action'].write_record_and_buffer({'Action':pid_action})
     # Pull data from external databases -------------------
         new_data = []
         for doc in mon['filter_cavity/DAQ_error_signal']['cursor']:
@@ -721,6 +735,11 @@ def find_lock(state_db, last_good_position=None):
         # Lock is succesful, update state variable
             current_state[state_db]['compliance'] = True
             db[state_db].write_record_and_buffer(current_state[state_db])
+        # Update the monitor variable if necessary
+            if (mon['filter_cavity/PID_action']['data'] != True):
+                mon['filter_cavity/PID_action']['new'] = True
+                mon['filter_cavity/PID_action']['data'] = True
+                db['filter_cavity/PID_action'].write_record_and_buffer({'Action':True})
 # If unlocked -------------------------------------------------------
     else:
         '''The current state has failed the lock tests. The PID controller is
@@ -838,7 +857,7 @@ lock_age_threshold = 30.0 #s
 def keep_lock(state_db):
     locked = True
 # Queue the SRS PID controller --------------------------------------
-    device_db = 'filter_cavity/device_PID'
+    
     dev[device_db]['queue'].queue_and_wait()
 # Evaluate conditions
     new_output_condition = mon['filter_cavity/PID_output']['new']
@@ -847,19 +866,14 @@ def keep_lock(state_db):
 # Get most recent values --------------------------------------------
     if new_output_condition:
         current_output = mon['filter_cavity/PID_output']['data'][-1]
-    current_limits = {}
-    current_limits['min'] = dev[device_db]['driver'].lower_limit
-    current_limits['max'] = dev[device_db]['driver'].upper_limit
+    current_limits = mon['filter_cavity/PID_output_limits']['data']
     v_high = (1-v_range_threshold)*current_limits['max'] + v_range_threshold*current_limits['min']
     v_low = (1-v_range_threshold)*current_limits['min'] + v_range_threshold*current_limits['max']
-    state_limits = {
-            'upper_output_limit':STATES[state_db][current_state[state_db]['state']]['settings'][device_db]['upper_output_limit'],
-            'lower_output_limit':STATES[state_db][current_state[state_db]['state']]['settings'][device_db]['lower_output_limit']}
-# Clear 'new' data flags
+    # Clear 'new' data flags
     mon['filter_cavity/PID_output']['new'] = False
     mon['filter_cavity/PID_voltage_limits']['new'] = False
 # Check if the PID controller is on ---------------------------------
-    if not(dev[device_db]['driver'].pid_action()):
+    if (mon['filter_cavity/PID_action']['data'] != True):
     # It is not locked
         locked = False
 # Check if the output is outside the acceptable range ---------------
@@ -870,8 +884,6 @@ def keep_lock(state_db):
     # TODO: check error signal std
 # If not locked -----------------------------------------------------
     if not(locked):
-    # Remove SRS PID controller from queue
-        dev[device_db]['queue'].remove()
     # Update state variable
         current_state[state_db]['compliance'] = False
         db[state_db].write_record_and_buffer(current_state[state_db])
@@ -890,8 +902,6 @@ def keep_lock(state_db):
     else:
     # If the system is at a new lock point, reinitialize the local monitors
         if (not(lock_age_condition) and not(no_new_limits_condition)):
-        # Remove SRS PID controller from queue
-            dev[device_db]['queue'].remove()
         # Reinitialize the output voltage monitor
             mon['filter_cavity/PID_output']['data'] = np.array([])
             mon['filter_cavity/PID_output']['new'] = False
@@ -905,33 +915,42 @@ def keep_lock(state_db):
             v_std = np.std(data - v_avg_slope*np.arange(len(data)))
             upper_limit = round(v_expected + (v_std_threshold*v_std)/(1-2*v_range_threshold),2)
             lower_limit = round(v_expected - (v_std_threshold*v_std)/(1-2*v_range_threshold),2)
-            if (upper_limit - lower_limit) < 0.5:
+            if (upper_limit - lower_limit) < 0.5: #TODO: determine optimal thresholds
                 upper_limit = round(v_expected + 0.25,2)
                 lower_limit = round(v_expected - 0.25,2)
         # Restrict the results
-            update = True
+            device_db = 'filter_cavity/device_PID'
+            state_limits = {
+                    'upper_output_limit':STATES[state_db][current_state[state_db]['state']]['settings'][device_db]['upper_output_limit'],
+                    'lower_output_limit':STATES[state_db][current_state[state_db]['state']]['settings'][device_db]['lower_output_limit']}
+            update_upper = True
+            update_lower = True
             if upper_limit == lower_limit:
-                update = False
+                update_upper = False
+                update_lower = False
             elif (upper_limit >= state_limits['upper_output_limit']) and (lower_limit <= state_limits['lower_output_limit']):
-                update = False
+                update_upper = False
+                update_lower = False
             elif (upper_limit > state_limits['upper_output_limit']):
                 upper_limit = state_limits['upper_output_limit']
             elif (lower_limit < state_limits['lower_output_limit']):
                 lower_limit = state_limits['lower_output_limit']
-            if (upper_limit == current_limits['max']) and (lower_limit == current_limits['min']):
-                update = False
+            if (upper_limit == current_limits['max']):
+                update_upper = False
+            if (lower_limit == current_limits['min']):
+                update_lower = False
         # Update the hardware limits
-            if not(update):
-            # Remove SRS PID controller from queue
-                dev[device_db]['queue'].remove()
-            else:
+            if (update_upper or update_lower):
             # Update the limits
-                settings_list = {
-                        'upper_output_limit':upper_limit,
-                        'lower_output_limit':lower_limit}
+                if not(update_lower):
+                    settings_list = {'upper_output_limit':upper_limit}
+                elif not(update_upper):
+                    settings_list = {'lower_output_limit':lower_limit}
+                else:
+                    settings_list = {
+                            'upper_output_limit':upper_limit,
+                            'lower_output_limit':lower_limit}
                 update_device_settings(device_db, settings_list, write_log=False)
-            # Remove SRS PID controller from queue
-                dev[device_db]['queue'].remove()
             # Update the voltage limit monitor
                 mon['filter_cavity/PID_voltage_limits']['new'] = True
                 mon['filter_cavity/PID_voltage_limits']['data'] = {'min':lower_limit, 'max':upper_limit}

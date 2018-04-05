@@ -316,9 +316,9 @@ DEVICE_DBs =[
     'mll_fR/device_TEC', 'mll_fR/device_PID',
     'mll_fR/device_HV', 'mll_fR/device_DAQ_Vout_vs_freq']
 MONITOR_DBs = [
-    'mll_fR/TEC_temperature', 'mll_fR/TEC_current', 'mll_fR/PID_output',
-    'mll_fR/PID_output_limits', 'mll_fR/HV_output', 'mll_fR/DAQ_Vout_vs_freq',
-    'mll_fR/TEC_event_status']
+    'mll_fR/TEC_temperature', 'mll_fR/TEC_current',  'mll_fR/TEC_event_status', 
+    'mll_fR/PID_output', 'mll_fR/PID_output_limits', 'mll_fR/PID_action',
+    'mll_fR/HV_output', 'mll_fR/DAQ_Vout_vs_freq',]
 LOG_DB = 'mll_fR/log'
 CONTROL_DB = 'mll_fR/control'
 MASTER_DBs = STATE_DBs + DEVICE_DBs + MONITOR_DBs + [LOG_DB] + [CONTROL_DB]
@@ -532,6 +532,10 @@ mon['mll_fR/TEC_event_status'] = {
         'device':dev['mll_fR/device_TEC'],
         'new':False}
     # SRS -----------------------------
+mon['mll_fR/PID_action'] = {
+        'data':np.array([]),
+        'device':dev['mll_fR/device_PID'],
+        'new':False}
 mon['mll_fR/PID_output'] = {
         'data':np.array([]),
         'device':dev['mll_fR/device_PID'],
@@ -620,11 +624,15 @@ def monitor(state_db):
         # Wait for queue
         dev[device_db]['queue'].queue_and_wait()
         # Get values
+            # Current output voltage
         new_v_out = dev[device_db]['driver'].new_output_monitor()
         if new_v_out:
             v_out = dev[device_db]['driver'].output_monitor()
+            # Output voltage limits
         v_min = dev[device_db]['driver'].lower_limit
         v_max = dev[device_db]['driver'].upper_limit
+            # PID action
+        pid_action = dev[device_db]['driver'].pid_action()
         # Remove from queue
         dev[device_db]['queue'].remove()
         # Update buffers and databases ----------
@@ -640,6 +648,11 @@ def monitor(state_db):
             mon['mll_fR/PID_output_limits']['new'] = True
             mon['mll_fR/PID_output_limits']['data'] = {'min':v_min, 'max':v_max}
             db['mll_fR/PID_output_limits'].write_record_and_buffer({'min':v_min, 'max':v_max})
+            # PID action --------------
+        if (mon['mll_fR/PID_action']['data'] != pid_action):
+            mon['mll_fR/PID_action']['new'] = True
+            mon['mll_fR/PID_action']['data'] = pid_action
+            db['mll_fR/PID_action'].write_record_and_buffer({'Action':pid_action})
     # Pull data from external databases -------------------
         new_data = []
         for doc in mon['mll_fR/DAQ_error_signal']['cursor']:
@@ -766,6 +779,11 @@ def find_lock(state_db, last_good_position=None):
         # Lock is succesful, update state variable
             current_state[state_db]['compliance'] = True
             db[state_db].write_record_and_buffer(current_state[state_db])
+        # Update the monitor variable if necessary
+            if (mon['mll_fR/PID_action']['data'] != True):
+                mon['mll_fR/PID_action']['new'] = True
+                mon['mll_fR/PID_action']['data'] = True
+                db['mll_fR/PID_action'].write_record_and_buffer({'Action':True})
 # If unlocked -------------------------------------------------------
     else:
         '''The current state has failed the lock tests. The PID controller is
@@ -907,31 +925,25 @@ v_std_threshold = 5 # standard deviations
 lock_age_threshold = 30.0 #s
 def keep_lock(state_db):
     locked = True
-# Queue the SRS PID controller --------------------------------------
-    device_db = 'mll_fR/device_PID'
-    dev[device_db]['queue'].queue_and_wait()
-# Evaluate conditions
+# Evaluate conditions -----------------------------------------------
     new_output_condition = mon['mll_fR/PID_output']['new']
     lock_age_condition = ((time.time() - timer['find_lock:locked']) > lock_age_threshold)
     no_new_limits_condition = not(mon['mll_fR/PID_output_limits']['new'])
 # Get most recent values --------------------------------------------
     if new_output_condition:
         current_output = mon['mll_fR/PID_output']['data'][-1]
-    current_limits = {}
-    current_limits['min'] = dev[device_db]['driver'].lower_limit
-    current_limits['max'] = dev[device_db]['driver'].upper_limit
+    current_limits = mon['mll_fR/PID_output_limits']['data']
+        # Lock threshold
     v_high = (1-v_range_threshold)*current_limits['max'] + v_range_threshold*current_limits['min']
     v_low = (1-v_range_threshold)*current_limits['min'] + v_range_threshold*current_limits['max']
-    v_high2 = (1-v_range_threshold*2)*current_limits['max'] + v_range_threshold*2*current_limits['min']
-    v_low2 = (1-v_range_threshold*2)*current_limits['min'] + v_range_threshold*2*current_limits['max']
-    state_limits = {
-            'upper_output_limit':STATES[state_db][current_state[state_db]['state']]['settings'][device_db]['upper_output_limit'],
-            'lower_output_limit':STATES[state_db][current_state[state_db]['state']]['settings'][device_db]['lower_output_limit']}
-# Clear 'new' data flags
+        # Temperature adjustment threshold
+    v_high2 = (1-2*v_range_threshold)*current_limits['max'] + 2*v_range_threshold*current_limits['min']
+    v_low2 = (1-2*v_range_threshold)*current_limits['min'] + 2*v_range_threshold*current_limits['max']
+# Clear 'new' data flags --------------------------------------------
     mon['mll_fR/PID_output']['new'] = False
     mon['mll_fR/PID_output_limits']['new'] = False
 # Check if the PID controller is on ---------------------------------
-    if not(dev[device_db]['driver'].pid_action()):
+    if (mon['mll_fR/PID_action']['data'] != True):
     # It is not locked
         locked = False
 # Check if the output is outside the acceptable range ---------------
@@ -940,8 +952,6 @@ def keep_lock(state_db):
         # It is not locked
             locked = False
     # TODO: check error signal std
-# Remove SRS PID controller from queue
-    dev[device_db]['queue'].remove()
 # If not locked -----------------------------------------------------
     if not(locked):
     # Update state variable
@@ -999,15 +1009,11 @@ def keep_lock(state_db):
                     dev[device_db]['queue'].remove()
 
 def lock_disabled(state_db):
-# Queue the SRS PID controller --------------------------------------
-    device_db = 'mll_fR/device_PID'
-    dev[device_db]['queue'].queue_and_wait()
 # Check if the PID controller is on ---------------------------------
-    if dev[device_db]['driver'].pid_action():
-    # Turn off
-        dev[device_db]['driver'].pid_action(False)
-# Remove SRS PID from queue -----------------------------------------
-    dev[device_db]['queue'].remove()
+    if (mon['mll_fR/PID_action']['data'] != False):
+    # Update state variable
+        current_state[state_db]['compliance'] = False
+        db[state_db].write_record_and_buffer(current_state[state_db])
 
 
 # Operate Functions -----------------------------------------------------------

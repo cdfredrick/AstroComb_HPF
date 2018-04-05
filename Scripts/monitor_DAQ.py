@@ -728,23 +728,23 @@ def read_DAQ(state_db):
             data = multi_channel_reading[0] # ai0
             data_mean = np.mean(data)
             data_std = np.std(data)
-            data_ste = data_std/np.sqrt(len(data))
+            data_n = len(data)
             mon[monitor_db]['new'] = True
             mon[monitor_db]['data'] = update_buffer(
                     mon[monitor_db]['data'],
                     data_mean, 500)
-            db[monitor_db].write_record_and_buffer({'V':data_mean, 'std':data_std, 'ste':data_ste})
+            db[monitor_db].write_record_and_buffer({'V':data_mean, 'std':data_std, 'n':data_n})
                 # ai1, 'filter_cavity/DAQ_error_signal'
             monitor_db = 'filter_cavity/DAQ_error_signal'
             data = multi_channel_reading[1] # ai1
             data_mean = np.mean(data)
             data_std = np.std(data)
-            data_ste = data_std/np.sqrt(len(data))
+            data_n = len(data)
             mon[monitor_db]['new'] = True
             mon[monitor_db]['data'] = update_buffer(
                     mon[monitor_db]['data'],
                     data_mean, 500)
-            db[monitor_db].write_record_and_buffer({'V':data_mean, 'std':data_std, 'ste':data_ste})
+            db[monitor_db].write_record_and_buffer({'V':data_mean, 'std':data_std, 'n':data_n})
                 # ai2, V_set, 'filter_cavity/heater_temperature'
                 # ai3, V_act, 'filter_cavity/heater_temperature'
             monitor_db = 'filter_cavity/heater_temperature'
@@ -752,52 +752,52 @@ def read_DAQ(state_db):
             data_set = multi_channel_reading[2] # ai2
             data_set_mean = np.mean(data_set)
             data_set_std = np.std(data_set)
-            data_set_ste = data_set_std/np.sqrt(len(data_set))
+            data_set_n = len(data_set)
                     # ai3
             data_act = multi_channel_reading[3] # ai3
             data_act_mean = np.mean(data_act)
             data_act_std = np.std(data_act)
-            data_act_ste = data_act_std/np.sqrt(len(data_act))
+            data_act_n = len(data_act)
             mon[monitor_db]['new'] = True
             mon[monitor_db]['data'] = update_buffer(
                     mon[monitor_db]['data'],
                     data_mean, 500)
             db[monitor_db].write_record_and_buffer(
-                    {'V_set':data_set_mean, 'set_std':data_set_std, 'set_ste':data_set_ste,
-                     'V_act':data_act_mean, 'act_std':data_act_std, 'act_ste':data_act_ste})
+                    {'V_set':data_set_mean, 'set_std':data_set_std, 'set_n':data_set_n,
+                     'V_act':data_act_mean, 'act_std':data_act_std, 'act_n':data_act_n})
                 # ai4, 'ambience/box_temperature_0'
             monitor_db = 'ambience/box_temperature_0'
             data = multi_channel_reading[4] # ai4
             data_mean = np.mean(data)
             data_std = np.std(data)
-            data_ste = data_std/np.sqrt(len(data))
+            data_n = len(data)
             mon[monitor_db]['new'] = True
             mon[monitor_db]['data'] = update_buffer(
                     mon[monitor_db]['data'],
                     data_mean, 500)
-            db[monitor_db].write_record_and_buffer({'V':data_mean, 'std':data_std, 'ste':data_ste})
+            db[monitor_db].write_record_and_buffer({'V':data_mean, 'std':data_std, 'n':data_n})
                 # ai5, 'ambience/box_temperature_1'
             monitor_db = 'ambience/box_temperature_1'
             data = multi_channel_reading[5] # ai5
             data_mean = np.mean(data)
             data_std = np.std(data)
-            data_ste = data_std/np.sqrt(len(data))
+            data_n = len(data)
             mon[monitor_db]['new'] = True
             mon[monitor_db]['data'] = update_buffer(
                     mon[monitor_db]['data'],
                     data_mean, 500)
-            db[monitor_db].write_record_and_buffer({'V':data_mean, 'std':data_std, 'ste':data_ste})
+            db[monitor_db].write_record_and_buffer({'V':data_mean, 'std':data_std, 'n':data_n})
                 # ai6, 'ambience/rack_temperature_0'
             monitor_db = 'ambience/rack_temperature_0'
             data = multi_channel_reading[6] # ai6
             data_mean = np.mean(data)
             data_std = np.std(data)
-            data_ste = data_std/np.sqrt(len(data))
+            data_n = len(data)
             mon[monitor_db]['new'] = True
             mon[monitor_db]['data'] = update_buffer(
                     mon[monitor_db]['data'],
                     data_mean, 500)
-            db[monitor_db].write_record_and_buffer({'V':data_mean, 'std':data_std, 'ste':data_ste})
+            db[monitor_db].write_record_and_buffer({'V':data_mean, 'std':data_std, 'n':data_n})
     # Propogate lap numbers ---------------------------------------------
         timer[state_db]['data'] = new_control_lap
 

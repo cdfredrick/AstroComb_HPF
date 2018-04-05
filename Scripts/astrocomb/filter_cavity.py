@@ -12,6 +12,8 @@ import numpy as np
 import time
 import logging
 
+import threading
+
 import os
 import sys
 sys.path.append(os.getcwd())
@@ -579,8 +581,9 @@ for database in R_MONITOR_DBs:
 
 # %% State and Monitor Functions ==============================================
 
-# Global Timing Variable ------------------------------------------------------
+# Global Variables ------------------------------------------------------------
 timer = {}
+array = {}
 
 # Do nothing function ---------------------------------------------------------
 '''A functional placeholder for cases where nothing should happen.'''
@@ -590,6 +593,99 @@ def nothing(state_db):
 
 # Monitor Functions -----------------------------------------------------------
 '''This section is for defining the methods needed to monitor the system.'''
+array['srs:v_out'] = np.array([])
+srs_record_interval = 10 # seconds
+timer['srs:record'] = get_lap(srs_record_interval)
+def get_srs_data():
+# Get lap number
+    new_record_lap = get_lap(srs_record_interval)
+# Pull data from SRS ----------------------------------
+    device_db = 'filter_cavity/device_PID'
+    # Wait for queue
+    dev[device_db]['queue'].queue_and_wait()
+    # Get values --------------------------------
+         # Output voltage -------------
+    new_v_out = dev[device_db]['driver'].new_output_monitor()
+    if new_v_out:
+        v_out = dev[device_db]['driver'].output_monitor()
+        # Output voltage limits -------
+    v_min = dev[device_db]['driver'].lower_limit
+    v_max = dev[device_db]['driver'].upper_limit
+        # PID action ------------------
+    pid_action = dev[device_db]['driver'].pid_action()
+    # Remove from queue
+    dev[device_db]['queue'].remove()
+    # Update buffers and databases ----------
+        # Output voltage --------------
+    if new_v_out:
+        mon['filter_cavity/PID_output']['new'] = True
+        mon['filter_cavity/PID_output']['data'] = update_buffer(
+                mon['filter_cavity/PID_output']['data'],
+                v_out, 500)
+            # Write to the buffer
+        db['filter_cavity/PID_output'].write_buffer({'V':v_out})
+            # Append to the record array
+        array['srs:v_out'] = np.append(array['srs:v_out'], v_out)
+        if new_record_lap > timer['srs:record']:
+            # Record statistics
+            db['filter_cavity/PID_output'].write_record({
+                    'V':array['srs:v_out'].mean(),
+                    'std':array['srs:v_out'].std(),
+                    'n':array['srs:v_out'].size})
+            # Empty the array
+            array['srs:v_out'] = np.array([])
+        # Voltage limits ----------
+    if (mon['filter_cavity/PID_output_limits']['data'] != {'min':v_min, 'max':v_max}):
+        mon['filter_cavity/PID_output_limits']['new'] = True
+        mon['filter_cavity/PID_output_limits']['data'] = {'min':v_min, 'max':v_max}
+        db['filter_cavity/PID_output_limits'].write_record_and_buffer({'min':v_min, 'max':v_max})
+        # PID action --------------
+    if (mon['filter_cavity/PID_action']['data'] != pid_action):
+        mon['filter_cavity/PID_action']['new'] = True
+        mon['filter_cavity/PID_action']['data'] = pid_action
+        db['filter_cavity/PID_action'].write_record_and_buffer({'Action':pid_action})
+    # Propogate lap numbers ---------------------------------------------
+    if new_record_lap > timer['srs:record']:
+        timer['srs:record'] = new_record_lap
+get_srs_data_d = threading.Thread(target=get_srs_data, daemon=True)
+get_srs_data_d.start()
+
+array['hv:v_out'] = np.array([])
+hv_record_interval = 10 # seconds
+timer['hv:record'] = get_lap(hv_record_interval)
+def get_HV_data():
+# Get lap number
+    new_record_lap = get_lap(hv_record_interval)
+# Pull data from Thorlabs 3-axis piezo controller -----
+    device_db = 'filter_cavity/device_HV'
+    # Wait for queue
+    dev[device_db]['queue'].queue_and_wait()
+    # Get values
+    hv_out = dev[device_db]['driver'].y_voltage()
+    # Remove from queue
+    dev[device_db]['queue'].remove()
+    # Update buffers and databases ----------
+    mon['filter_cavity/HV_output']['new'] = True
+    mon['filter_cavity/HV_output']['data'] = update_buffer(
+            mon['filter_cavity/HV_output']['data'],
+            hv_out, 100)
+    db['filter_cavity/HV_output'].write_buffer({'V':hv_out})
+    # Append to the record array
+    array['hv:v_out'] = np.append(array['hv:v_out'], hv_out)
+    if new_record_lap > timer['hv:record']:
+        # Record statistics
+        db['filter_cavity/HV_output'].write_record({
+                'V':array['hv:v_out'].mean(),
+                'std':array['hv:v_out'].std(),
+                'n':array['hv:v_out'].size})
+        # Empty the array
+        array['hv:v_out'] = np.array([])
+    # Propogate lap numbers ---------------------------------------------
+    if new_record_lap > timer['hv:record']:
+        timer['hv:record'] = new_record_lap
+get_HV_data_d = threading.Thread(target=get_HV_data, daemon=True)
+get_HV_data_d.start()
+
 control_interval = 0.2 # s
 passive_interval = 1.0 # s
 timer['monitor:control'] = get_lap(control_interval)
@@ -600,40 +696,8 @@ def monitor(state_db):
     new_passive_lap = get_lap(passive_interval)
 # Update control loop variables -------------------------------------
     if (new_control_lap > timer['monitor:control']):
-    # Pull data from SRS ----------------------------------
-        device_db = 'filter_cavity/device_PID'
-        # Wait for queue
-        dev[device_db]['queue'].queue_and_wait()
-        # Get values
-             # Current output voltage
-        new_v_out = dev[device_db]['driver'].new_output_monitor()
-        if new_v_out:
-            v_out = dev[device_db]['driver'].output_monitor()
-            # Output voltage limits
-        v_min = dev[device_db]['driver'].lower_limit
-        v_max = dev[device_db]['driver'].upper_limit
-            # PID action
-        pid_action = dev[device_db]['driver'].pid_action()
-        # Remove from queue
-        dev[device_db]['queue'].remove()
-        # Update buffers and databases ----------
-            # Output voltage ----------
-        if new_v_out:
-            mon['filter_cavity/PID_output']['new'] = True
-            mon['filter_cavity/PID_output']['data'] = update_buffer(
-                    mon['filter_cavity/PID_output']['data'],
-                    v_out, 500)
-            db['filter_cavity/PID_output'].write_record_and_buffer({'V':v_out})
-            # Voltage limits ----------
-        if (mon['filter_cavity/PID_output_limits']['data'] != {'min':v_min, 'max':v_max}):
-            mon['filter_cavity/PID_output_limits']['new'] = True
-            mon['filter_cavity/PID_output_limits']['data'] = {'min':v_min, 'max':v_max}
-            db['filter_cavity/PID_output_limits'].write_record_and_buffer({'min':v_min, 'max':v_max})
-            # PID action --------------
-        if (mon['filter_cavity/PID_action']['data'] != pid_action):
-            mon['filter_cavity/PID_action']['new'] = True
-            mon['filter_cavity/PID_action']['data'] = pid_action
-            db['filter_cavity/PID_action'].write_record_and_buffer({'Action':pid_action})
+        if not(get_srs_data_d.is_alive()):
+            get_srs_data_d.run()
     # Pull data from external databases -------------------
         new_data = []
         for doc in mon['filter_cavity/DAQ_error_signal']['cursor']:
@@ -644,22 +708,12 @@ def monitor(state_db):
             mon['filter_cavity/DAQ_error_signal']['data'] = update_buffer(
                 mon['filter_cavity/DAQ_error_signal']['data'],
                 new_data, 500)
+    # Propogate lap numbers ---------------------------------------------
+        timer['monitor:control'] = new_control_lap
 # Update passive monitoring variables -------------------------------
     if (new_passive_lap > timer['monitor:passive']):
-    # Pull data from Thorlabs 3-axis piezo controller -----
-        device_db = 'filter_cavity/device_HV'
-        # Wait for queue
-        dev[device_db]['queue'].queue_and_wait()
-        # Get values
-        hv_out = dev[device_db]['driver'].y_voltage()
-        # Remove from queue
-        dev[device_db]['queue'].remove()
-        # Update buffers and databases ----------
-        mon['filter_cavity/HV_output']['new'] = True
-        mon['filter_cavity/HV_output']['data'] = update_buffer(
-                mon['filter_cavity/HV_output']['data'],
-                hv_out, 100)
-        db['filter_cavity/HV_output'].write_record_and_buffer({'V':hv_out})
+        if not(get_HV_data_d.is_alive()):
+            get_HV_data_d.run()
     # Pull data from external databases -------------------
         new_data = []
         for doc in mon['filter_cavity/TEC_temperature']['cursor']:
@@ -670,9 +724,8 @@ def monitor(state_db):
             mon['filter_cavity/TEC_temperature']['data'] = update_buffer(
                 mon['filter_cavity/TEC_temperature']['data'],
                 new_data, 500)
-# Propogate lap numbers ---------------------------------------------
-    timer['monitor:control'] = new_control_lap
-    timer['monitor:passive'] = new_passive_lap
+    # Propogate lap numbers ---------------------------------------------
+        timer['monitor:passive'] = new_passive_lap
 
 # Search Functions ------------------------------------------------------------
 '''This section is for defining the methods needed to bring the system into
@@ -1159,7 +1212,7 @@ STATES = {
     operation of the state machine logic'''
 
 # Initialize state machine timer ----------------------------------------------
-main_loop_interval = 0.5 # seconds
+main_loop_interval = 0.2 # seconds
 main_loop_timer = get_lap(main_loop_interval)+1
 
 # Initialize failed prereq log timers -----------------------------------------
@@ -1285,6 +1338,6 @@ while loop:
         main_loop_timer += 1
     else:
         log_str = "Execution time exceeded the set loop interval {:}s by {:.2g}s".format(main_loop_interval, abs(pause))
-        log.log_debug(__name__, 'main_loop', log_str)
+        log.log_warning(__name__, 'main_loop', log_str)
         main_loop_timer = get_lap(main_loop_interval)+1
 

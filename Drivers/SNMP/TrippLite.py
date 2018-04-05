@@ -14,7 +14,7 @@ from pysnmp.hlapi import SnmpEngine
 from pysnmp.hlapi import CommunityData
 from pysnmp.hlapi import UdpTransportTarget
 from pysnmp.hlapi import ContextData
-from pysnmp.hlapi import getCmd, setCmd
+from pysnmp.hlapi import getCmd, nextCmd, setCmd
 
 
 # %% PDU
@@ -25,6 +25,7 @@ class PDUOutlet():
         self.transport_addr = (str(ip_address), 161)
         self.transport_target = UdpTransportTarget(self.transport_addr, timeout=timeout, retries=retries)
         self.outlet_id = int(outlet_id)
+        self.device_id = 1
         self.community = CommunityData('tripplite')
     # Initialize the MIB
         mibBuilder = builder.MibBuilder()
@@ -33,6 +34,27 @@ class PDUOutlet():
         obj_id.addAsn1MibSource('file://@mib@')
         obj_id.addAsn1MibSource('http://mibs.snmplabs.com/asn1/@mib@')
         obj_id.resolveWithMib(mibView)
+    
+    def query(self, oid,  base=False):
+    # Get current outlet state
+        if base:
+            obj_id = rfc1902.ObjectIdentity(self.mib, oid)
+        else:
+            obj_id = rfc1902.ObjectIdentity(oid)
+        g = getCmd(SnmpEngine(),
+                   self.community,
+                   self.transport_target,
+                   ContextData(),
+                   rfc1902.ObjectType(obj_id))
+        errorIndication, errorStatus, errorIndex, varBinds = next(g)
+        print(errorIndication, '\n')
+        print(errorStatus, '\n')
+        print(errorIndex, '\n')
+        print(varBinds, '\n')
+        oid, value = varBinds[0]
+        print(varBinds[0].prettyPrint(), '\n')
+        print(oid, '\n')
+        print(value, '\n')
     
     def outlet_state(self, set_state=None):
         '''The current state of the outlet. Setting this value to turnOff(1)
@@ -46,7 +68,7 @@ class PDUOutlet():
         '''
         if set_state is None:
         # Get current outlet state
-            obj_id = rfc1902.ObjectIdentity(self.mib, 'tlpUpsOutletState', self.outlet_id)
+            obj_id = rfc1902.ObjectIdentity(self.mib, 'tlpPduOutletState', self.device_id, self.outlet_id)
             g = getCmd(SnmpEngine(),
                        self.community,
                        self.transport_target,
@@ -54,15 +76,16 @@ class PDUOutlet():
                        rfc1902.ObjectType(obj_id))
             errorIndication, errorStatus, errorIndex, varBinds = next(g)
             oid, value = varBinds[0]
+            print(oid)
             return int(value)
         else:
         # Send outlet state
-            obj_id = rfc1902.ObjectIdentity(self.mib, 'tlpUpsOutletCommand', self.outlet_id)
+            obj_id = rfc1902.ObjectIdentity(self.mib, 'tlpPduOutletCommand', self.device_id, self.outlet_id)
             g = setCmd(SnmpEngine(),
                        self.community,
                        self.transport_target,
                        ContextData(),
-                       rfc1902.ObjectType(obj_id), int(set_state))
+                       rfc1902.ObjectType(obj_id, int(set_state)))
             errorIndication, errorStatus, errorIndex, varBinds = next(g)
     
     def outlet_ramp_action(self, set_action=None):
@@ -73,7 +96,7 @@ class PDUOutlet():
         '''
         if set_action is None:
         # Get current outlet state
-            obj_id = rfc1902.ObjectIdentity(self.mib, 'tlpUpsOutletRampAction', self.outlet_id)
+            obj_id = rfc1902.ObjectIdentity(self.mib, 'tlpPduOutletRampAction', self.device_id, self.outlet_id)
             g = getCmd(SnmpEngine(),
                        self.community,
                        self.transport_target,
@@ -84,12 +107,12 @@ class PDUOutlet():
             return int(value)
         else:
         # Send outlet state
-            obj_id = rfc1902.ObjectIdentity(self.mib, 'tlpUpsOutletRampAction', self.outlet_id)
+            obj_id = rfc1902.ObjectIdentity(self.mib, 'tlpPduOutletRampAction', self.device_id, self.outlet_id)
             g = setCmd(SnmpEngine(),
                        self.community,
                        self.transport_target,
                        ContextData(),
-                       rfc1902.ObjectType(obj_id), int(set_action))
+                       rfc1902.ObjectType(obj_id, int(set_action)))
             errorIndication, errorStatus, errorIndex, varBinds = next(g)
     
     def outlet_ramp_delay(self, set_delay=None):
@@ -98,7 +121,7 @@ class PDUOutlet():
         '''
         if set_delay is None:
         # Get current outlet state
-            obj_id = rfc1902.ObjectIdentity(self.mib, 'tlpUpsOutletRampDelay', self.outlet_id)
+            obj_id = rfc1902.ObjectIdentity(self.mib, 'tlpPduOutletRampDelay', self.device_id, self.outlet_id)
             g = getCmd(SnmpEngine(),
                        self.community,
                        self.transport_target,
@@ -109,7 +132,7 @@ class PDUOutlet():
             return int(value)
         else:
         # Send outlet state
-            obj_id = rfc1902.ObjectIdentity(self.mib, 'tlpUpsOutletRampDelay', self.outlet_id)
+            obj_id = rfc1902.ObjectIdentity(self.mib, 'tlpPduOutletRampDelay', self.device_id, self.outlet_id)
             g = setCmd(SnmpEngine(),
                        self.community,
                        self.transport_target,

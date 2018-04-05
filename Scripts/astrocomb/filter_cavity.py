@@ -315,7 +315,7 @@ DEVICE_DBs =[
     'filter_cavity/device_PID', 'filter_cavity/device_HV',
     'filter_cavity/device_DAQ_Vout_vs_reflect']
 MONITOR_DBs = [
-    'filter_cavity/PID_output', 'filter_cavity/PID_voltage_limits',
+    'filter_cavity/PID_output', 'filter_cavity/PID_output_limits',
     'filter_cavity/PID_action', 'filter_cavity/HV_output',
     'filter_cavity/DAQ_Vout_vs_reflect']
 LOG_DB = 'filter_cavity/log'
@@ -552,7 +552,7 @@ mon['filter_cavity/PID_output'] = {
         'data':np.array([]),
         'device':dev['filter_cavity/device_PID'],
         'new':False}
-mon['filter_cavity/PID_voltage_limits'] = {
+mon['filter_cavity/PID_output_limits'] = {
         'data':{'max':local_settings['filter_cavity/device_PID']['upper_output_limit'],
                 'min':local_settings['filter_cavity/device_PID']['lower_output_limit']},
         'device':dev['filter_cavity/device_PID'],
@@ -625,10 +625,10 @@ def monitor(state_db):
                     v_out, 500)
             db['filter_cavity/PID_output'].write_record_and_buffer({'V':v_out})
             # Voltage limits ----------
-        if (mon['filter_cavity/PID_voltage_limits']['data'] != {'min':v_min, 'max':v_max}):
-            mon['filter_cavity/PID_voltage_limits']['new'] = True
-            mon['filter_cavity/PID_voltage_limits']['data'] = {'min':v_min, 'max':v_max}
-            db['filter_cavity/PID_voltage_limits'].write_record_and_buffer({'min':v_min, 'max':v_max})
+        if (mon['filter_cavity/PID_output_limits']['data'] != {'min':v_min, 'max':v_max}):
+            mon['filter_cavity/PID_output_limits']['new'] = True
+            mon['filter_cavity/PID_output_limits']['data'] = {'min':v_min, 'max':v_max}
+            db['filter_cavity/PID_output_limits'].write_record_and_buffer({'min':v_min, 'max':v_max})
             # PID action --------------
         if (mon['filter_cavity/PID_action']['data'] != pid_action):
             mon['filter_cavity/PID_action']['new'] = True
@@ -862,7 +862,7 @@ def keep_lock(state_db):
 # Evaluate conditions
     new_output_condition = mon['filter_cavity/PID_output']['new']
     lock_age_condition = ((time.time() - timer['find_lock:locked']) > lock_age_threshold)
-    no_new_limits_condition = not(mon['filter_cavity/PID_voltage_limits']['new'])
+    no_new_limits_condition = not(mon['filter_cavity/PID_output_limits']['new'])
 # Get most recent values --------------------------------------------
     if new_output_condition:
         current_output = mon['filter_cavity/PID_output']['data'][-1]
@@ -871,7 +871,7 @@ def keep_lock(state_db):
     v_low = (1-v_range_threshold)*current_limits['min'] + v_range_threshold*current_limits['max']
     # Clear 'new' data flags
     mon['filter_cavity/PID_output']['new'] = False
-    mon['filter_cavity/PID_voltage_limits']['new'] = False
+    mon['filter_cavity/PID_output_limits']['new'] = False
 # Check if the PID controller is on ---------------------------------
     if (mon['filter_cavity/PID_action']['data'] != True):
     # It is not locked
@@ -952,9 +952,9 @@ def keep_lock(state_db):
                             'lower_output_limit':lower_limit}
                 update_device_settings(device_db, settings_list, write_log=False)
             # Update the voltage limit monitor
-                mon['filter_cavity/PID_voltage_limits']['new'] = True
-                mon['filter_cavity/PID_voltage_limits']['data'] = {'min':lower_limit, 'max':upper_limit}
-                db['filter_cavity/PID_voltage_limits'].write_record_and_buffer({'min':lower_limit, 'max':upper_limit})
+                mon['filter_cavity/PID_output_limits']['new'] = True
+                mon['filter_cavity/PID_output_limits']['data'] = {'min':lower_limit, 'max':upper_limit}
+                db['filter_cavity/PID_output_limits'].write_record_and_buffer({'min':lower_limit, 'max':upper_limit})
 
 def lock_disabled(state_db):
 # Queue the SRS PID controller --------------------------------------

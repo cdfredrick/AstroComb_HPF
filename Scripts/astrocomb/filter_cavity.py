@@ -494,52 +494,6 @@ dev['filter_cavity/device_DAQ_Vout_vs_reflect'] = {
         'driver':send_args(AiTask, DEVICE_SETTINGS['filter_cavity/device_DAQ_Vout_vs_reflect']['__init__']),
         'queue':CouchbaseDB.PriorityQueue('DAQ_ai')}
 
-# Initialize Local Copy of Monitors -------------------------------------------
-'''Monitors should associate the monitor databases with the local, circular
-    buffers of the monitored data. Monitors should indicate when they have 
-    recieved new data.
-    -Monitors from the internal databases should be associated with the device
-    that they pull data from:
-        {<database path>:{'data':<placeholder for local data copy>},
-                          'device':<device object>,
-                          'new':<bool>}
-    -Monitors from the read database should have their cursors exhausted so
-    that only their most recent values are accessible:
-        {<database path>:{'data':<placeholder for local data copy>},
-                          'cursor':<tailable cursor object>,
-                          'new':<bool>}'''
-mon = {}
-    # SRS -----------------------------
-mon['filter_cavity/PID_action'] = {
-        'data':np.array([]),
-        'device':dev['filter_cavity/device_PID'],
-        'new':False}
-mon['filter_cavity/PID_output'] = {
-        'data':np.array([]),
-        'device':dev['filter_cavity/device_PID'],
-        'new':False}
-mon['filter_cavity/PID_voltage_limits'] = {
-        'data':np.array([]),
-        'device':dev['filter_cavity/device_PID'],
-        'new':False}
-    # HV Piezo ------------------------
-mon['filter_cavity/HV_output'] = {
-        'data':np.array([]),
-        'device':dev['filter_cavity/device_HV'],
-        'new':False}
-    # DAQ -----------------------------
-mon['filter_cavity/DAQ_Vout_vs_reflect'] = {
-        'data':np.array([]),
-        'device':dev['filter_cavity/device_DAQ_Vout_vs_reflect'],
-        'new':False}
-    # External ------------------------
-for database in R_MONITOR_DBs:
-    cursor = db[database].read_buffer(tailable_cursor=True, no_cursor_timeout=True)
-    mon[database] = {
-            'data':np.array([]),
-            'cursor':exhaust_cursor(cursor),
-            'new':False}
-
 # Initialize all Database Settings --------------------------------------------
 '''This checks that all settings (as listed in SETTINGS) exist within the
     databases. Any missing settings are populated with the default values. 
@@ -573,6 +527,55 @@ for database in SETTINGS:
     if not(db_initialized):
     # Update the database values if necessary
         db[database].write_record_and_buffer(local_settings[database])
+
+# Initialize Local Copy of Monitors -------------------------------------------
+'''Monitors should associate the monitor databases with the local, circular
+    buffers of the monitored data. Monitors should indicate when they have 
+    recieved new data.
+    -Monitors from the internal databases should be associated with the device
+    that they pull data from:
+        {<database path>:{'data':<placeholder for local data copy>},
+                          'device':<device object>,
+                          'new':<bool>}
+    -Monitors from the read database should have their cursors exhausted so
+    that only their most recent values are accessible:
+        {<database path>:{'data':<placeholder for local data copy>},
+                          'cursor':<tailable cursor object>,
+                          'new':<bool>}'''
+mon = {}
+    # SRS -----------------------------
+mon['filter_cavity/PID_action'] = {
+        'data':np.array([]),
+        'device':dev['filter_cavity/device_PID'],
+        'new':False}
+mon['filter_cavity/PID_output'] = {
+        'data':np.array([]),
+        'device':dev['filter_cavity/device_PID'],
+        'new':False}
+mon['filter_cavity/PID_voltage_limits'] = {
+        'data':{'max':local_settings['filter_cavity/device_PID']['upper_output_limit'],
+                'min':local_settings['filter_cavity/device_PID']['lower_output_limit']},
+        'device':dev['filter_cavity/device_PID'],
+        'new':False}
+    # HV Piezo ------------------------
+mon['filter_cavity/HV_output'] = {
+        'data':np.array([]),
+        'device':dev['filter_cavity/device_HV'],
+        'new':False}
+    # DAQ -----------------------------
+mon['filter_cavity/DAQ_Vout_vs_reflect'] = {
+        'data':np.array([]),
+        'device':dev['filter_cavity/device_DAQ_Vout_vs_reflect'],
+        'new':False}
+    # External ------------------------
+for database in R_MONITOR_DBs:
+    cursor = db[database].read_buffer(tailable_cursor=True, no_cursor_timeout=True)
+    mon[database] = {
+            'data':np.array([]),
+            'cursor':exhaust_cursor(cursor),
+            'new':False}
+
+
 
 # %% State and Monitor Functions ==============================================
 
@@ -856,9 +859,6 @@ v_std_threshold = 5 # standard deviations
 lock_age_threshold = 30.0 #s
 def keep_lock(state_db):
     locked = True
-# Queue the SRS PID controller --------------------------------------
-    
-    dev[device_db]['queue'].queue_and_wait()
 # Evaluate conditions
     new_output_condition = mon['filter_cavity/PID_output']['new']
     lock_age_condition = ((time.time() - timer['find_lock:locked']) > lock_age_threshold)

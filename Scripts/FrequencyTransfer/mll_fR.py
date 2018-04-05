@@ -503,6 +503,40 @@ dev['mll_fR/device_DAQ_Vout_vs_freq'] = {
         'driver':send_args(AiTask, DEVICE_SETTINGS['mll_fR/device_DAQ_Vout_vs_freq']['__init__']),
         'queue':CouchbaseDB.PriorityQueue('DAQ_ai')}
 
+# Initialize all Database Settings --------------------------------------------
+'''This checks that all settings (as listed in SETTINGS) exist within the
+    databases. Any missing settings are populated with the default values. 
+    -If the setting does not exist within a device database that setting is
+    propogated to the device, otherwise the local settings are read from the
+    device.
+    -The settings for '__init__' methods are are not sent or pulled to devices.
+    -A local copy of all settings is contained within the local_settings
+    dictionary.'''
+local_settings = {}
+for database in SETTINGS:
+    device_db_condition = (database in DEVICE_DBs)
+    local_settings[database] = db[database].read_buffer()
+# Check all SETTINGS
+    db_initialized = True
+    settings_list = []
+    for setting in SETTINGS[database]:
+    # Check that there is anything at all
+        if (local_settings[database]==None):
+            local_settings[database]={}
+    # Check that the key exists in the database
+        if not(setting in local_settings[database]):
+            db_initialized = False
+            local_settings[database][setting] = SETTINGS[database][setting]
+            if (device_db_condition and (setting != '__init__')):
+                settings_list.append({setting:SETTINGS[database][setting]})
+        elif (device_db_condition and (setting != '__init__')):
+            settings_list.append({setting:None})
+    if device_db_condition:
+        update_device_settings(database, settings_list)
+    if not(db_initialized):
+    # Update the database values if necessary
+        db[database].write_record_and_buffer(local_settings[database])
+
 # Initialize Local Copy of Monitors -------------------------------------------
 '''Monitors should associate the monitor databases with the local, circular
     buffers of the monitored data. Monitors should indicate when they have 
@@ -541,7 +575,8 @@ mon['mll_fR/PID_output'] = {
         'device':dev['mll_fR/device_PID'],
         'new':False}
 mon['mll_fR/PID_output_limits'] = {
-        'data':np.array([]),
+        'data':{'max':local_settings['mll_fR/device_PID']['upper_output_limit'],
+                'min':local_settings['mll_fR/device_PID']['lower_output_limit']},
         'device':dev['mll_fR/device_PID'],
         'new':False}
     # HV Piezo ------------------------
@@ -562,39 +597,6 @@ for database in R_MONITOR_DBs:
             'cursor':exhaust_cursor(cursor),
             'new':False}
 
-# Initialize all Database Settings --------------------------------------------
-'''This checks that all settings (as listed in SETTINGS) exist within the
-    databases. Any missing settings are populated with the default values. 
-    -If the setting does not exist within a device database that setting is
-    propogated to the device, otherwise the local settings are read from the
-    device.
-    -The settings for '__init__' methods are are not sent or pulled to devices.
-    -A local copy of all settings is contained within the local_settings
-    dictionary.'''
-local_settings = {}
-for database in SETTINGS:
-    device_db_condition = (database in DEVICE_DBs)
-    local_settings[database] = db[database].read_buffer()
-# Check all SETTINGS
-    db_initialized = True
-    settings_list = []
-    for setting in SETTINGS[database]:
-    # Check that there is anything at all
-        if (local_settings[database]==None):
-            local_settings[database]={}
-    # Check that the key exists in the database
-        if not(setting in local_settings[database]):
-            db_initialized = False
-            local_settings[database][setting] = SETTINGS[database][setting]
-            if (device_db_condition and (setting != '__init__')):
-                settings_list.append({setting:SETTINGS[database][setting]})
-        elif (device_db_condition and (setting != '__init__')):
-            settings_list.append({setting:None})
-    if device_db_condition:
-        update_device_settings(database, settings_list)
-    if not(db_initialized):
-    # Update the database values if necessary
-        db[database].write_record_and_buffer(local_settings[database])
 
 # %% State and Monitor Functions ==============================================
 
@@ -933,10 +935,10 @@ def keep_lock(state_db):
     if new_output_condition:
         current_output = mon['mll_fR/PID_output']['data'][-1]
     current_limits = mon['mll_fR/PID_output_limits']['data']
-        # Lock threshold
+    # Lock threshold
     v_high = (1-v_range_threshold)*current_limits['max'] + v_range_threshold*current_limits['min']
     v_low = (1-v_range_threshold)*current_limits['min'] + v_range_threshold*current_limits['max']
-        # Temperature adjustment threshold
+    # Temperature adjustment threshold
     v_high2 = (1-2*v_range_threshold)*current_limits['max'] + 2*v_range_threshold*current_limits['min']
     v_low2 = (1-2*v_range_threshold)*current_limits['min'] + 2*v_range_threshold*current_limits['max']
 # Clear 'new' data flags --------------------------------------------

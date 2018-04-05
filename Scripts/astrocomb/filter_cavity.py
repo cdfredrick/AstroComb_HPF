@@ -867,6 +867,7 @@ def keep_lock(state_db):
     if new_output_condition:
         current_output = mon['filter_cavity/PID_output']['data'][-1]
     current_limits = mon['filter_cavity/PID_output_limits']['data']
+    # Lock threshold
     v_high = (1-v_range_threshold)*current_limits['max'] + v_range_threshold*current_limits['min']
     v_low = (1-v_range_threshold)*current_limits['min'] + v_range_threshold*current_limits['max']
     # Clear 'new' data flags
@@ -913,65 +914,66 @@ def keep_lock(state_db):
             v_avg_slope = np.mean(np.diff(data))/(len(data)-1)
             v_expected = v_avg + v_avg_slope*len(data)/2
             v_std = np.std(data - v_avg_slope*np.arange(len(data)))
-            upper_limit = round(v_expected + (v_std_threshold*v_std)/(1-2*v_range_threshold),2)
-            lower_limit = round(v_expected - (v_std_threshold*v_std)/(1-2*v_range_threshold),2)
-            if (upper_limit - lower_limit) < 0.5: #TODO: determine optimal thresholds
-                upper_limit = round(v_expected + 0.25,2)
-                lower_limit = round(v_expected - 0.25,2)
-        # Restrict the results
+            new_upper_limit = round(v_expected + (v_std_threshold*v_std)/(1-2*v_range_threshold),2)
+            new_lower_limit = round(v_expected - (v_std_threshold*v_std)/(1-2*v_range_threshold),2)
+            if (new_upper_limit - new_lower_limit) < 0.5: #TODO: determine optimal thresholds
+                new_upper_limit = round(v_expected + 0.25,2)
+                new_lower_limit = round(v_expected - 0.25,2)
+        # Restrict the limits
             device_db = 'filter_cavity/device_PID'
             state_limits = {
                     'upper_output_limit':STATES[state_db][current_state[state_db]['state']]['settings'][device_db]['upper_output_limit'],
                     'lower_output_limit':STATES[state_db][current_state[state_db]['state']]['settings'][device_db]['lower_output_limit']}
-            update_upper = True
-            update_lower = True
-            if upper_limit == lower_limit:
+            if (new_upper_limit > state_limits['upper_output_limit']):
+                new_upper_limit = state_limits['upper_output_limit']
+            if (new_lower_limit < state_limits['lower_output_limit']):
+                new_lower_limit = state_limits['lower_output_limit']
+        # Determine if limits should be updated
+            new_v_high = (1-v_range_threshold)*new_upper_limit + v_range_threshold*new_lower_limit
+            new_v_low = (1-v_range_threshold)*new_lower_limit + v_range_threshold*new_upper_limit
+            update_upper = False
+            update_lower = False
+            if new_v_high > current_limits['max']:
+                update_upper = True
+            if new_v_low < current_limits['min']:
+                update_lower = True
+            if new_upper_limit < v_high:
+                update_upper = True
+            if new_lower_limit > v_low:
+                update_lower = True
+            if (new_upper_limit == current_limits['max']):
                 update_upper = False
+            if (new_lower_limit == current_limits['min']):
                 update_lower = False
-            elif (upper_limit >= state_limits['upper_output_limit']) and (lower_limit <= state_limits['lower_output_limit']):
+            if new_upper_limit == new_lower_limit:
                 update_upper = False
-                update_lower = False
-            elif (upper_limit > state_limits['upper_output_limit']):
-                upper_limit = state_limits['upper_output_limit']
-            elif (lower_limit < state_limits['lower_output_limit']):
-                lower_limit = state_limits['lower_output_limit']
-            if (upper_limit == current_limits['max']):
-                update_upper = False
-            if (lower_limit == current_limits['min']):
                 update_lower = False
         # Update the hardware limits
             if (update_upper or update_lower):
             # Update the limits
                 if not(update_lower):
-                    settings_list = {'upper_output_limit':upper_limit}
+                    settings_list = {'upper_output_limit':new_upper_limit}
                 elif not(update_upper):
-                    settings_list = {'lower_output_limit':lower_limit}
+                    settings_list = {'lower_output_limit':new_lower_limit}
                 else:
                     settings_list = {
-                            'upper_output_limit':upper_limit,
-                            'lower_output_limit':lower_limit}
+                            'upper_output_limit':new_upper_limit,
+                            'lower_output_limit':new_lower_limit}
                 update_device_settings(device_db, settings_list, write_log=False)
             # Update the voltage limit monitor
                 mon['filter_cavity/PID_output_limits']['new'] = True
-                mon['filter_cavity/PID_output_limits']['data'] = {'min':lower_limit, 'max':upper_limit}
-                db['filter_cavity/PID_output_limits'].write_record_and_buffer({'min':lower_limit, 'max':upper_limit})
+                mon['filter_cavity/PID_output_limits']['data'] = {'min':new_lower_limit, 'max':new_upper_limit}
+                db['filter_cavity/PID_output_limits'].write_record_and_buffer({'min':new_lower_limit, 'max':new_upper_limit})
 
 def lock_disabled(state_db):
-# Queue the SRS PID controller --------------------------------------
-    device_db = 'filter_cavity/device_PID'
-    dev[device_db]['queue'].queue_and_wait()
-# Check if the PID controller is on ---------------------------------
-    if dev[device_db]['driver'].pid_action():
-    # Turn off
-        dev[device_db]['driver'].pid_action(False)
-# Remove SRS PID from queue -----------------------------------------
-    dev[device_db]['queue'].remove()
-
+if (mon['filter_cavity/PID_action']['data'] != False):
+    # Update state variable
+        current_state[state_db]['compliance'] = False
+        db[state_db].write_record_and_buffer(current_state[state_db])
 
 # Operate Functions -----------------------------------------------------------
 '''This section is for defining the methods called only when the system is in
     its defined states.'''
-
 
 
 # %% States ===================================================================

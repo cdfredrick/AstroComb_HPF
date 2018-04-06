@@ -26,7 +26,7 @@ class MongoClient:
             document keys.
         '''
         # Connect to the mongoDB client
-        self.client = pymongo.MongoClient()
+        self.client = pymongo.MongoClient(maxPoolSize=None)
         self.COLLECTION_KEYS = ['record', 'buffer', 'log', 'log_buffer']
         self.DOCUMENT_KEYS = ['_id', 'entry', '_timestamp', 'log_level']
     
@@ -352,7 +352,7 @@ class DatabaseReadWrite(DatabaseRead):
         document.pop('_id')
         self.record.insert_one(document)
 
-    def write_buffer(self, entry_dict):
+    def write_buffer(self, entry_dict, timestamp=None):
         '''
         Writes an entry into the buffer. An entry into the buffer can contain any
             type, but all entries should contain the same type and should represent
@@ -361,11 +361,14 @@ class DatabaseReadWrite(DatabaseRead):
         *args
         entry_dict: a dictionary containing things to write to the buffer.
         '''
-        document = {'_timestamp':datetime.datetime.utcnow()}
+        if (timestamp == None) or (type(timestamp) != datetime.datetime):
+            document = {'_timestamp':datetime.datetime.utcnow()}
+        else:
+            document = {'_timestamp':timestamp}
         document = dict(list(document.items()) + list(entry_dict.items()))
         self.buffer.insert_one(document)
 
-    def write_log(self, entry, log_level):
+    def write_log(self, entry, log_level, timestamp=None):
         '''
         Writes an entry into the log. An entry into the log can be of any type,
             but is ideally a text based description of the current state of, or
@@ -378,10 +381,12 @@ class DatabaseReadWrite(DatabaseRead):
         entry: a thing to write to the log.
         log_level: int, the log level of the entry.
         '''
-        document = {'entry':entry, '_timestamp':datetime.datetime.utcnow(), 'log_level':log_level}
+        if (timestamp == None) or (type(timestamp) != datetime.datetime):
+            timestamp = datetime.datetime.utcnow()
+        document = {'entry':entry, '_timestamp':timestamp, 'log_level':log_level}
         self.log.insert_one(document)
     
-    def write_log_buffer(self, entry, log_level):
+    def write_log_buffer(self, entry, log_level, timestamp=None):
         '''
         Writes an entry into the log buffer. An entry into the log can be of
             any type, but is ideally a text based description of the current 
@@ -395,10 +400,12 @@ class DatabaseReadWrite(DatabaseRead):
         entry: a thing to write to the log.
         log_level: int, the log level of the entry.
         '''
-        document = {'entry':entry, '_timestamp':datetime.datetime.utcnow(), 'log_level':log_level}
+        if (timestamp == None) or (type(timestamp) != datetime.datetime):
+            timestamp = datetime.datetime.utcnow()
+        document = {'entry':entry, '_timestamp':timestamp, 'log_level':log_level}
         self.log_buffer.insert_one(document)
     
-    def write_log_and_log_buffer(self, entry, log_level):
+    def write_log_and_log_buffer(self, entry, log_level, timestamp=None):
         '''
         Writes an entry into the log and log buffer. An entry into the log can
             be of any type, but is ideally a text based description of the 
@@ -412,11 +419,13 @@ class DatabaseReadWrite(DatabaseRead):
         entry: a thing to write to the log.
         log_level: int, the log level of the entry.
         '''
-        document = {'entry':entry, '_timestamp':datetime.datetime.utcnow(), 'log_level':log_level}
+        if (timestamp == None) or (type(timestamp) != datetime.datetime):
+            timestamp = datetime.datetime.utcnow()
+        document = {'entry':entry, '_timestamp':timestamp, 'log_level':log_level}
         self.log.insert_one(document)
         self.log_buffer.insert_one(document)
 
-    def write_record(self, entry_dict):
+    def write_record(self, entry_dict, timestamp=None):
         '''
         Writes an entry into the record. This bypasses the buffer and directly 
             writes an entry into the record. For compatibility considerations, 
@@ -425,11 +434,14 @@ class DatabaseReadWrite(DatabaseRead):
         *args
         entry_dict: a dictionary containing thing to write to the record.
         '''
-        document = {'_timestamp':datetime.datetime.utcnow()}
+        if (timestamp == None) or (type(timestamp) != datetime.datetime):
+            document = {'_timestamp':datetime.datetime.utcnow()}
+        else:
+            document = {'_timestamp':timestamp}
         document = dict(list(document.items()) + list(entry_dict.items()))
         self.record.insert_one(document)
     
-    def write_record_and_buffer(self, entry_dict):
+    def write_record_and_buffer(self, entry_dict, timestamp=None):
         '''
         Writes an entry into the record and into the buffer. For compatibility
         considerations, the entry should have the same format as those written
@@ -438,7 +450,10 @@ class DatabaseReadWrite(DatabaseRead):
         *args
         entry_dict: a dictionary containing thing to write to the record.
         '''
-        document = {'_timestamp':datetime.datetime.utcnow()}
+        if (timestamp == None) or (type(timestamp) != datetime.datetime):
+            document = {'_timestamp':datetime.datetime.utcnow()}
+        else:
+            document = {'_timestamp':timestamp}
         document = dict(list(document.items()) + list(entry_dict.items()))
         self.buffer.insert_one(document)
         self.record.insert_one(document)

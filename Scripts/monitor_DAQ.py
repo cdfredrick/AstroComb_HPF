@@ -833,7 +833,7 @@ def read_ai_DAQ(state_db):
             mon[monitor_db]['data'] = update_buffer(
                     mon[monitor_db]['data'],
                     data_mean, 500)
-            db[monitor_db].write_record_and_buffer({'V':data_mean, 'std':data_std, 'n':data_n})
+            db[monitor_db].write_buffer({'V':data_mean, 'std':data_std, 'n':data_n})
         # Append to record array ----------------
         array[channel] = np.append(array[channel], data)
         if new_record_lap > timer['daq:record']:
@@ -858,7 +858,7 @@ def read_ai_DAQ(state_db):
             mon[monitor_db]['data'] = update_buffer(
                     mon[monitor_db]['data'],
                     data_mean, 500)
-            db[monitor_db].write_record_and_buffer({'V':data_mean, 'std':data_std, 'n':data_n})
+            db[monitor_db].write_buffer({'V':data_mean, 'std':data_std, 'n':data_n})
         # Append to record array ----------------
         array[channel] = np.append(array[channel], data)
         if new_record_lap > timer['daq:record']:
@@ -882,7 +882,7 @@ def read_ai_DAQ(state_db):
             mon[monitor_db]['data'] = update_buffer(
                     mon[monitor_db]['data'],
                     data_mean, 500)
-            db[monitor_db].write_record_and_buffer({'V':data_mean, 'std':data_std, 'n':data_n})
+            db[monitor_db].write_buffer({'V':data_mean, 'std':data_std, 'n':data_n})
         # Append to record array ----------------
         array[channel] = np.append(array[channel], data)
         if new_record_lap > timer['daq:record']:

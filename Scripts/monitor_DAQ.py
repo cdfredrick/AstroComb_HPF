@@ -807,7 +807,6 @@ def read_ai_DAQ(state_db):
     # Double check queue
         dev[device_db]['queue'].queue_and_wait()
     # Get values
-<<<<<<< HEAD
         multi_channel_reading = np.array(dev[device_db]['driver'].read_cont())
         timestamp=datetime.datetime.utcnow()
         sample_size = multi_channel_reading.size

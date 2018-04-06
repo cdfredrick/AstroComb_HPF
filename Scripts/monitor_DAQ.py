@@ -783,10 +783,8 @@ def record_ai(monitor_db, data, timestamp, write_record, array_identifier, chann
             array[array_identifier[ind]] = np.append(array[array_identifier[ind]], data[ind])
             array_size.append(array[array_identifier[ind]].size)
         if write_record:
-            if (monitor_db == 'filter_cavity/heater_temperature'):
-                print(array_size)
             data_record = {}
-            if (np.product(array_size) > 0):
+            if np.all(array_size):
         # Record statistics ---------------------
                 for ind, name in enumerate(channel_identifiers):
                     data_record[name+'_V'] = array[array_identifier[ind]].mean()

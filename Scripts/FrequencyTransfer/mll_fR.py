@@ -650,7 +650,7 @@ def get_srs_data():
         array['srs:v_out'] = np.append(array['srs:v_out'], v_out)
         if new_record_lap > timer['srs:record']:
             # Record statistics
-            db['filter_cavity/PID_output'].write_record({
+            db['mll_fR/PID_output'].write_record({
                     'V':array['srs:v_out'].mean(),
                     'std':array['srs:v_out'].std(),
                     'n':array['srs:v_out'].size})

@@ -730,9 +730,10 @@ def queue_worker(queue_name):
             item.start()
             item.join()
             fifo_q[queue_name].task_done()
-for database in MONITOR_DBs:
-    fifo_q[database] = queue.Queue()
-    thread[database] = threading.Thread(target=queue_worker, args=[database], daemon=True)
+fifo_q['daq:ai_buffer'] = queue.Queue()
+thread['daq:ai_buffer'] = threading.Thread(target=queue_worker, args=['daq:ai_buffer'], daemon=True)
+fifo_q['daq:ai_record'] = queue.Queue()
+thread['daq:ai_record'] = threading.Thread(target=queue_worker, args=['daq:ai_record'], daemon=True)
 
 def buffer_ai(monitor_db, data_mean, data_std, data_n, timestamp, channel_identifiers=None):
     if (channel_identifiers == None):
@@ -822,34 +823,30 @@ def read_ai_DAQ(state_db):
             channel_index = 0 # ai0
             data = multi_channel_reading[channel_index]
             # Update buffer
-            buffer_ai(monitor_db, multi_channel_mean[channel_index],
-                      multi_channel_std[channel_index], multi_channel_n,
-                      timestamp)
+            args = [monitor_db, multi_channel_mean[channel_index],
+                    multi_channel_std[channel_index], multi_channel_n,
+                    timestamp]
+            item = threading.Thread(target=buffer_ai, args=args, daemon=True)
+            fifo_q['daq:ai_buffer'].put(item, block=False)
             # Update record
             args = [monitor_db, data, timestamp, write_record, channel]
             item = threading.Thread(target=record_ai, args=args, daemon=True)
-            fifo_q[monitor_db].put(item, block=False)
-            if not(thread[monitor_db].is_alive()):
-            # Start new thread
-                thread[monitor_db] = threading.Thread(target=queue_worker, args=[monitor_db], daemon=True)
-                thread[monitor_db].start()
+            fifo_q['daq:ai_record'].put(item, block=False)
         # ai1, 'filter_cavity/DAQ_error_signal' ---------------
             channel = 'daq:ai1'
             monitor_db = 'filter_cavity/DAQ_error_signal'
             channel_index = 1 # ai1
             data = multi_channel_reading[channel_index]
             # Update buffer
-            buffer_ai(monitor_db, multi_channel_mean[channel_index],
-                      multi_channel_std[channel_index], multi_channel_n,
-                      timestamp)
+            args = [monitor_db, multi_channel_mean[channel_index],
+                    multi_channel_std[channel_index], multi_channel_n,
+                    timestamp]
+            item = threading.Thread(target=buffer_ai, args=args, daemon=True)
+            fifo_q['daq:ai_buffer'].put(item, block=False)
             # Update record
             args = [monitor_db, data, timestamp, write_record, channel]
             item = threading.Thread(target=record_ai, args=args, daemon=True)
-            fifo_q[monitor_db].put(item, block=False)
-            if not(thread[monitor_db].is_alive()):
-            # Start new thread
-                thread[monitor_db] = threading.Thread(target=queue_worker, args=[monitor_db], daemon=True)
-                thread[monitor_db].start()
+            fifo_q['daq:ai_record'].put(item, block=False)
         # ai2, V_set, 'filter_cavity/heater_temperature' ------
         # ai3, V_act, 'filter_cavity/heater_temperature' ------
             channel_set = 'daq:ai2'
@@ -861,71 +858,73 @@ def read_ai_DAQ(state_db):
             channel_indicies = [channel_index_set, channel_index_act]
             data = multi_channel_reading[channel_indicies]
             # Update buffer
-            buffer_ai(monitor_db, multi_channel_mean[channel_indicies],
-                      multi_channel_std[channel_indicies], multi_channel_n,
-                      timestamp, channel_identifiers=['set', 'act'])
+            args = [monitor_db, multi_channel_mean[channel_indicies],
+                    multi_channel_std[channel_indicies], multi_channel_n,
+                    timestamp]
+            kwargs = {'channel_identifiers':['set', 'act']}
+            item = threading.Thread(target=buffer_ai, args=args, kwargs=kwargs, daemon=True)
+            fifo_q['daq:ai_buffer'].put(item, block=False)
             # Update record
             args = [monitor_db, data, timestamp, write_record, channels]
             kwargs = {'channel_identifiers':['set', 'act']}
             item = threading.Thread(target=record_ai, args=args, kwargs=kwargs, daemon=True)
-            fifo_q[monitor_db].put(item, block=False)
-            if not(thread[monitor_db].is_alive()):
-            # Start new thread
-                thread[monitor_db] = threading.Thread(target=queue_worker, args=[monitor_db], daemon=True)
-                thread[monitor_db].start()
+            fifo_q['daq:ai_record'].put(item, block=False)
         # ai4, 'ambience/box_temperature_0' -------------------
             channel = 'daq:ai4'
             monitor_db = 'ambience/box_temperature_0'
             channel_index = 4 # ai4
             data = multi_channel_reading[channel_index]
             # Update buffer
-            buffer_ai(monitor_db, multi_channel_mean[channel_index],
-                      multi_channel_std[channel_index], multi_channel_n,
-                      timestamp)
+            args = [monitor_db, multi_channel_mean[channel_index],
+                    multi_channel_std[channel_index], multi_channel_n,
+                    timestamp]
+            item = threading.Thread(target=buffer_ai, args=args, daemon=True)
+            fifo_q['daq:ai_buffer'].put(item, block=False)
             # Update record
             args = [monitor_db, data, timestamp, write_record, channel]
             item = threading.Thread(target=record_ai, args=args, daemon=True)
-            fifo_q[monitor_db].put(item, block=False)
-            if not(thread[monitor_db].is_alive()):
-            # Start new thread
-                thread[monitor_db] = threading.Thread(target=queue_worker, args=[monitor_db], daemon=True)
-                thread[monitor_db].start()
+            fifo_q['daq:ai_record'].put(item, block=False)
         # ai5, 'ambience/box_temperature_1' -------------------
             channel = 'daq:ai5'
             monitor_db = 'ambience/box_temperature_1'
             channel_index = 5 # ai5
             data = multi_channel_reading[channel_index]
             # Update buffer
-            buffer_ai(monitor_db, multi_channel_mean[channel_index],
-                      multi_channel_std[channel_index], multi_channel_n,
-                      timestamp)
+            args = [monitor_db, multi_channel_mean[channel_index],
+                    multi_channel_std[channel_index], multi_channel_n,
+                    timestamp]
+            item = threading.Thread(target=buffer_ai, args=args, daemon=True)
+            fifo_q['daq:ai_buffer'].put(item, block=False)
             # Update record
             args = [monitor_db, data, timestamp, write_record, channel]
             item = threading.Thread(target=record_ai, args=args, daemon=True)
-            fifo_q[monitor_db].put(item, block=False)
-            if not(thread[monitor_db].is_alive()):
-            # Start new thread
-                thread[monitor_db] = threading.Thread(target=queue_worker, args=[monitor_db], daemon=True)
-                thread[monitor_db].start()
+            fifo_q['daq:ai_record'].put(item, block=False)
         # ai6, 'ambience/rack_temperature_0' ------------------
             channel = 'daq:ai6'
             monitor_db = 'ambience/rack_temperature_0'
             channel_index = 6 # ai6
             data = multi_channel_reading[channel_index]
             # Update buffer
-            buffer_ai(monitor_db, multi_channel_mean[channel_index],
-                      multi_channel_std[channel_index], multi_channel_n,
-                      timestamp)
+            args = [monitor_db, multi_channel_mean[channel_index],
+                    multi_channel_std[channel_index], multi_channel_n,
+                    timestamp]
+            item = threading.Thread(target=buffer_ai, args=args, daemon=True)
+            fifo_q['daq:ai_buffer'].put(item, block=False)
             # Update record
             args = [monitor_db, data, timestamp, write_record, channel]
             item = threading.Thread(target=record_ai, args=args, daemon=True)
-            fifo_q[monitor_db].put(item, block=False)
-            if not(thread[monitor_db].is_alive()):
+            fifo_q['daq:ai_record'].put(item, block=False)
+        # Check threads ---------------------------------------------
+            if not(thread['daq:ai_buffer'].is_alive()):
             # Start new thread
-                thread[monitor_db] = threading.Thread(target=queue_worker, args=[monitor_db], daemon=True)
-                thread[monitor_db].start()
+                thread['daq:ai_record'] = threading.Thread(target=queue_worker, args=['daq:ai_record'], daemon=True)
+                thread['daq:ai_record'].start()
+            if not(thread['daq:ai_record'].is_alive()):
+            # Start new thread
+                thread['daq:ai_record'] = threading.Thread(target=queue_worker, args=['daq:ai_record'], daemon=True)
+                thread['daq:ai_record'].start()
         # Propogate lap numbers -------------------------------------
-            if new_record_lap > timer['daq:record_ai']:
+            if write_record:
                 timer['daq:record_ai'] = new_record_lap
     # Propogate lap numbers -----------------------------------------
         timer[state_db]['data'] = new_control_lap

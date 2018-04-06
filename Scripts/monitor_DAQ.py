@@ -917,8 +917,8 @@ def read_ai_DAQ(state_db):
         # Check threads ---------------------------------------------
             if not(thread['daq:ai_buffer'].is_alive()):
             # Start new thread
-                thread['daq:ai_record'] = threading.Thread(target=queue_worker, args=['daq:ai_record'], daemon=True)
-                thread['daq:ai_record'].start()
+                thread['daq:ai_buffer'] = threading.Thread(target=queue_worker, args=['daq:ai_buffer'], daemon=True)
+                thread['daq:ai_buffer'].start()
             if not(thread['daq:ai_record'].is_alive()):
             # Start new thread
                 thread['daq:ai_record'] = threading.Thread(target=queue_worker, args=['daq:ai_record'], daemon=True)

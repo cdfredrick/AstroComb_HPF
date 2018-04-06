@@ -776,13 +776,15 @@ def record_ai(monitor_db, data, timestamp, write_record, array_identifier, chann
                         'n':array[array_identifier].size}, timestamp=timestamp)
         # Empty the array -----------------------
                 array[array_identifier] = np.array([])
-    else:
+    elif (type(channel_identifiers) == list):
         # Append to record arrays ---------------
         array_size = []
         for ind, name in enumerate(channel_identifiers):
             array[array_identifier[ind]] = np.append(array[array_identifier[ind]], data[ind])
             array_size.append(array[array_identifier[ind]].size)
         if write_record:
+            if (monitor_db == 'filter_cavity/heater_temperature'):
+                print(array_size)
             data_record = {}
             if (np.product(array_size) > 0):
         # Record statistics ---------------------

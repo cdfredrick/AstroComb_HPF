@@ -592,6 +592,7 @@ thread = {}
 def nothing(state_db):
     pass
 
+
 # Monitor Functions -----------------------------------------------------------
 '''This section is for defining the methods needed to monitor the system.'''
 array['srs:v_out'] = np.array([])
@@ -730,6 +731,7 @@ def monitor(state_db):
     # Propogate lap numbers ---------------------------------------------
         timer['monitor:passive'] = new_passive_lap
 
+
 # Search Functions ------------------------------------------------------------
 '''This section is for defining the methods needed to bring the system into
     its defined states.'''
@@ -742,6 +744,9 @@ timer['find_lock:locked'] = time.time()
 timer['find_lock:log_setpoint_error'] = time.time()
 def find_lock(state_db, last_good_position=None):
 # Queue the SRS PID controller --------------------------------------
+    if thread['get_srs_data'].ident != None:
+    # Wait for the monitor thread to complete
+        thread['get_srs_data'].join()
     device_db = 'filter_cavity/device_PID'
     dev[device_db]['queue'].queue_and_wait(priority=True)
 # Initialize threshold variables ------------------------------------
@@ -814,6 +819,9 @@ def find_lock(state_db, last_good_position=None):
                 {'y_min_limit':STATES[state_db][current_state[state_db]['state']]['settings']['filter_cavity/device_HV']['y_min_limit'],
                  'y_max_limit':STATES[state_db][current_state[state_db]['state']]['settings']['filter_cavity/device_HV']['y_max_limit']},
                  {'y_voltage':STATES[state_db][current_state[state_db]['state']]['settings']['filter_cavity/device_HV']['y_voltage']}]
+        if thread['get_hv_data'].ident != None:
+        # Wait for the monitor thread to complete
+            thread['get_hv_data'].join()
         update_device_settings('filter_cavity/device_HV', settings_list)
     # Reinitialize threshold variables --------------------
         v_high = (1-v_range_threshold)*dev[device_db]['driver'].upper_limit + v_range_threshold*dev[device_db]['driver'].lower_limit
@@ -850,7 +858,6 @@ def find_lock(state_db, last_good_position=None):
         #Coarse Estimate ------------------------
         min_index = np.argmin(y)
         output_coarse = x[min_index]
-        #new_output = output_coarse
         #Fine Estimate --------------------------
         try:
             spline = UnivariateSpline(x, y, w=w)
@@ -858,9 +865,7 @@ def find_lock(state_db, last_good_position=None):
             new_output = min_result['x'][0]
         except:
             log.log_exception(__name__, 'find_lock')
-            # Failure may be because the frequency response was too flat?
-            # The middle is a safe place to go (no TEC adjustment)
-            new_output = dev[device_db]['driver'].center
+            new_output = output_coarse
     # Get Lock --------------------------------------------
         if (new_output > v_low) and (new_output < v_high):
             '''If the new lock point is within the acceptable range between
@@ -891,6 +896,9 @@ def find_lock(state_db, last_good_position=None):
 
 def transfer_to_manual(state_db):
 # Queue the SRS PID controller --------------------------------------
+    if thread['get_srs_data'].ident != None:
+    # Wait for the monitor thread to complete
+        thread['get_srs_data'].join()
     device_db = 'filter_cavity/device_PID'
     dev[device_db]['queue'].queue_and_wait()
 # Check if the PID controller is on ---------------------------------
@@ -1015,6 +1023,9 @@ def keep_lock(state_db):
                     settings_list = {
                             'upper_output_limit':new_upper_limit,
                             'lower_output_limit':new_lower_limit}
+                if thread['get_srs_data'].ident != None:
+                # Wait for the monitor thread to complete
+                    thread['get_srs_data'].join()
                 update_device_settings(device_db, settings_list, write_log=False)
             # Update the voltage limit monitor
                 mon['filter_cavity/PID_output_limits']['new'] = True
@@ -1026,6 +1037,7 @@ def lock_disabled(state_db):
     # Update state variable
         current_state[state_db]['compliance'] = False
         db[state_db].write_record_and_buffer(current_state[state_db])
+
 
 # Operate Functions -----------------------------------------------------------
 '''This section is for defining the methods called only when the system is in
@@ -1341,6 +1353,6 @@ while loop:
         main_loop_timer += 1
     else:
         log_str = "Execution time exceeded the set loop interval {:}s by {:.2g}s".format(main_loop_interval, abs(pause))
-        log.log_warning(__name__, 'main_loop', log_str)
+        log.log_info(__name__, 'main_loop', log_str)
         main_loop_timer = get_lap(main_loop_interval)+1
 

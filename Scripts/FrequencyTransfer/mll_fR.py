@@ -12,6 +12,8 @@ import numpy as np
 import time
 import logging
 
+import threading
+
 import os
 import sys
 sys.path.append(os.getcwd())
@@ -600,8 +602,10 @@ for database in R_MONITOR_DBs:
 
 # %% State and Monitor Functions ==============================================
 
-# Global Timing Variable ------------------------------------------------------
+# Global Variables ------------------------------------------------------------
 timer = {}
+array = {}
+thread = {}
 
 # Do nothing function ---------------------------------------------------------
 '''A functional placeholder for cases where nothing should happen.'''
@@ -609,10 +613,163 @@ timer = {}
 def nothing(state_db):
     pass
 
+
 # Monitor Functions -----------------------------------------------------------
 '''This section is for defining the methods needed to monitor the system.'''
-control_interval = 0.2 # s
-passive_interval = 60.0 # s
+array['srs:v_out'] = np.array([])
+srs_record_interval = 10 # seconds
+timer['srs:record'] = get_lap(srs_record_interval)
+def get_srs_data():
+# Get lap number
+    new_record_lap = get_lap(srs_record_interval)
+# Pull data from SRS ----------------------------------
+    device_db = 'mll_fR/device_PID'
+    # Wait for queue
+    dev[device_db]['queue'].queue_and_wait()
+    # Get values
+        # Current output voltage
+    new_v_out = dev[device_db]['driver'].new_output_monitor()
+    if new_v_out:
+        v_out = dev[device_db]['driver'].output_monitor()
+        # Output voltage limits
+    v_min = dev[device_db]['driver'].lower_limit
+    v_max = dev[device_db]['driver'].upper_limit
+        # PID action
+    pid_action = dev[device_db]['driver'].pid_action()
+    # Remove from queue
+    dev[device_db]['queue'].remove()
+    # Update buffers and databases ----------
+        # Output voltage ----------
+    if new_v_out:
+        mon['mll_fR/PID_output']['new'] = True
+        mon['mll_fR/PID_output']['data'] = update_buffer(
+                mon['mll_fR/PID_output']['data'],
+                v_out, 500)
+        db['mll_fR/PID_output'].write_buffer({'V':v_out})
+            # Append to the record array
+        array['srs:v_out'] = np.append(array['srs:v_out'], v_out)
+        if new_record_lap > timer['srs:record']:
+            # Record statistics
+            db['filter_cavity/PID_output'].write_record({
+                    'V':array['srs:v_out'].mean(),
+                    'std':array['srs:v_out'].std(),
+                    'n':array['srs:v_out'].size})
+            # Empty the array
+            array['srs:v_out'] = np.array([])
+        # Voltage limits ----------
+    if (mon['mll_fR/PID_output_limits']['data'] != {'min':v_min, 'max':v_max}):
+        mon['mll_fR/PID_output_limits']['new'] = True
+        mon['mll_fR/PID_output_limits']['data'] = {'min':v_min, 'max':v_max}
+        db['mll_fR/PID_output_limits'].write_record_and_buffer({'min':v_min, 'max':v_max})
+        # PID action --------------
+    if (mon['mll_fR/PID_action']['data'] != pid_action):
+        mon['mll_fR/PID_action']['new'] = True
+        mon['mll_fR/PID_action']['data'] = pid_action
+        db['mll_fR/PID_action'].write_record_and_buffer({'Action':pid_action})
+    # Propogate lap numbers ---------------------------------------------
+    if new_record_lap > timer['srs:record']:
+        timer['srs:record'] = new_record_lap
+thread['get_srs_data'] = threading.Thread(target=get_srs_data, daemon=True)
+
+array['ilx:tec_temp'] = np.array([])
+array['ilx:tec_curr'] = np.array([])
+ilx_record_interval = 10 # seconds
+timer['ilx:record'] = get_lap(ilx_record_interval)
+def get_ilx_data():
+# Get lap number
+    new_record_lap = get_lap(ilx_record_interval)
+# Pull data from ILX Lightwave ------------------------
+    device_db = 'mll_fR/device_TEC'
+    # Wait for queue
+    dev[device_db]['queue'].queue_and_wait()
+    # Get values
+    dev[device_db]['driver'].open_resource()
+    tec_temp = dev[device_db]['driver'].tec_resistance()
+    tec_curr = dev[device_db]['driver'].tec_current()
+    tec_events = dev[device_db]['driver'].tec_events()
+    dev[device_db]['driver'].close_resource()
+    # Remove from queue
+    dev[device_db]['queue'].remove()
+    # Update buffers and databases -----------
+        # TEC temp ----------------
+    mon['mll_fR/TEC_temperature']['new'] = True
+    mon['mll_fR/TEC_temperature']['data'] = update_buffer(
+            mon['mll_fR/TEC_temperature']['data'],
+            tec_temp, 100)
+    db['mll_fR/TEC_temperature'].write_buffer({'kOhm':tec_temp})
+            # Append to the record array
+    array['ilx:tec_temp'] = np.append(array['ilx:tec_temp'], tec_temp)
+    if new_record_lap > timer['ilx:record']:
+        # Record statistics
+        db['mll_fR/TEC_temperature'].write_record({
+                'kOhm':array['ilx:tec_temp'].mean(),
+                'std':array['ilx:tec_temp'].std(),
+                'n':array['ilx:tec_temp'].size})
+        # Empty the array
+        array['ilx:tec_temp'] = np.array([])
+        # TEC current -------------
+    mon['mll_fR/TEC_current']['new'] = True
+    mon['mll_fR/TEC_current']['data'] = update_buffer(
+            mon['mll_fR/TEC_current']['data'],
+            tec_curr, 100)
+    db['mll_fR/TEC_current'].write_buffer({'A':tec_curr})
+            # Append to the record array
+    array['ilx:tec_curr'] = np.append(array['ilx:tec_curr'], tec_temp)
+    if new_record_lap > timer['ilx:record']:
+        # Record statistics
+        db['mll_fR/TEC_current'].write_record({
+                'A':array['ilx:tec_curr'].mean(),
+                'std':array['ilx:tec_curr'].std(),
+                'n':array['ilx:tec_curr'].size})
+        # Empty the array
+        array['ilx:tec_curr'] = np.array([])
+        # TEC Events --------------
+    if (mon['mll_fR/TEC_event_status']['data'] != tec_events):
+        mon['mll_fR/TEC_event_status']['new'] = True
+        mon['mll_fR/TEC_event_status']['data'] = tec_events
+        db['mll_fR/TEC_event_status'].write_record_and_buffer({'events':tec_events})
+    # Propogate lap numbers ---------------------------------------------
+    if new_record_lap > timer['ilx:record']:
+        timer['ilx:record'] = new_record_lap
+thread['get_ilx_data'] = threading.Thread(target=get_ilx_data, daemon=True)
+
+array['hv:v_out'] = np.array([])
+hv_record_interval = 10 # seconds
+timer['hv:record'] = get_lap(hv_record_interval)
+def get_HV_data():
+# Get lap number
+    new_record_lap = get_lap(hv_record_interval)
+# Pull data from Thorlabs 3-axis piezo controller -----
+    device_db = 'mll_fR/device_HV'
+    # Wait for queue
+    dev[device_db]['queue'].queue_and_wait()
+    # Get values
+    hv_out = dev[device_db]['driver'].x_voltage()
+    # Remove from queue
+    dev[device_db]['queue'].remove()
+    # Update buffers and databases ----------
+    mon['mll_fR/HV_output']['new'] = True
+    mon['mll_fR/HV_output']['data'] = update_buffer(
+            mon['mll_fR/HV_output']['data'],
+            hv_out, 100)
+    db['mll_fR/HV_output'].write_buffer({'V':hv_out})
+    # Append to the record array
+    array['hv:v_out'] = np.append(array['hv:v_out'], hv_out)
+    if new_record_lap > timer['hv:record']:
+        # Record statistics
+        db['mll_fR/HV_output'].write_record({
+                'V':array['hv:v_out'].mean(),
+                'std':array['hv:v_out'].std(),
+                'n':array['hv:v_out'].size})
+        # Empty the array
+        array['hv:v_out'] = np.array([])
+    # Propogate lap numbers ---------------------------------------------
+    if new_record_lap > timer['hv:record']:
+        timer['hv:record'] = new_record_lap
+thread['get_HV_data'] = threading.Thread(target=get_HV_data, daemon=True)
+
+control_interval = 0.5 # s
+passive_interval = 1.0 # s
 timer['monitor:control'] = get_lap(control_interval)
 timer['monitor:passive'] = get_lap(passive_interval)
 def monitor(state_db):
@@ -622,39 +779,10 @@ def monitor(state_db):
 # Update control loop variables -------------------------------------
     if (new_control_lap > timer['monitor:control']):
     # Pull data from SRS ----------------------------------
-        device_db = 'mll_fR/device_PID'
-        # Wait for queue
-        dev[device_db]['queue'].queue_and_wait()
-        # Get values
-            # Current output voltage
-        new_v_out = dev[device_db]['driver'].new_output_monitor()
-        if new_v_out:
-            v_out = dev[device_db]['driver'].output_monitor()
-            # Output voltage limits
-        v_min = dev[device_db]['driver'].lower_limit
-        v_max = dev[device_db]['driver'].upper_limit
-            # PID action
-        pid_action = dev[device_db]['driver'].pid_action()
-        # Remove from queue
-        dev[device_db]['queue'].remove()
-        # Update buffers and databases ----------
-            # Output voltage ----------
-        if new_v_out:
-            mon['mll_fR/PID_output']['new'] = True
-            mon['mll_fR/PID_output']['data'] = update_buffer(
-                    mon['mll_fR/PID_output']['data'],
-                    v_out, 500)
-            db['mll_fR/PID_output'].write_record_and_buffer({'V':v_out})
-            # Voltage limits ----------
-        if (mon['mll_fR/PID_output_limits']['data'] != {'min':v_min, 'max':v_max}):
-            mon['mll_fR/PID_output_limits']['new'] = True
-            mon['mll_fR/PID_output_limits']['data'] = {'min':v_min, 'max':v_max}
-            db['mll_fR/PID_output_limits'].write_record_and_buffer({'min':v_min, 'max':v_max})
-            # PID action --------------
-        if (mon['mll_fR/PID_action']['data'] != pid_action):
-            mon['mll_fR/PID_action']['new'] = True
-            mon['mll_fR/PID_action']['data'] = pid_action
-            db['mll_fR/PID_action'].write_record_and_buffer({'Action':pid_action})
+        if not(thread['get_srs_data'].is_alive()):
+        # Start new thread
+            thread['get_srs_data'] = threading.Thread(target=get_srs_data, daemon=True)
+            thread['get_srs_data'].start()
     # Pull data from external databases -------------------
         new_data = []
         for doc in mon['mll_fR/DAQ_error_signal']['cursor']:
@@ -665,57 +793,23 @@ def monitor(state_db):
             mon['mll_fR/DAQ_error_signal']['data'] = update_buffer(
                 mon['mll_fR/DAQ_error_signal']['data'],
                 new_data, 500)
+    # Propogate lap numbers ---------------------------------------------
+        timer['monitor:control'] = new_control_lap
 # Update passive monitoring variables -------------------------------
     if (new_passive_lap > timer['monitor:passive']):
     # Pull data from ILX Lightwave ------------------------
-        device_db = 'mll_fR/device_TEC'
-        # Wait for queue
-        dev[device_db]['queue'].queue_and_wait()
-        # Get values
-        dev[device_db]['driver'].auto_connect = False
-        dev[device_db]['driver'].open_resource()
-        tec_temp = dev[device_db]['driver'].tec_resistance()
-        tec_curr = dev[device_db]['driver'].tec_current()
-        tec_events = dev[device_db]['driver'].tec_events()
-        dev[device_db]['driver'].auto_connect = True
-        dev[device_db]['driver'].close_resource()
-        # Remove from queue
-        dev[device_db]['queue'].remove()
-        # Update buffers and databases -----------
-            # TEC temp ----------------
-        mon['mll_fR/TEC_temperature']['new'] = True
-        mon['mll_fR/TEC_temperature']['data'] = update_buffer(
-                mon['mll_fR/TEC_temperature']['data'],
-                tec_temp, 100)
-        db['mll_fR/TEC_temperature'].write_record_and_buffer({'kOhm':tec_temp})
-            # TEC current -------------
-        mon['mll_fR/TEC_current']['new'] = True
-        mon['mll_fR/TEC_current']['data'] = update_buffer(
-                mon['mll_fR/TEC_current']['data'],
-                tec_curr, 100)
-        db['mll_fR/TEC_current'].write_record_and_buffer({'A':tec_curr})
-            # TEC Events --------------
-        if (mon['mll_fR/TEC_event_status']['data'] != tec_events):
-            mon['mll_fR/TEC_event_status']['new'] = True
-            mon['mll_fR/TEC_event_status']['data'] = tec_events
-            db['mll_fR/TEC_event_status'].write_record_and_buffer({'events':tec_events})
+        if not(thread['get_ilx_data'].is_alive()):
+        # Start new thread
+            thread['get_ilx_data'] = threading.Thread(target=get_ilx_data, daemon=True)
+            thread['get_ilx_data'].start()
     # Pull data from Thorlabs 3-axis piezo controller -----
-        device_db = 'mll_fR/device_HV'
-        # Wait for queue
-        dev[device_db]['queue'].queue_and_wait()
-        # Get values
-        hv_out = dev[device_db]['driver'].x_voltage()
-        # Remove from queue
-        dev[device_db]['queue'].remove()
-        # Update buffers and databases ----------
-        mon['mll_fR/HV_output']['new'] = True
-        mon['mll_fR/HV_output']['data'] = update_buffer(
-                mon['mll_fR/HV_output']['data'],
-                hv_out, 100)
-        db['mll_fR/HV_output'].write_record_and_buffer({'V':hv_out})
-# Propogate lap numbers ---------------------------------------------
-    timer['monitor:control'] = new_control_lap
-    timer['monitor:passive'] = new_passive_lap
+        if not(thread['get_HV_data'].is_alive()):
+        # Start new thread
+            thread['get_HV_data'] = threading.Thread(target=get_HV_data, daemon=True)
+            thread['get_HV_data'].start()
+    # Propogate lap numbers ---------------------------------------------
+        timer['monitor:passive'] = new_passive_lap
+
 
 # Search Functions ------------------------------------------------------------
 '''This section is for defining the methods needed to bring the system into
@@ -729,6 +823,9 @@ timer['find_lock:locked'] = time.time()
 timer['find_lock:tec_adjust'] = time.time()
 def find_lock(state_db, last_good_position=None):
 # Queue the SRS PID controller --------------------------------------
+    if thread['get_srs_data'].ident != None:
+    # Wait for the monitor thread to complete
+        thread['get_srs_data'].join()
     device_db = 'mll_fR/device_PID'
     dev[device_db]['queue'].queue_and_wait(priority=True)
 # Initialize threshold variables ------------------------------------
@@ -868,6 +965,9 @@ def find_lock(state_db, last_good_position=None):
         # Remove the SRS PID controller from queue
             dev[device_db]['queue'].remove()
         # Queue the ILX TEC controller ----------
+            if thread['get_ilx_data'].ident != None:
+            # Wait for the monitor thread to complete
+                thread['get_ilx_data'].join()
             device_db = 'mll_fR/device_TEC'
             dev[device_db]['queue'].queue_and_wait(priority=True)
         # Check TEC settings --------------------
@@ -903,6 +1003,9 @@ def find_lock(state_db, last_good_position=None):
 
 def transfer_to_manual(state_db):
 # Queue the SRS PID controller --------------------------------------
+    if thread['get_srs_data'].ident != None:
+    # Wait for the monitor thread to complete
+        thread['get_srs_data'].join()
     device_db = 'mll_fR/device_PID'
     dev[device_db]['queue'].queue_and_wait()
 # Check if the PID controller is on ---------------------------------
@@ -919,6 +1022,7 @@ def transfer_to_manual(state_db):
 # Update state variable
     current_state[state_db]['compliance'] = True
     db[state_db].write_record_and_buffer(current_state[state_db])
+
 
 # Maintain Functions ----------------------------------------------------------
 '''This section is for defining the methods needed to maintain the system in
@@ -991,9 +1095,10 @@ def keep_lock(state_db):
             # If approaching the state limits, adjust the temperature setpoint
                 adjustment_interval_condition = ((time.time()-timer['find_lock:tec_adjust']) > tec_adjust_interval)
                 if (adjustment_interval_condition and (upper_limit_condition or lower_limit_condition)):
-                # Queue the ILX TEC controller --------------------------------------
+                    if thread['get_ilx_data'].ident != None:
+                    # Wait for the monitor thread to complete
+                        thread['get_ilx_data'].join()
                     device_db = 'mll_fR/device_TEC'
-                    dev[device_db]['queue'].queue_and_wait()
                 # Adjust timer
                     timer['find_lock:tec_adjust'] = time.time()
                 # Adjust the setpoint
@@ -1001,14 +1106,15 @@ def keep_lock(state_db):
                         log_str = 'Voltage = {:.3f}, raising the resistance setpoint'.format(current_output)
                         log.log_info(__name__, 'keep_lock', log_str)
                     # Raise the resistance setpoint
+                        settings_list = [{'tec_step':+1}, {'tec_resistance_setpoint':None}]
+                        update_device_settings(device_db, settings_list)
                         dev[device_db]['driver'].tec_step(+1)
                     elif upper_limit_condition:
                         log_str = 'Voltage = {:.3f}, lowering the resistance setpoint'.format(current_output)
                         log.log_info(__name__, 'keep_lock', log_str)
                     # Lower the resistance setpoint
-                        dev[device_db]['driver'].tec_step(-1)
-                # Remove the ILX TEC controller from queue ------------
-                    dev[device_db]['queue'].remove()
+                        settings_list = [{'tec_step':-1}, {'tec_resistance_setpoint':None}]
+                        update_device_settings(device_db, settings_list)
 
 def lock_disabled(state_db):
 # Check if the PID controller is on ---------------------------------
@@ -1336,6 +1442,6 @@ while loop:
         main_loop_timer += 1
     else:
         log_str = "Execution time exceeded the set loop interval {:}s by {:.2g}s".format(main_loop_interval, abs(pause))
-        log.log_debug(__name__, 'main_loop', log_str)
+        log.log_info(__name__, 'main_loop', log_str)
         main_loop_timer = get_lap(main_loop_interval)+1
 

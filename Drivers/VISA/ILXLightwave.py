@@ -1080,7 +1080,7 @@ class TECModule(LDC3900):
             elif set_resistance > 450:
                 set_resistance = 450
         # Send command
-            self.write_tec('R {:.1f}'.format(set_resistance))
+            self.write_tec('R {:.3f}'.format(set_resistance))
         
     @log.log_this()
     def tec_resistance(self):

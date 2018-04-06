@@ -714,7 +714,7 @@ def get_ilx_data():
             tec_curr, 100)
     db['mll_fR/TEC_current'].write_buffer({'A':tec_curr})
             # Append to the record array
-    array['ilx:tec_curr'] = np.append(array['ilx:tec_curr'], tec_temp)
+    array['ilx:tec_curr'] = np.append(array['ilx:tec_curr'], tec_curr)
     if new_record_lap > timer['ilx:record']:
         # Record statistics
         db['mll_fR/TEC_current'].write_record({

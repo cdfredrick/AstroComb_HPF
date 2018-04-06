@@ -633,16 +633,20 @@ for database in SETTINGS:
 
 # %% State and Monitor Functions ==============================================
 
-# Global Timing Variable ------------------------------------------------------
+# Global Variables ------------------------------------------------------------
 timer = {}
+array = {}
+thread = {}
 for state_db in STATE_DBs:
     timer[state_db] = {}
+
 
 # Do nothing function ---------------------------------------------------------
 '''A functional placeholder for cases where nothing should happen.'''
 @log.log_this()
 def nothing(state_db):
     pass
+
 
 # Monitor Functions -----------------------------------------------------------
 '''This section is for defining the methods needed to monitor the system.'''
@@ -673,133 +677,227 @@ def queue_and_reserve(state_db):
             # Start over if something else is in the queue
                 dev[device_db]['queue'].remove()
 
+
 # Maintain Functions ----------------------------------------------------------
 '''This section is for defining the methods needed to maintain the system in
     its defined states.'''
 touch_interval = 1 # second
-queue_interval = 0.2 # seconds
 for state_db in STATE_DBs:
     timer[state_db]['touch'] = get_lap(touch_interval)
-    timer[state_db]['queue'] = get_lap(queue_interval)
 def touch(state_db):
-# if alone in the queue, touch. otherwise  if at the top of the queue, unreserve cont. and remove from queue 
-    # have a switch for each state_db, either analog in or diggital in
     if (state_db == 'monitor_DAQ/state_analog'):
-        queue_lap = get_lap(queue_interval)
-        if queue_lap > timer[state_db]['queue']:
-            timer[state_db]['queue'] = queue_lap
-            device_db ='monitor_DAQ/device_DAQ_analog_in'
-            queue_size = len(dev[device_db]['queue'].get_queue())
-            if (queue_size != 1):
-            # Unreserve and dequeue DAQ
-                dev[device_db]['driver'].reserve_cont(False)
-                dev[device_db]['queue'].remove()
-            # Update state variable
-                current_state[state_db]['compliance'] = False
-                db[state_db].write_record_and_buffer(current_state[state_db])
-            else:
-            # Touch queue (prevent timeout)
-                touch_lap = get_lap(touch_interval)
-                if touch_lap > timer[state_db]['touch']:
-                    timer[state_db]['touch'] = touch_lap
-                    dev[device_db]['queue'].touch()
+        device_db ='monitor_DAQ/device_DAQ_analog_in'
+        queue_size = len(dev[device_db]['queue'].get_queue())
+        if (queue_size != 1):
+        # Other scripts want to use the DAQ
+        # Unreserve and dequeue DAQ
+            dev[device_db]['driver'].reserve_cont(False)
+            dev[device_db]['queue'].remove()
+        # Update state variable
+            current_state[state_db]['compliance'] = False
+            db[state_db].write_record_and_buffer(current_state[state_db])
+        elif not(dev[device_db]['driver'].reserve_cont()):
+        # Continuous auisition has not been reserved
+        # Dequeue
+            dev[device_db]['queue'].remove()
+        # Update state variable
+            current_state[state_db]['compliance'] = False
+            db[state_db].write_record_and_buffer(current_state[state_db])
+        else:
+        # Touch queue (prevent timeout)
+            touch_lap = get_lap(touch_interval)
+            if touch_lap > timer[state_db]['touch']:
+                timer[state_db]['touch'] = touch_lap
+                dev[device_db]['queue'].touch()
+
 
 # Operate Functions -----------------------------------------------------------
 '''This section is for defining the methods called only when the system is in
     its defined states.'''
+array['daq:ai0'] = np.array([])
+array['daq:ai1'] = np.array([])
+array['daq:ai2'] = np.array([])
+array['daq:ai3'] = np.array([])
+array['daq:ai4'] = np.array([])
+array['daq:ai5'] = np.array([])
+array['daq:ai6'] = np.array([])
+daq_record_interval = 10 # seconds
+timer['daq:record'] = get_lap(daq_record_interval)
 control_interval = 0.2 # s
 for state_db in STATE_DBs:
     timer[state_db]['data'] = get_lap(control_interval)
-def read_DAQ(state_db):
-    # have a switch for each state_db, either analog in or digital in
-    if (state_db == 'monitor_DAQ/state_analog'):
-    # Get lap number
-        new_control_lap = get_lap(control_interval)
-    # Read DAQ ------------------------------------------------------
-        if (new_control_lap > timer[state_db]['data']):
-            device_db = 'monitor_DAQ/device_DAQ_analog_in'
-            # Double check queue
-            dev[device_db]['queue'].queue_and_wait()
-            # Get values
-            multi_channel_reading = dev[device_db]['driver'].read_cont()
-            # Update buffers and databases ----------
-                # ai0, 'mll_fR/DAQ_error_signal'
-            monitor_db = 'mll_fR/DAQ_error_signal'
-            data = multi_channel_reading[0] # ai0
+def read_ai_DAQ(state_db):
+# Get lap number
+    new_control_lap = get_lap(control_interval)
+    new_record_lap = get_lap(daq_record_interval)
+# Read DAQ ----------------------------------------------------------
+    if (new_control_lap > timer[state_db]['data']):
+        device_db = 'monitor_DAQ/device_DAQ_analog_in'
+    # Double check queue
+        dev[device_db]['queue'].queue_and_wait()
+    # Get values
+        multi_channel_reading = dev[device_db]['driver'].read_cont()
+    # Update buffers and databases -----------------------------
+    # ai0, 'mll_fR/DAQ_error_signal' ----------------------
+        channel = 'daq:ai0'
+        monitor_db = 'mll_fR/DAQ_error_signal'
+        data = multi_channel_reading[0] # ai0
+        data_n = len(data)
+        if data_n > 0:
             data_mean = np.mean(data)
             data_std = np.std(data)
-            data_n = len(data)
             mon[monitor_db]['new'] = True
             mon[monitor_db]['data'] = update_buffer(
                     mon[monitor_db]['data'],
                     data_mean, 500)
-            db[monitor_db].write_record_and_buffer({'V':data_mean, 'std':data_std, 'n':data_n})
-                # ai1, 'filter_cavity/DAQ_error_signal'
-            monitor_db = 'filter_cavity/DAQ_error_signal'
-            data = multi_channel_reading[1] # ai1
+            db[monitor_db].write_buffer({'V':data_mean, 'std':data_std, 'n':data_n})
+        # Append to record array ----------------
+        array[channel] = np.append(array[channel], data)
+        if new_record_lap > timer['daq:record']:
+            if array[channel].size > 0:
+        # Record statistics ---------------------
+                db[monitor_db].write_record({
+                        'V':array[channel].mean(),
+                        'std':array[channel].std(),
+                        'n':array[channel].size})
+        # Empty the array -----------------------
+                array[channel] = np.array([])
+    # ai1, 'filter_cavity/DAQ_error_signal' ---------------
+        channel = 'daq:ai1'
+        monitor_db = 'filter_cavity/DAQ_error_signal'
+        data = multi_channel_reading[1] # ai1
+        data_n = len(data)
+        if data_n > 0:
             data_mean = np.mean(data)
             data_std = np.std(data)
-            data_n = len(data)
             mon[monitor_db]['new'] = True
             mon[monitor_db]['data'] = update_buffer(
                     mon[monitor_db]['data'],
                     data_mean, 500)
-            db[monitor_db].write_record_and_buffer({'V':data_mean, 'std':data_std, 'n':data_n})
-                # ai2, V_set, 'filter_cavity/heater_temperature'
-                # ai3, V_act, 'filter_cavity/heater_temperature'
-            monitor_db = 'filter_cavity/heater_temperature'
-                    # ai2
-            data_set = multi_channel_reading[2] # ai2
+            db[monitor_db].write_buffer({'V':data_mean, 'std':data_std, 'n':data_n})
+        # Append to record array ----------------
+        array[channel] = np.append(array[channel], data)
+        if new_record_lap > timer['daq:record']:
+            if array[channel].size > 0:
+        # Record statistics ---------------------
+                db[monitor_db].write_record({
+                        'V':array[channel].mean(),
+                        'std':array[channel].std(),
+                        'n':array[channel].size})
+        # Empty the array -----------------------
+                array[channel] = np.array([])
+    # ai2, V_set, 'filter_cavity/heater_temperature' ------
+    # ai3, V_act, 'filter_cavity/heater_temperature' ------
+        channel_set = 'daq:ai2'
+        channel_act = 'daq:ai3'
+        monitor_db = 'filter_cavity/heater_temperature'
+        # ai2
+        data_set = multi_channel_reading[2] # ai2
+        data_set_n = len(data_set)
+        # ai3
+        data_act = multi_channel_reading[3] # ai3
+        data_act_n = len(data_act)
+        if ((data_set_n > 0) and (data_act_n > 0)):
             data_set_mean = np.mean(data_set)
             data_set_std = np.std(data_set)
-            data_set_n = len(data_set)
-                    # ai3
-            data_act = multi_channel_reading[3] # ai3
             data_act_mean = np.mean(data_act)
             data_act_std = np.std(data_act)
-            data_act_n = len(data_act)
             mon[monitor_db]['new'] = True
             mon[monitor_db]['data'] = update_buffer(
                     mon[monitor_db]['data'],
                     data_mean, 500)
-            db[monitor_db].write_record_and_buffer(
-                    {'V_set':data_set_mean, 'set_std':data_set_std, 'set_n':data_set_n,
-                     'V_act':data_act_mean, 'act_std':data_act_std, 'act_n':data_act_n})
-                # ai4, 'ambience/box_temperature_0'
-            monitor_db = 'ambience/box_temperature_0'
-            data = multi_channel_reading[4] # ai4
+            db[monitor_db].write_buffer(
+                    {'set_V':data_set_mean, 'set_std':data_set_std, 'set_n':data_set_n,
+                     'act_V':data_act_mean, 'act_std':data_act_std, 'act_n':data_act_n})
+        # Append to record arrays ---------------
+        array[channel_set] = np.append(array[channel_set], data_set)
+        array[channel_act] = np.append(array[channel_act], data_act)
+        if new_record_lap > timer['daq:record']:
+            if (array[channel_set].size > 0) and (array[channel_act].size > 0):
+        # Record statistics ---------------------
+                db[monitor_db].write_record(
+                    {'set_V':array[channel_set].mean(), 'set_std':array[channel_set].std(), 'set_n':array[channel_set].size,
+                     'act_V':array[channel_act].mean(), 'act_std':array[channel_act].std(), 'act_n':array[channel_act].size})
+        # Empty the arrays ----------------------
+                array[channel_set] = np.array([])
+                array[channel_act] = np.array([])
+    # ai4, 'ambience/box_temperature_0' -------------------
+        channel = 'daq:ai4'
+        monitor_db = 'ambience/box_temperature_0'
+        data = multi_channel_reading[4] # ai4
+        data_n = len(data)
+        if data_n > 0:
             data_mean = np.mean(data)
             data_std = np.std(data)
-            data_n = len(data)
             mon[monitor_db]['new'] = True
             mon[monitor_db]['data'] = update_buffer(
                     mon[monitor_db]['data'],
                     data_mean, 500)
             db[monitor_db].write_record_and_buffer({'V':data_mean, 'std':data_std, 'n':data_n})
-                # ai5, 'ambience/box_temperature_1'
-            monitor_db = 'ambience/box_temperature_1'
-            data = multi_channel_reading[5] # ai5
+        # Append to record array ----------------
+        array[channel] = np.append(array[channel], data)
+        if new_record_lap > timer['daq:record']:
+            if array[channel].size > 0:
+        # Record statistics ---------------------
+                db[monitor_db].write_record({
+                        'V':array[channel].mean(),
+                        'std':array[channel].std(),
+                        'n':array[channel].size})
+        # Empty the array -----------------------
+                array[channel] = np.array([])
+    # ai5, 'ambience/box_temperature_1' -------------------
+        channel = 'daq:ai5'
+        monitor_db = 'ambience/box_temperature_1'
+        data = multi_channel_reading[5] # ai5
+        data_n = len(data)
+        if data_n > 0:
             data_mean = np.mean(data)
             data_std = np.std(data)
-            data_n = len(data)
+            
             mon[monitor_db]['new'] = True
             mon[monitor_db]['data'] = update_buffer(
                     mon[monitor_db]['data'],
                     data_mean, 500)
             db[monitor_db].write_record_and_buffer({'V':data_mean, 'std':data_std, 'n':data_n})
-                # ai6, 'ambience/rack_temperature_0'
-            monitor_db = 'ambience/rack_temperature_0'
-            data = multi_channel_reading[6] # ai6
+        # Append to record array ----------------
+        array[channel] = np.append(array[channel], data)
+        if new_record_lap > timer['daq:record']:
+            if array[channel].size > 0:
+        # Record statistics ---------------------
+                db[monitor_db].write_record({
+                        'V':array[channel].mean(),
+                        'std':array[channel].std(),
+                        'n':array[channel].size})
+        # Empty the array -----------------------
+                array[channel] = np.array([])
+    # ai6, 'ambience/rack_temperature_0' ------------------
+        channel = 'daq:ai6'
+        monitor_db = 'ambience/rack_temperature_0'
+        data = multi_channel_reading[6] # ai6
+        data_n = len(data)
+        if data_n > 0:
             data_mean = np.mean(data)
             data_std = np.std(data)
-            data_n = len(data)
             mon[monitor_db]['new'] = True
             mon[monitor_db]['data'] = update_buffer(
                     mon[monitor_db]['data'],
                     data_mean, 500)
             db[monitor_db].write_record_and_buffer({'V':data_mean, 'std':data_std, 'n':data_n})
-    # Propogate lap numbers ---------------------------------------------
+        # Append to record array ----------------
+        array[channel] = np.append(array[channel], data)
+        if new_record_lap > timer['daq:record']:
+            if array[channel].size > 0:
+        # Record statistics ---------------------
+                db[monitor_db].write_record({
+                        'V':array[channel].mean(),
+                        'std':array[channel].std(),
+                        'n':array[channel].size})
+        # Empty the array -----------------------
+                array[channel] = np.array([])
+    # Propogate lap numbers -----------------------------------------
         timer[state_db]['data'] = new_control_lap
+        if new_record_lap > timer['daq:record']:
+            timer['daq:record'] = new_record_lap
 
 
 # %% States ===================================================================
@@ -940,7 +1038,7 @@ STATES = {
                                 'optional':[]},
                         'routines':{
                                 'monitor':nothing, 'search':queue_and_reserve,
-                                'maintain':touch, 'operate':read_DAQ}},
+                                'maintain':touch, 'operate':read_ai_DAQ}},
                 'safe':{
                         'settings':{},
                         'prerequisites':{
@@ -967,6 +1065,10 @@ STATES = {
 '''The code after this section operates the state machine. This section
     should not require any alteration. Changes to this section changes the
     operation of the state machine logic'''
+
+# Initialize state machine timer ----------------------------------------------
+main_loop_interval = 0.2 # seconds
+main_loop_timer = get_lap(main_loop_interval)+1
 
 # Initialize failed prereq log timers -----------------------------------------
 '''These are set so that the logs do not become cluttered with repetitions of
@@ -1083,5 +1185,15 @@ while loop:
                         critical=critical_pass,
                         necessary=necessary_pass,
                         optional=optional_pass)
+
+# Pause -----------------------------------------------------------------------
+    pause = (main_loop_timer+1)*main_loop_interval - time.time()
+    if pause > 0:
+        time.sleep(pause)
+        main_loop_timer += 1
+    else:
+        log_str = "Execution time exceeded the set loop interval {:}s by {:.2g}s".format(main_loop_interval, abs(pause))
+        log.log_info(__name__, 'main_loop', log_str)
+        main_loop_timer = get_lap(main_loop_interval)+1
 
 

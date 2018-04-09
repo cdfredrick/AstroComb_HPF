@@ -795,7 +795,7 @@ def record_ai(monitor_db, data, timestamp, write_record, array_identifier, chann
                 for ind, name in enumerate(channel_identifiers):
                     array[array_identifier[ind]] = np.array([])
 
-control_interval = 0.2 # s
+control_interval = 0.5 # s
 for state_db in STATE_DBs:
     timer[state_db]['data'] = get_lap(control_interval)
 def read_ai_DAQ(state_db):
@@ -1098,7 +1098,7 @@ STATES = {
     operation of the state machine logic'''
 
 # Initialize state machine timer ----------------------------------------------
-main_loop_interval = 0.2 # seconds
+main_loop_interval = 0.5 # seconds
 main_loop_timer = get_lap(main_loop_interval)+1
 
 # Initialize failed prereq log timers -----------------------------------------

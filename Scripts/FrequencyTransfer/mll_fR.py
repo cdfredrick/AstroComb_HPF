@@ -685,8 +685,11 @@ def get_ilx_data():
     # Get values
     dev[device_db]['driver'].open_resource()
     tec_temp = dev[device_db]['driver'].tec_resistance()
+    dev[device_db]['queue'].touch()
     tec_curr = dev[device_db]['driver'].tec_current()
+    dev[device_db]['queue'].touch()
     tec_events = dev[device_db]['driver'].tec_events()
+    dev[device_db]['queue'].touch()
     dev[device_db]['driver'].close_resource()
     # Remove from queue
     dev[device_db]['queue'].remove()

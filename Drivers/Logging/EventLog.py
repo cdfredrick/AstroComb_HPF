@@ -22,13 +22,14 @@ Public functions:
 ### Intentionally catching a general exception
 LOGGER_NAME = 'Astrocomb'
 
-#Python imports
+# %% Python imports
 import logging
 import sys
 from functools import wraps
+import threading
 from Drivers.Database.MongoDB import MongoLogger
 
-#Public functions
+# %% Logging functions
 def start_logging(database=None, logger_level=logging.DEBUG, log_buffer_handler_level=logging.DEBUG, log_handler_level=logging.WARNING, format_str=None, remove_all_handlers=True):
     """
     Must be called by external module to begin logging. Initializes a logger to
@@ -44,12 +45,12 @@ def start_logging(database=None, logger_level=logging.DEBUG, log_buffer_handler_
     if database is not None:
     # If a database is specified, initialize the mongo logger
         if format_str is None:
-            format_str = '%(name)s:\n %(message)s'
+            format_str = '%(name)s:\n%(message)s'
         logger = MongoLogger(database, name=LOGGER_NAME, logger_level=logger_level, log_buffer_handler_level=log_buffer_handler_level, log_handler_level=log_handler_level, format_str=format_str, remove_all_handlers=remove_all_handlers)
     else:
     # If no database is specified, setup a simple stream handler
         if format_str is None:
-            format_str='%(asctime)s [%(levelname)s] %(name)s:\n %(message)s \n'
+            format_str='%(asctime)s [%(levelname)s] %(name)s:\n%(message)s'
         logger = logging.getLogger(LOGGER_NAME)
         logger.setLevel(logger_level)
         stream_handler = logging.StreamHandler(sys.stdout)

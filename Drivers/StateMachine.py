@@ -922,8 +922,9 @@ class Machine():
                 try:
                     result = self.send_args(getattr(self.dev[device_db]['driver'], setting),settings_group[setting])
                 except: 
-                # Ignore and log exceptions
+                # Log exception and raise
                     log.log_exception(mod_name, func_name)
+                    raise
                 else:
                 # Update the local copy if it exists in the device settings
                     if (setting in self.local_settings[device_db]):

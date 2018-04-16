@@ -369,6 +369,8 @@ def nothing(state_db):
 
 # %% Monitor Functions ========================================================
 '''This section is for defining the methods needed to monitor the system.'''
+
+# SRS Data --------------------------------------------------------------------
 array['srs:v_out'] = np.array([])
 srs_record_interval = 10 # seconds
 timer['srs:record'] = get_lap(srs_record_interval)
@@ -425,6 +427,7 @@ def get_srs_data():
         timer['srs:record'] = new_record_lap
 thread['get_srs_data'] = ThreadFactory(target=get_srs_data)
 
+# HV Data ---------------------------------------------------------------------
 array['hv:v_out'] = np.array([])
 hv_record_interval = 10 # seconds
 timer['hv:record'] = get_lap(hv_record_interval)
@@ -460,6 +463,7 @@ def get_HV_data():
         timer['hv:record'] = new_record_lap
 thread['get_HV_data'] = ThreadFactory(target=get_HV_data)
 
+# Monitor ---------------------------------------------------------------------
 control_interval = 0.5 # s
 passive_interval = 1.0 # s
 timer['monitor:control'] = get_lap(control_interval)
@@ -515,6 +519,8 @@ def monitor(state_db):
 # %% Search Functions =========================================================
 '''This section is for defining the methods needed to bring the system into
     its defined states.'''
+
+# Find Lock -------------------------------------------------------------------
 from scipy.interpolate import UnivariateSpline
 from scipy.optimize import minimize
 v_range_threshold = 0.1 #(limit-threshold)/(upper - lower limits)
@@ -523,6 +529,8 @@ lock_hold_interval = 1.0 #s
 timer['find_lock:locked'] = time.time()
 timer['find_lock:log_setpoint_error'] = time.time()
 def find_lock(state_db, last_good_position=None):
+    mod_name = __name__
+    func_name = find_lock.__name__
 # Queue the SRS PID controller --------------------------------------
     device_db = 'filter_cavity/device_PID'
     dev[device_db]['queue'].queue_and_wait(priority=True)
@@ -555,7 +563,6 @@ def find_lock(state_db, last_good_position=None):
         if (current_output < v_low) or (current_output > v_high):
         # Output is beyond voltage thresholds
             locked = False
-        # TODO: elif reflect error signal is high -> locked = False
         else:
         # Lock is holding
             locked = True
@@ -571,11 +578,12 @@ def find_lock(state_db, last_good_position=None):
         dev[device_db]['queue'].remove()
     # Check lock interval ---------------------------------
         if (time.time() - timer['find_lock:locked']) > lock_hold_interval:
-            log_str = 'Lock succesful'
-            log.log_info(__name__, 'find_lock', log_str)
+        # TODO: if reflect error signal is high -> locked = False
         # Lock is succesful, update state variable
             current_state[state_db]['compliance'] = True
             db[state_db].write_record_and_buffer(current_state[state_db])
+            log_str = ' filter_cavity lock successful'
+            log.log_info(mod_name, func_name, log_str)
         # Update the monitor variable if necessary
             if (mon['filter_cavity/PID_action']['data'] != True):
                 mon['filter_cavity/PID_action']['new'] = True
@@ -638,14 +646,14 @@ def find_lock(state_db, last_good_position=None):
             min_result = minimize(spline, output_coarse)
             new_output = min_result['x'][0]
         except:
-            log.log_exception(__name__, 'find_lock')
+            log.log_exception(mod_name, func_name)
             new_output = output_coarse
     # Get Lock --------------------------------------------
         if (new_output > v_low) and (new_output < v_high):
             '''If the new lock point is within the acceptable range between
             the upper and lower hardware limits, attempt to lock.'''
-            log_str = 'Estimated voltage setpoint = {:.3f}, locking.'.format(new_output)
-            log.log_info(__name__, 'find_lock', log_str)
+            log_str = ' Estimated voltage setpoint = {:.3f}, locking.'.format(new_output)
+            log.log_info(mod_name, func_name, log_str)
         # Update deivice settings ---------------
             settings_list = [{'manual_output':new_output,
                               'offset_action':True,
@@ -663,12 +671,15 @@ def find_lock(state_db, last_good_position=None):
             no method to adjust those parameters'''
             log_setpoint_error_condition = ((time.time() - timer['find_lock:log_setpoint_error']) > log_setpoint_error_interval)
             if log_setpoint_error_condition:
-                log_str = 'Estimated voltage setpoint = {:.3f}, lock unobtainable.'.format(new_output)
-                log.log_critical(__name__, 'find_lock', log_str)
+                log_str = ' Estimated voltage setpoint = {:.3f}, lock unobtainable.'.format(new_output)
+                log.log_critical(mod_name, func_name, log_str)
             # Update timer
                 timer['find_lock:log_setpoint_error'] = time.time()
 
+# Transfer to Manual ----------------------------------------------------------
 def transfer_to_manual(state_db):
+    mod_name = __name__
+    func_name = keep_lock.__name__
 # Queue the SRS PID controller --------------------------------------
     device_db = 'filter_cavity/device_PID'
     dev[device_db]['queue'].queue_and_wait()
@@ -686,13 +697,20 @@ def transfer_to_manual(state_db):
 # Update state variable
     current_state[state_db]['compliance'] = True
     db[state_db].write_record_and_buffer(current_state[state_db])
+    log_str = ' Transfer to manual successful'
+    log.log_info(mod_name, func_name, log_str)
+
 
 # %% Maintain Functions =======================================================
 '''This section is for defining the methods needed to maintain the system in
     its defined states.'''
+    
+# Keep Lock -------------------------------------------------------------------
 v_std_threshold = 5 # standard deviations
 lock_age_threshold = 30.0 #s
 def keep_lock(state_db):
+    mod_name = __name__
+    func_name = keep_lock.__name__
     locked = True
 # Evaluate conditions
     new_output_condition = mon['filter_cavity/PID_output']['new']
@@ -712,11 +730,15 @@ def keep_lock(state_db):
     if (mon['filter_cavity/PID_action']['data'] != True):
     # It is not locked
         locked = False
+        log_str = " filter_cavity lock lost, PID controller was disabled"
+        log.log_error(mod_name, func_name, log_str)
 # Check if the output is outside the acceptable range ---------------
     elif new_output_condition:
         if (current_output < v_low) or (current_output > v_high):
         # It is not locked
             locked = False
+            log_str = " filter_cavity lock lost, output was outside the acceptable range"
+            log.log_error(mod_name, func_name, log_str)
     # TODO: check error signal std
 # If not locked -----------------------------------------------------
     if not(locked):
@@ -733,6 +755,8 @@ def keep_lock(state_db):
         # Remove the last point from the local monitor
             mon['filter_cavity/PID_output']['data'] = data
         # Attempt a quick relock
+            log_str = " Attempting quick relock"
+            log.log_info(mod_name, func_name, log_str)
             find_lock(state_db, last_good_position=v_expected)
 # If locked ---------------------------------------------------------
     else:
@@ -799,12 +823,19 @@ def keep_lock(state_db):
                 mon['filter_cavity/PID_output_limits']['new'] = True
                 mon['filter_cavity/PID_output_limits']['data'] = {'min':new_lower_limit, 'max':new_upper_limit}
                 db['filter_cavity/PID_output_limits'].write_record_and_buffer({'min':new_lower_limit, 'max':new_upper_limit})
+                log_str = " New output limits = {:}".format(mon['filter_cavity/PID_output_limits']['data'])
+                log.log_info(mod_name, func_name, log_str)
 
+# Lock Disabled ---------------------------------------------------------------
 def lock_disabled(state_db):
+    mod_name = __name__
+    func_name = lock_disabled.__name__
     if (mon['filter_cavity/PID_action']['data'] != False):
     # Update state variable
         current_state[state_db]['compliance'] = False
         db[state_db].write_record_and_buffer(current_state[state_db])
+        log_str = " Detected lock enabled, transfering to manual"
+        log.log_info(mod_name, func_name, log_str)
 
 
 # %% Operate Functions ========================================================

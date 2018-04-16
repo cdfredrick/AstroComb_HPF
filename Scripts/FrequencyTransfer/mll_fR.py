@@ -395,6 +395,8 @@ def nothing(state_db):
 
 # %% Monitor Functions -----------------------------------------------------------
 '''This section is for defining the methods needed to monitor the system.'''
+
+# SRS Data --------------------------------------------------------------------
 array['srs:v_out'] = np.array([])
 srs_record_interval = 10 # seconds
 timer['srs:record'] = get_lap(srs_record_interval)
@@ -450,6 +452,7 @@ def get_srs_data():
         timer['srs:record'] = new_record_lap
 thread['get_srs_data'] = ThreadFactory(target=get_srs_data)
 
+# ILX Data --------------------------------------------------------------------
 array['ilx:tec_temp'] = np.array([])
 array['ilx:tec_curr'] = np.array([])
 ilx_record_interval = 10 # seconds
@@ -515,6 +518,7 @@ def get_ilx_data():
         timer['ilx:record'] = new_record_lap
 thread['get_ilx_data'] = ThreadFactory(target=get_ilx_data)
 
+# HV Data ---------------------------------------------------------------------
 array['hv:v_out'] = np.array([])
 hv_record_interval = 10 # seconds
 timer['hv:record'] = get_lap(hv_record_interval)
@@ -550,6 +554,7 @@ def get_HV_data():
         timer['hv:record'] = new_record_lap
 thread['get_HV_data'] = ThreadFactory(target=get_HV_data)
 
+# Monitor ---------------------------------------------------------------------
 control_interval = 0.5 # s
 passive_interval = 1.0 # s
 timer['monitor:control'] = get_lap(control_interval)
@@ -605,6 +610,8 @@ def monitor(state_db):
 # %% Search Functions ------------------------------------------------------------
 '''This section is for defining the methods needed to bring the system into
     its defined states.'''
+
+# Find Lock -------------------------------------------------------------------
 from scipy.optimize import curve_fit
 v_range_threshold = 0.1 #(limit-threshold)/(upper - lower limits)
 t_setpoint_threshold = 0.02 #kOhm
@@ -613,6 +620,8 @@ lock_hold_interval = 1.0 #s
 timer['find_lock:locked'] = time.time()
 timer['find_lock:tec_adjust'] = time.time()
 def find_lock(state_db, last_good_position=None):
+    mod_name = __name__
+    func_name = find_lock.__name__
 # Queue the SRS PID controller --------------------------------------
     device_db = 'mll_fR/device_PID'
     dev[device_db]['queue'].queue_and_wait(priority=True)
@@ -645,7 +654,6 @@ def find_lock(state_db, last_good_position=None):
         if (current_output < v_low) or (current_output > v_high):
         # Output is beyond voltage thresholds
             locked = False
-        # TODO: elif rms error signal is high -> locked = False
         else:
         # Lock is holding
             locked = True
@@ -661,8 +669,9 @@ def find_lock(state_db, last_good_position=None):
         dev[device_db]['queue'].remove()
     # Check lock interval ---------------------------------
         if (time.time() - timer['find_lock:locked']) > lock_hold_interval:
-            log_str = 'Lock succesful'
-            log.log_info(__name__, 'find_lock', log_str)
+        # TODO: if rms error signal is high -> locked = False
+            log_str = ' mll_fR lock successful'
+            log.log_info(mod_name, func_name, log_str)
         # Lock is succesful, update state variable
             current_state[state_db]['compliance'] = True
             db[state_db].write_record_and_buffer(current_state[state_db])
@@ -726,7 +735,7 @@ def find_lock(state_db, last_good_position=None):
         try:
             new_output = curve_fit(to_fit, x, y, [output_coarse, slope_coarse])[0][0]
         except:
-            log.log_exception(__name__, 'find_lock')
+            log.log_exception(mod_name, func_name)
             # Failure may be because the frequency response was too flat?
             # The middle is a safe place to go (no TEC adjustment)
             new_output = dev[device_db]['driver'].center
@@ -734,8 +743,8 @@ def find_lock(state_db, last_good_position=None):
         if (new_output > v_low) and (new_output < v_high):
             '''If the new lock point is within the acceptable range between
             the upper and lower hardware limits, attempt to lock.'''
-            log_str = 'Estimated voltage setpoint = {:.3f}, locking.'.format(new_output)
-            log.log_info(__name__, 'find_lock', log_str)
+            log_str = ' Estimated voltage setpoint = {:.3f}, locking.'.format(new_output)
+            log.log_info(mod_name, func_name, log_str)
         # Update deivice settings ---------------
             settings_list = [{'manual_output':new_output,
                               'offset_action':True,
@@ -767,26 +776,29 @@ def find_lock(state_db, last_good_position=None):
                     timer['find_lock:tec_adjust'] = time.time()
                 # Adjust the setpoint
                     if (new_output < dev['mll_fR/device_PID']['driver'].center):
-                        log_str = 'Estimated voltage setpoint = {:.3f}, raising the resistance setpoint'.format(new_output)
-                        log.log_info(__name__, 'find_lock', log_str)
+                        log_str = ' Estimated voltage setpoint = {:.3f}, raising the resistance setpoint'.format(new_output)
+                        log.log_info(mod_name, func_name, log_str)
                     # Raise the resistance setpoint
                         dev[device_db]['driver'].tec_step(+1)
                     elif new_output > dev['mll_fR/device_PID']['driver'].center:
-                        log_str = 'Estimated voltage setpoint = {:.3f}, lowering the resistance setpoint.'.format(new_output)
-                        log.log_info(__name__, 'find_lock', log_str)
+                        log_str = ' Estimated voltage setpoint = {:.3f}, lowering the resistance setpoint.'.format(new_output)
+                        log.log_info(mod_name, func_name, log_str)
                     # Lower the resistance setpoint
                         dev[device_db]['driver'].tec_step(-1)
                 else:
                 # TEC has not settled, wait
-                    log_str = 'Estimated voltage setpoint = {:.3f}, but TEC has not yet settled'.format(new_output)
-                    log.log_debug(__name__, 'find_lock', log_str)
+                    log_str = ' Estimated voltage setpoint = {:.3f}, but TEC has not yet settled'.format(new_output)
+                    log.log_debug(mod_name, func_name, log_str)
             else:
             # TEC output is off, renable
                 sm.update_device_settings(device_db, [{'tec_mode':'R'}, {'tec_output':True}])
         # Remove the ILX TEC controller from queue ------------
             dev[device_db]['queue'].remove()
 
+# Transfer to Manual ----------------------------------------------------------
 def transfer_to_manual(state_db):
+    mod_name = __name__
+    func_name = transfer_to_manual.__name__
 # Queue the SRS PID controller --------------------------------------
     device_db = 'mll_fR/device_PID'
     dev[device_db]['queue'].queue_and_wait()
@@ -804,14 +816,20 @@ def transfer_to_manual(state_db):
 # Update state variable
     current_state[state_db]['compliance'] = True
     db[state_db].write_record_and_buffer(current_state[state_db])
+    log_str = ' Transfer to manual successful'
+    log.log_info(mod_name, func_name, log_str)
 
 
 # %% Maintain Functions ----------------------------------------------------------
 '''This section is for defining the methods needed to maintain the system in
     its defined states.'''
+
+# Keep Lock -------------------------------------------------------------------
 v_std_threshold = 5 # standard deviations
 lock_age_threshold = 30.0 #s
 def keep_lock(state_db):
+    mod_name = __name__
+    func_name = keep_lock.__name__
     locked = True
 # Evaluate conditions -----------------------------------------------
     new_output_condition = mon['mll_fR/PID_output']['new']
@@ -834,11 +852,15 @@ def keep_lock(state_db):
     if (mon['mll_fR/PID_action']['data'] != True):
     # It is not locked
         locked = False
+        log_str = " mll_fR lock lost, PID controller was disabled"
+        log.log_error(mod_name, func_name, log_str)
 # Check if the output is outside the acceptable range ---------------
     elif new_output_condition:
         if (current_output < v_low) or (current_output > v_high):
         # It is not locked
             locked = False
+            log_str = " mll_fR lock lost, output was outside the acceptable range"
+            log.log_error(mod_name, func_name, log_str)
     # TODO: check error signal std
 # If not locked -----------------------------------------------------
     if not(locked):
@@ -855,6 +877,8 @@ def keep_lock(state_db):
         # Remove the last point from the local monitor
             mon['mll_fR/PID_output']['data'] = data
         # Attempt a quick relock
+            log_str = " Attempting quick relock"
+            log.log_info(mod_name, func_name, log_str)
             find_lock(state_db, last_good_position=v_expected)
 # If locked ---------------------------------------------------------
     else:
@@ -882,31 +906,35 @@ def keep_lock(state_db):
                     timer['find_lock:tec_adjust'] = time.time()
                 # Adjust the setpoint
                     if lower_limit_condition:
-                        log_str = 'Voltage = {:.3f}, raising the resistance setpoint'.format(current_output)
+                        log_str = ' Voltage = {:.3f}, raising the resistance setpoint'.format(current_output)
                         log.log_info(__name__, 'keep_lock', log_str)
                     # Raise the resistance setpoint
                         settings_list = [{'tec_step':+1}, {'tec_resistance_setpoint':None}]
                         sm.update_device_settings(device_db, settings_list)
                         dev[device_db]['driver'].tec_step(+1)
                     elif upper_limit_condition:
-                        log_str = 'Voltage = {:.3f}, lowering the resistance setpoint'.format(current_output)
+                        log_str = ' Voltage = {:.3f}, lowering the resistance setpoint'.format(current_output)
                         log.log_info(__name__, 'keep_lock', log_str)
                     # Lower the resistance setpoint
                         settings_list = [{'tec_step':-1}, {'tec_resistance_setpoint':None}]
                         sm.update_device_settings(device_db, settings_list)
 
+# Lock Disabled ---------------------------------------------------------------
 def lock_disabled(state_db):
+    mod_name = __name__
+    func_name = lock_disabled.__name__
 # Check if the PID controller is on ---------------------------------
     if (mon['mll_fR/PID_action']['data'] != False):
     # Update state variable
         current_state[state_db]['compliance'] = False
         db[state_db].write_record_and_buffer(current_state[state_db])
+        log_str = " Detected lock enabled, transfering to manual"
+        log.log_info(mod_name, func_name, log_str)
 
 
 # %% Operate Functions -----------------------------------------------------------
 '''This section is for defining the methods called only when the system is in
     its defined states.'''
-
 
 
 # %% States ===================================================================

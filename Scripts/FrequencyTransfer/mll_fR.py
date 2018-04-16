@@ -228,13 +228,11 @@ initialized settings are read from the device at startup.
         follows:
             {<control database path>:{
                 <control parameter>:{'value':<value>,'type':<type str>},...}}
-        -Control parameters are grouped by the method that they contribute
-        to. Choose one method in which to associate a single control
-        parameter if it happens to be used in multiple local methods. These
-        methods are executed based on their placement in STATES.
         -Control parameters have both a value and a type.
         -Only include parameters that should have remote access. There is
         no protection against the insertion of bad values.
+        -The "main_loop" parameter is reserved for operation of the
+        state machine.
 '''
 STATE_SETTINGS = {
         'mll_fR/state':{

@@ -619,6 +619,8 @@ class Machine():
     def operate_machine(self, current_state={}, main_loop_interval=0.5):
         mod_name = __name__
         func_name = self.operate_machine.__name__
+        log_str = " Operating state machine"
+        log.log_info(mod_name, func_name, log_str)
     # Current state -----------------------------------------------------------
         self.current_state = current_state
         for state_db in self.STATE_DBs:

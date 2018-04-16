@@ -488,7 +488,7 @@ def touch(state_db):
         # Update state variable
             current_state[state_db]['compliance'] = False
             db[state_db].write_record_and_buffer(current_state[state_db])
-            log_str = " Releasing DAQ"
+            log_str = " Releasing DAQ, other processes waiting in the queue"
             log.log_info(mod_name, func_name, log_str)
         elif not(dev[device_db]['driver'].reserve_cont()):
         # Continuous aquisition has not been reserved
@@ -497,7 +497,7 @@ def touch(state_db):
         # Update state variable
             current_state[state_db]['compliance'] = False
             db[state_db].write_record_and_buffer(current_state[state_db])
-            log_str = " Releasing DAQ"
+            log_str = " Releasing DAQ, continuous acquisition has not been reserved"
             log.log_info(mod_name, func_name, log_str)
         else:
         # Touch queue (prevent timeout)

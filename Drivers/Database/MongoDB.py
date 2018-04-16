@@ -14,7 +14,7 @@ import logging
 # %% MongoClient ==============================================================
 
 class MongoClient:
-    def __init__(self):
+    def __init__(self, host='localhost', port=27017):
         '''
         Connects to a mongoDB client, which can then be used to access different
             databases and collections.
@@ -26,7 +26,7 @@ class MongoClient:
             document keys.
         '''
         # Connect to the mongoDB client
-        self.client = pymongo.MongoClient(maxPoolSize=None)
+        self.client = pymongo.MongoClient(host=host, port=port, maxPoolSize=None)
         self.COLLECTION_KEYS = ['record', 'buffer', 'log', 'log_buffer']
         self.DOCUMENT_KEYS = ['_id', 'entry', '_timestamp', 'log_level']
     

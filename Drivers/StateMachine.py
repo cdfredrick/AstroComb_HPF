@@ -13,6 +13,7 @@ import datetime
 import threading
 from functools import wraps
 
+import logging
 from Drivers.Logging import EventLog as log
 
 from Drivers.Database import MongoDB
@@ -22,12 +23,14 @@ from Drivers.Database import CouchbaseDB
 # %% Helper Functions =========================================================
 
 '''The following are helper functionss that increase the readablity of code in
-    this script. These functions are defined by the user and should not
-    directly appear in the main loop of the state machine.'''
+    this script.'''
 
 # Update a 1D circular buffer -------------------------------------------------
 @log.log_this()
 def update_buffer(buffer, new_data, length):
+    '''Use this function to update a 1D rolling buffer, as typically found in
+    the monitor variables.
+    '''
     length = int(abs(length))
     buffer = np.append(buffer, new_data)
     if buffer.size > length:
@@ -37,13 +40,20 @@ def update_buffer(buffer, new_data, length):
 # Periodic Timer --------------------------------------------------------------
 @log.log_this()
 def get_lap(time_interval):
+    '''Use this function to get an incrementing integer linked to the system
+    clock.
+    '''
     return int(time.time() // time_interval)
 
 
 # %% Threading Error Handling
 class ThreadFactory():
     @log.log_this()
-    def __init__(self, group=None, target=None, name=None, args=[], kwargs={}, daemon=None):
+    def __init__(self, group=None, target=None, name=None, args=[], kwargs={}, daemon=True):
+        '''The ThreadFactory works similarly to a standard threading.Thread(), 
+        but with added routines to catch thread errors and start new threads
+        without having to reinitialize a new object.
+        '''
         self.group = group
         self.target = target
         self.name = name
@@ -58,7 +68,8 @@ class ThreadFactory():
     def handle_thread(self, func):
         """A function decorator that handles exceptions that occur during thread
         execution. Only errors from the most recent thread are held in memory
-        and are accessible through "check_thread"."""
+        and are accessible through "check_thread".
+        """
         @wraps(func)
         def wrapper(*args, **kwargs):
             """Wrapped function"""
@@ -77,6 +88,8 @@ class ThreadFactory():
     
     @log.log_this()
     def new_thread(self):
+        '''Initialzes a new threading.Thread() object
+        '''
         self.thread = threading.Thread(group=self.group,
                                        target=self.handle_thread(self.target),
                                        name=self.name,
@@ -86,6 +99,8 @@ class ThreadFactory():
     
     @log.log_this()
     def start(self):
+        '''Starts a new thread, creating one if need be.
+        '''
     # Check for old thread
         if (self.thread.ident != None):
         # Forget old errors
@@ -99,10 +114,19 @@ class ThreadFactory():
     
     @log.log_this()
     def join(self):
+        '''Blocks until the thread has completed execution.
+        '''
         self.thread.join()
     
     @log.log_this()
+    def is_alive(self):
+        return self.thread.is_alive()
+    
+    @log.log_this()
     def check_thread(self):
+        '''Checks whether the thread is alive and whether any erros have
+        occured during its execution.
+        '''
         alive = self.thread.is_alive()
         error = None
         if not(alive):
@@ -145,7 +169,7 @@ class Machine():
             Requesting to change device settings:
                 {'device_setting': {<device driver DB path>:{<method name>:<args>,...},...}}
             Requesting to change a control parameter:
-                {'control_parameter': {<local method>:{<parameter name>:<value>,...},...}}
+                {'control_parameter': {<parameter name>:<value>,...}}
         -Commands are sent into the queue by setting the "message" keyword argument
         within the CouchbaseDB queue.push() method. 
         -Commands are read from the queue with the queue.pop() method.
@@ -158,7 +182,7 @@ class Machine():
             message = {
                 'state':{<state DB path>:{'state':<state>},...},
                 'device_setting':{<device driver DB path>:{<method name>:<args>,...},...},
-                'control_parameter':{<local method>:{<parameter name>:<value>,...},...}}
+                'control_parameter':{<parameter name>:<value>,...}}
         '''
         self.COMMS = COMMS
         self.comms = CouchbaseDB.PriorityQueue(self.COMMS)
@@ -300,20 +324,19 @@ class Machine():
                 -Entries in the control parameter database are specified as
                 follows:
                     {<control database path>:{
-                        <local method>:{
-                            <control parameter>:{'value':<value>,'type':<type str>},...}
-                        ,...}}
-                -Control parameters are grouped by the method that they contribute
-                to. Choose one method in which to associate a single control
-                parameter if it happens to be used in multiple local methods. These
-                methods are executed based on their placement in STATES.
+                        <control parameter>:{'value':<value>,'type':<type str>},...}}
                 -Control parameters have both a value and a type.
                 -Only include parameters that should have remote access. There is
                 no protection against the insertion of bad values.
+                -The "main_loop" parameter is reserved for operation of the
+                state machine.
         '''
         self.STATE_SETTINGS = STATE_SETTINGS
         self.DEVICE_SETTINGS = DEVICE_SETTINGS
         self.CONTROL_PARAMS = CONTROL_PARAMS
+        if not(self.CONTROL_DB in self.CONTROL_PARAMS):
+            self.CONTROL_PARAMS[self.CONTROL_DB] = {}
+        self.CONTROL_PARAMS[self.CONTROL_DB]['main_loop'] = {'value':True,'type':'bool'}
         self.SETTINGS = dict(list(STATE_SETTINGS.items()) + list(DEVICE_SETTINGS.items()) + list(CONTROL_PARAMS.items()))
 
 # Connect to MongoDB ----------------------------------------------------------
@@ -327,6 +350,16 @@ class Machine():
             self.db[database] = MongoDB.DatabaseMaster(self.mongo_client, database)
         for database in self.READ_DBs:
             self.db[database] = MongoDB.DatabaseRead(self.mongo_client, database)
+
+# Start Logging ---------------------------------------------------------------
+    def init_logging(self, database_object=None, logger_level=logging.DEBUG, log_buffer_handler_level=logging.DEBUG, log_handler_level=logging.WARNING):
+        '''Initializes logging for this script. If the logging database is unset then
+            all logs will be output to the stout. When the logging database is set
+            there are two logging handlers, one logs lower threshold events to the log 
+            buffer and the other logs warnings and above to the permanent log database.
+            The threshold for the base logger, and the two handlers, may be set in the
+            following command.'''
+        log.start_logging(logger_level=logger_level, log_buffer_handler_level=log_buffer_handler_level, log_handler_level=log_handler_level, database_object=database_object)
 
 # Initialize all Devices and Settings -----------------------------------------
     @log.log_this()
@@ -358,12 +391,13 @@ class Machine():
         self.local_settings = local_settings
         for database in self.SETTINGS:
             device_db_condition = (database in self.DEVICE_DBs)
+            control_db_condition = (database in self.CONTROL_DB)
             self.local_settings[database] = self.db[database].read_buffer()
         # Check all SETTINGS
             db_initialized = True
             settings_list = []
             for setting in self.SETTINGS[database]:
-                update_device_condition = ((setting != 'driver') and (setting != 'queue') and (setting != '__init__'))
+                update_device_condition = (device_db_condition and (setting != 'driver') and (setting != 'queue') and (setting != '__init__'))
             # Check that there is anything at all
                 if (self.local_settings[database]==None):
                     self.local_settings[database]={}
@@ -379,6 +413,10 @@ class Machine():
                             settings_list.append({setting:self.SETTINGS[database][setting]})
                 elif (device_db_condition and update_device_condition):
                     settings_list.append({setting:None})
+                if (control_db_condition and setting == 'main_loop'):
+                    if self.local_settings[database][setting]['value'] !=True:
+                        db_initialized = False
+                        self.local_settings[database][setting]['value'] = True
             if device_db_condition:
             # Update the device values
                 self.update_device_settings(database, settings_list)
@@ -471,9 +509,11 @@ class Machine():
                         {'critical':[{
                             'db':<database path>,
                             'key':<entry's key>,
-                            'value':<desired value>},...],
+                            'test':<desired value>},...], 
                         'necessary':[{...},...],
                         'optional':[{...}]}}
+                -The "test" should be a lambda function that evaluates to true
+                if the prerequisite has passed.
                 -The automated "from_keys()" checks for lists of keys needed to
                 retrieve values from nested dictionaries.
                 -Prereqs should be separated by severity:
@@ -623,9 +663,8 @@ class Machine():
         for state_db in self.STATE_DBs:
             self.thread[state_db] = ThreadFactory(target=self.state_machine, args=[state_db])
         self.thread[self.COMMS] = ThreadFactory(target=self.check_for_messages)
-        loop = True
     # Main Loop ---------------------------------------------------------------
-        while loop:
+        while self.local_settings[self.CONTROL_DB]['main_loop']['value']:
         # Maintain threads ----------------------------------------------------
             errors = []
             for state_db in self.STATE_DBs:
@@ -662,9 +701,26 @@ class Machine():
                 log_str = " Execution time exceeded the set loop interval {:}s by {:.2g}s".format(self.main_loop_interval, abs(pause))
                 log.log_info(mod_name, func_name, log_str)
                 self.main_loop_timer['check_for_messages'] = get_lap(self.main_loop_interval)+1
+    # Main Loop has exited ----------------------------------------------------
+        log_str = " Shut down command accepted. Exiting the control script."
+        log.log_info(mod_name, func_name, log_str)
+        # Trigger shutdown events
+        for state_db in self.STATE_DBs:
+            self.event[state_db].set()
+        self.event[self.COMMS].set()
+        # Join all threads
+        for state_db in self.STATE_DBs:
+            self.thread[state_db].join()
+        self.thread[self.COMMS].join()
+        log_str = " Shutdown complete."
+        log.log_info(mod_name, func_name, log_str)
+        
 
     @log.log_this()
     def state_machine(self, state_db):
+        '''This runs the state machine routines. Each state_db should have
+        a separate thread of execution.
+        '''
         mod_name = __name__
         func_name = '.'.join([self.state_machine.__name__, state_db])
         while not(self.event[state_db].is_set()):
@@ -774,6 +830,8 @@ class Machine():
 # Check the Communications Queue ----------------------------------------------
     @log.log_this()
     def check_for_messages(self):
+        '''This checks for and parses new messages in the communications queue.
+        '''
         mod_name = __name__
         func_name = self.check_for_messages.__name__
         while not(self.event[self.COMMS].is_set()):
@@ -794,44 +852,52 @@ class Machine():
 # Check the Prerequisites of a Given State ------------------------------------
     @log.log_this()
     def check_prereqs(self, state_db, state, level, log_all_failures=None):
+        '''A helper function to automate the process of checking prerequisites.
+        '''
         prereqs_pass = True
-        for prereq in self.STATES[state_db][state]['prerequisites'][level]:
-            prereq_value = self.from_keys(self.db[prereq['db']].read_buffer(),prereq['key'])
-            prereq_status = (prereq_value == prereq['value'])
-            if not(prereq_status):
-                if log_all_failures == None:
-                # Check if the error timer
-                    if (str(prereq) in self.log_failed_prereqs_timer[state_db][state][level]):
-                        log_failure = ((time.time() - self.log_failed_prereqs_timer[state_db][state][level][str(prereq)]) > self.log_error_interval)
+        if level in self.STATES[state_db][state]['prerequisites']:
+            for prereq in self.STATES[state_db][state]['prerequisites'][level]:
+                prereq_value = self.from_keys(self.db[prereq['db']].read_buffer(),prereq['key'])
+                prereq_status = prereq['test'](prereq_value)
+                if not(prereq_status):
+                    if log_all_failures == None:
+                    # Check the error timer
+                        if (str(prereq) in self.log_failed_prereqs_timer[state_db][state][level]):
+                        # If the failure has been caught before, wait for the timer
+                            log_failure = ((time.time() - self.log_failed_prereqs_timer[state_db][state][level][str(prereq)]) > self.log_error_interval)
+                        else:
+                        # Catch the failure for the first time
+                            log_failure = True
+                        if (log_failure == True):
+                        # Update the error timer
+                            self.log_failed_prereqs_timer[state_db][state][level][str(prereq)] = time.time()
                     else:
-                        log_failure = True
-                    if (log_failure == True):
-                        self.log_failed_prereqs_timer[state_db][state][level][str(prereq)] = time.time()
-                else:
-                # Use "log_all_failures"
-                    log_failure = log_all_failures
-                if log_failure:
-                    mod_name = __name__
-                    func_name = self.check_prereqs.__name__
-                    if (level=='critical'):
-                        log_str = 'Critical prerequisite failure:\n state_db:\t{:}\n state:\t\t{:}\n prereq:\t{:}\n current:\t{:}'.format(state_db, state, prereq, prereq_value)
-                        log.log_critical(mod_name,func_name,log_str)
-                    elif (level=='necessary'):
-                        log_str = 'Necessary prerequisite failure:\n state_db:\t{:}\n state:\t\t{:}\n prereq:\t{:}\n current:\t{:}'.format(state_db, state, prereq, prereq_value)
-                        log.log_warning(mod_name,func_name,log_str)
-                    elif (level=='optional'):
-                        log_str = 'Optional prerequisite failure:\n state_db:\t{:}\n state:\t\t{:}\n prereq:\t{:}\n current:\t{:}'.format(state_db, state, prereq, prereq_value)
-                        log.log_warning(mod_name,func_name,log_str)
-            # Multiply
-            prereqs_pass *= prereq_status
+                    # If "log_all_failures" is set, use it.
+                        log_failure = log_all_failures
+                    if log_failure:
+                        mod_name = __name__
+                        func_name = self.check_prereqs.__name__
+                        if (level=='critical'):
+                            log_str = 'Critical prerequisite failure:\n state_db:\t{:}\n state:\t\t{:}\n prereq:\t{:}\n current:\t{:}'.format(state_db, state, prereq, prereq_value)
+                            log.log_critical(mod_name,func_name,log_str)
+                        elif (level=='necessary'):
+                            log_str = 'Necessary prerequisite failure:\n state_db:\t{:}\n state:\t\t{:}\n prereq:\t{:}\n current:\t{:}'.format(state_db, state, prereq, prereq_value)
+                            log.log_warning(mod_name,func_name,log_str)
+                        elif (level=='optional'):
+                            log_str = 'Optional prerequisite failure:\n state_db:\t{:}\n state:\t\t{:}\n prereq:\t{:}\n current:\t{:}'.format(state_db, state, prereq, prereq_value)
+                            log.log_warning(mod_name,func_name,log_str)
+                # Propogate prereq status
+                prereqs_pass *= prereq_status
         return prereqs_pass
     
 # Update Device Settings ------------------------------------------------------
     @log.log_this()
     def update_device_settings(self, device_db, settings_list, write_log=True):
-        if write_log:
-            mod_name = __name__
-            func_name = self.update_device_settings.__name__
+        '''A helper function to automate the process of updating the settings
+        of a single device.
+        '''
+        mod_name = __name__
+        func_name = self.update_device_settings.__name__
         updated = False
     # Check settings_list type
         if isinstance(settings_list, dict):
@@ -849,7 +915,8 @@ class Machine():
             # Try sending the command to the device
                 try:
                     result = self.send_args(getattr(self.dev[device_db]['driver'], setting),settings_group[setting])
-                except:
+                except: 
+                # Ignore and log exceptions
                     log.log_exception(mod_name, func_name)
                 else:
                 # Update the local copy if it exists in the device settings
@@ -874,6 +941,7 @@ class Machine():
                 self.dev[device_db]['queue'].touch()
     # Remove from queue
         if not(queued):
+        # Remove from queue if it wasn't there to begin with.
             self.dev[device_db]['queue'].remove()
     # Update the database if the local copy changed
         if updated:
@@ -882,6 +950,8 @@ class Machine():
 # Setup the Transition to a New State -----------------------------------------
     @log.log_this()
     def setup_state(self, state_db, state, critical=True, necessary=True, optional=True):
+        '''A helper function to automate the process of setting up new states.
+        '''
     # Update the device settings
         for device_db in self.STATES[state_db][state]['settings']:
             self.update_device_settings(device_db, self.STATES[state_db][state]['settings'][device_db])
@@ -898,6 +968,31 @@ class Machine():
 # Parse Messages from the Communications Queue --------------------------------
     @log.log_this()
     def parse_message(self, message):
+        '''A helper function to automate the parsing messages from the
+        communications queue. The communications queue is a couchbase queue
+        that serves as the intermediary between this script and others. The 
+        entries in this queue are parsed as commands in this script:
+            Requesting to change state:
+                {'state': {<state DB path>:{'state':<state>},...}}
+            Requesting to change device settings:
+                {'device_setting': {<device driver DB path>:{<method name>:<args>,...},...}}
+            Requesting to change a control parameter:
+                {'control_parameter': {<parameter name>:<value>,...}}
+        -Commands are sent into the queue by setting the "message" keyword 
+        argument within the CouchbaseDB queue.push() method. 
+        -Commands are read from the queue with the queue.pop() method.
+        -If the DB path given does not exist in the defined STATE_DBs and
+        DEVICE_DBs, or the given method and parameter does not exist in 
+        CONTROL_PARAMS, no attempt is made to excecute the command.
+        -All commands are caught and logged at the INFO level.
+        -Multiple commands may be input simultaneously by nesting single
+        commands within the 'state', 'device_setting', and 'control_parameter'
+        keys:
+            message = {
+                'state':{<state DB path>:{'state':<state>},...},
+                'device_setting':{<device driver DB path>:{<method name>:<args>,...},...},
+                'control_parameter':{<parameter name>:<value>,...}}
+        '''
         mod_name = __name__
         func_name = self.parse_message.__name__
         if ('message' in message):
@@ -909,11 +1004,12 @@ class Machine():
                 for state_db in message['state']:
                     if ('state' in message['state'][state_db]):
                         desired_state = message['state'][state_db]['state']
-                        if self.current_state[state_db]['desired_state'] != desired_state:
-                        # Update the state variable
-                            with self.lock[state_db]:
-                                self.current_state[state_db]['desired_state'] = desired_state
-                                self.db[state_db].write_record_and_buffer(self.current_state[state_db])
+                        if (desired_state in self.STATES[state_db]):
+                            if self.current_state[state_db]['desired_state'] != desired_state:
+                            # Update the state variable
+                                with self.lock[state_db]:
+                                    self.current_state[state_db]['desired_state'] = desired_state
+                                    self.db[state_db].write_record_and_buffer(self.current_state[state_db])
         # If requesting to change device settings,
             if ('device_setting' in message):
                 for device_db in message['device_setting']:
@@ -923,23 +1019,21 @@ class Machine():
         # If requesting to change control parameters,
             if ('control_parameter' in message):
                 updated = False
-                for method in message['control_parameter']:
-                    if (method in self.local_settings[self.CONTROL_DB]):
-                        for parameter in message['control_parameter'][method]:
-                        # Update the control parameter
-                            if (parameter in self.local_settings[self.CONTROL_DB][method]):
-                            # Convert new parameter to the correct type
-                                parameter_type = self.local_settings[self.CONTROL_DB][method][parameter]['type']
-                                try:
-                                    result = self.convert_type(message['control_parameter'][method][parameter], parameter_type)
-                                except:
-                                    result_str = ' Could not convert {:} to {:} for control parameter {:}.{:}'.format(message['control_parameter'][method][parameter], parameter_type, method, parameter)
-                                    log.log_info(mod_name, func_name, result_str)
-                                else:
-                                    if (self.local_settings[self.CONTROL_DB][method][parameter]['value'] != result):
-                                # Update the local copy
-                                        updated = True
-                                        self.local_settings[self.CONTROL_DB][method][parameter]['value'] = result
+                for parameter in message['control_parameter']:
+                # Update the control parameter
+                    if (parameter in self.local_settings[self.CONTROL_DB]):
+                    # Convert new parameter to the correct type
+                        parameter_type = self.local_settings[self.CONTROL_DB][parameter]['type']
+                        try:
+                            result = self.convert_type(message['control_parameter'][parameter], parameter_type)
+                        except:
+                            result_str = ' Could not convert {:} to {:} for control parameter {:}'.format(message['control_parameter'][parameter], parameter_type, parameter)
+                            log.log_info(mod_name, func_name, result_str)
+                        else:
+                            if (self.local_settings[self.CONTROL_DB][parameter]['value'] != result):
+                        # Update the local copy
+                                updated = True
+                                self.local_settings[self.CONTROL_DB][parameter]['value'] = result
             # Update the database if the local copy changed
                 if updated:
                     self.db[self.CONTROL_DB].write_record_and_buffer(self.local_settings[self.CONTROL_DB])
@@ -947,6 +1041,8 @@ class Machine():
 # Convert Type from a "type string" -------------------------------------------
     @log.log_this()
     def convert_type(self, obj, type_str):
+        '''A helper function to convert an object to a specific type.
+        '''
         valid_types = {'bool':bool, 'complex':complex,
                        'float':float, 'int':int, 'str':str}
         obj = valid_types[type_str](obj)
@@ -955,6 +1051,9 @@ class Machine():
 # Exhaust a MongoDB Cursor to Queue up the Most Recent Values -----------------
     @log.log_this()
     def exhaust_cursor(self, cursor):
+        '''A helper fuction to queue new values from a MongoDB capped
+        collection.
+        '''
         for doc in cursor:
             pass
         return cursor
@@ -962,6 +1061,9 @@ class Machine():
 # Get Values from Nested Dictionary -------------------------------------------
     @log.log_this()
     def from_keys(self, nested_dict, key_list):
+        '''A helper function which parses nested dictionaries given a list of
+        keys.
+        '''
         if isinstance(key_list, list):
             for key in key_list:
                 nested_dict = nested_dict[key]
@@ -1021,6 +1123,10 @@ class Machine():
 # Threading Functions ---------------------------------------------------------
     @log.log_this()
     def thread_to_completion(self, name, thread_name):
+        '''A helper function that blocks until a thread has sucessfully
+        completed its execution. It automatically retries the thread if it
+        catches errors.
+        '''
         completed = False
         loop_count = 0
         while not(completed):
@@ -1049,6 +1155,10 @@ class Machine():
     
     @log.log_this()
     def maintain_thread(self, thread_name):
+        '''A helper function that can be used to maintain the operation of a
+        thread. The method checks if the thread is still alive, restarting the 
+        thread or returning error messages if it has stopped.
+        '''
         mod_name = __name__
         func_name = self.thread[thread_name].target.__name__
         (alive, error) = self.thread[thread_name].check_thread()

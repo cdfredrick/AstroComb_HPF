@@ -26,7 +26,6 @@ LOGGER_NAME = 'Astrocomb'
 import logging
 import sys
 from functools import wraps
-import threading
 from Drivers.Database.MongoDB import MongoLogger
 
 # %% Logging functions
@@ -47,21 +46,20 @@ def start_logging(database=None, logger_level=logging.DEBUG, log_buffer_handler_
         if format_str is None:
             format_str = '%(name)s:\n%(message)s'
         logger = MongoLogger(database, name=LOGGER_NAME, logger_level=logger_level, log_buffer_handler_level=log_buffer_handler_level, log_handler_level=log_handler_level, format_str=format_str, remove_all_handlers=remove_all_handlers)
-    else:
-    # If no database is specified, setup a simple stream handler
-        if format_str is None:
-            format_str='%(asctime)s [%(levelname)s] %(name)s:\n%(message)s'
-        logger = logging.getLogger(LOGGER_NAME)
-        logger.setLevel(logger_level)
-        stream_handler = logging.StreamHandler(sys.stdout)
-        stream_handler.setLevel(log_buffer_handler_level)
-        formatter = logging.Formatter(format_str)
-        stream_handler.setFormatter(formatter)
-        old_handlers = logger.handlers
-        for handler in old_handlers:
-            if remove_all_handlers:
+    # Setup a simple stream handler
+    format_str='%(asctime)s [%(levelname)s] %(name)s:\n%(message)s'
+    logger = logging.getLogger(LOGGER_NAME)
+    logger.setLevel(logger_level)
+    stream_handler = logging.StreamHandler(sys.stdout)
+    stream_handler.setLevel(log_buffer_handler_level)
+    formatter = logging.Formatter(format_str)
+    stream_handler.setFormatter(formatter)
+    old_handlers = logger.handlers
+    for handler in old_handlers:
+        if remove_all_handlers:
+            if (type(handler) == logging.StreamHandler):
                 logger.removeHandler(handler)
-        logger.addHandler(stream_handler)
+    logger.addHandler(stream_handler)
     logger.info('Logging started!')
     return logger
 

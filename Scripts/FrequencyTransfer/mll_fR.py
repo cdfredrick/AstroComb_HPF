@@ -10,9 +10,8 @@ Created on Fri Jul 21 15:51:36 2017
 
 import numpy as np
 import time
+import datetime
 import logging
-
-import threading
 
 import os
 import sys
@@ -246,7 +245,8 @@ STATE_SETTINGS = {
                         'optional':False},
                 'compliance':False,
                 'desired_state':'lock',
-                'initialized':False}}
+                'initialized':False,
+                'heartbeat':datetime.datetime.utcnow()}}
 DEVICE_SETTINGS = {
         # VISA device settings
         'mll_fR/device_TEC':{

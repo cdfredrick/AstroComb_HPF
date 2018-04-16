@@ -359,7 +359,7 @@ class Machine():
             buffer and the other logs warnings and above to the permanent log database.
             The threshold for the base logger, and the two handlers, may be set in the
             following command.'''
-        log.start_logging(logger_level=logger_level, log_buffer_handler_level=log_buffer_handler_level, log_handler_level=log_handler_level, database_object=database_object)
+        log.start_logging(logger_level=logger_level, log_buffer_handler_level=log_buffer_handler_level, log_handler_level=log_handler_level, database=database_object)
 
 # Initialize all Devices and Settings -----------------------------------------
     @log.log_this()

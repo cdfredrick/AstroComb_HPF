@@ -411,6 +411,8 @@ class Machine():
                             self.local_settings[database][setting] = self.SETTINGS[database][setting]
                         if update_device_condition:
                             settings_list.append({setting:self.SETTINGS[database][setting]})
+                    else:
+                        self.local_settings[database][setting] = self.SETTINGS[database][setting]
                 elif (device_db_condition and update_device_condition):
                     settings_list.append({setting:None})
                 if (control_db_condition and setting == 'main_loop'):

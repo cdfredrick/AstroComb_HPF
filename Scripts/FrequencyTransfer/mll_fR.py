@@ -28,7 +28,6 @@ from Drivers.VISA.Thorlabs import MDT639B
 from Drivers.DAQ.Tasks import AiTask
 
 
-
 # %% Helper Functions =========================================================
 
 '''The following are helper functionss that increase the readablity of code in
@@ -278,7 +277,7 @@ DEVICE_SETTINGS = {
                        'min_val':-1.0, 'max_val':1.0}],
                         100e3, int(100e3*0.2)],{'timeout':5.0}],
                 'reserve_cont':False, 'reserve_point':False}}
-CONTROL_PARAMS = {'mll_fR/control':{}}
+CONTROL_PARAMS = {CONTROL_DB:{}}
 SETTINGS = dict(list(STATE_SETTINGS.items()) + list(DEVICE_SETTINGS.items()) + list(CONTROL_PARAMS.items()))
 sm.init_default_settings(STATE_SETTINGS, DEVICE_SETTINGS, CONTROL_PARAMS)
 
@@ -299,7 +298,7 @@ following command.
 '''
 sm.init_logging(database_object=db[LOG_DB], logger_level=logging.INFO, log_buffer_handler_level=logging.DEBUG, log_handler_level=logging.WARNING)
 
-# Initialize Devices ----------------------------------------------------------
+# Initialize all Devices and Settings -----------------------------------------
 '''This initializes all device drivers and checks that all settings
 (as listed in SETTINGS) exist within the databases. Any missing
 settings are populated with the default values. This function 

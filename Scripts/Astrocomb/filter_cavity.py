@@ -580,8 +580,9 @@ def find_lock(state_db, last_good_position=None):
         if (time.time() - timer['find_lock:locked']) > lock_hold_interval:
         # TODO: if reflect error signal is high -> locked = False
         # Lock is succesful, update state variable
-            current_state[state_db]['compliance'] = True
-            db[state_db].write_record_and_buffer(current_state[state_db])
+            with sm.lock[state_db]:
+                current_state[state_db]['compliance'] = True
+                db[state_db].write_record_and_buffer(current_state[state_db])
             log_str = ' filter_cavity lock successful'
             log.log_info(mod_name, func_name, log_str)
         # Update the monitor variable if necessary
@@ -695,8 +696,9 @@ def transfer_to_manual(state_db):
 # Remove SRS PID from queue -----------------------------------------
     dev[device_db]['queue'].remove()
 # Update state variable
-    current_state[state_db]['compliance'] = True
-    db[state_db].write_record_and_buffer(current_state[state_db])
+    with sm.lock[state_db]:
+        current_state[state_db]['compliance'] = True
+        db[state_db].write_record_and_buffer(current_state[state_db])
     log_str = ' Transfer to manual successful'
     log.log_info(mod_name, func_name, log_str)
 
@@ -743,8 +745,9 @@ def keep_lock(state_db):
 # If not locked -----------------------------------------------------
     if not(locked):
     # Update state variable
-        current_state[state_db]['compliance'] = False
-        db[state_db].write_record_and_buffer(current_state[state_db])
+        with sm.lock[state_db]:
+            current_state[state_db]['compliance'] = False
+            db[state_db].write_record_and_buffer(current_state[state_db])
     # Check if quick relock is possible
         if (lock_age_condition and no_new_limits_condition):
         # Calculate the expected output voltage
@@ -832,9 +835,10 @@ def lock_disabled(state_db):
     func_name = lock_disabled.__name__
     if (mon['filter_cavity/PID_action']['data'] != False):
     # Update state variable
-        current_state[state_db]['compliance'] = False
-        db[state_db].write_record_and_buffer(current_state[state_db])
-        log_str = " Detected lock enabled, transfering to manual"
+        with sm.lock[state_db]:
+            current_state[state_db]['compliance'] = False
+            db[state_db].write_record_and_buffer(current_state[state_db])
+        log_str = " Lock enabled detected, transfering to manual"
         log.log_info(mod_name, func_name, log_str)
 
 

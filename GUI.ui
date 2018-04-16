@@ -2392,7 +2392,7 @@
             <item row="0" column="0">
              <widget class="QTabWidget" name="tabWidget_4">
               <property name="currentIndex">
-               <number>2</number>
+               <number>0</number>
               </property>
               <widget class="QWidget" name="tab_12">
                <attribute name="title">
@@ -3407,20 +3407,10 @@
                     <item row="1" column="1">
                      <widget class="QGraphicsView" name="graphicsView_5"/>
                     </item>
-                    <item row="2" column="0">
-                     <widget class="QLabel" name="label_5">
-                      <property name="text">
-                       <string>Power Supply</string>
-                      </property>
-                     </widget>
-                    </item>
                     <item row="2" column="1">
-                     <widget class="QGraphicsView" name="graphicsView_12"/>
-                    </item>
-                    <item row="3" column="1">
                      <widget class="QGroupBox" name="groupBox_3">
                       <property name="title">
-                       <string>GroupBox</string>
+                       <string>DC Power Supply</string>
                       </property>
                       <layout class="QGridLayout" name="gridLayout_22">
                        <item row="0" column="0">
@@ -3442,7 +3432,30 @@
                        <item row="0" column="1">
                         <widget class="QLabel" name="label_41">
                          <property name="text">
-                          <string>text</string>
+                          <string>12 V</string>
+                         </property>
+                        </widget>
+                       </item>
+                       <item row="0" column="2">
+                        <widget class="QGraphicsView" name="graphicsView_163">
+                         <property name="maximumSize">
+                          <size>
+                           <width>15</width>
+                           <height>15</height>
+                          </size>
+                         </property>
+                         <property name="acceptDrops">
+                          <bool>false</bool>
+                         </property>
+                         <property name="interactive">
+                          <bool>false</bool>
+                         </property>
+                        </widget>
+                       </item>
+                       <item row="0" column="3">
+                        <widget class="QLabel" name="label_168">
+                         <property name="text">
+                          <string>8 V</string>
                          </property>
                         </widget>
                        </item>

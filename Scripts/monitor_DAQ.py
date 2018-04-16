@@ -457,8 +457,9 @@ def queue_and_reserve(state_db):
             # Reserve and start the DAQ
                 dev[device_db]['driver'].reserve_cont(True)
             # Update the state variable
-                current_state[state_db]['compliance'] = True
-                db[state_db].write_record_and_buffer(current_state[state_db])
+                with sm.lock[state_db]:
+                    current_state[state_db]['compliance'] = True
+                    db[state_db].write_record_and_buffer(current_state[state_db])
                 log_str = " Reserving DAQ"
                 log.log_info(mod_name, func_name, log_str)
             else:
@@ -486,8 +487,9 @@ def touch(state_db):
             dev[device_db]['driver'].reserve_cont(False)
             dev[device_db]['queue'].remove()
         # Update state variable
-            current_state[state_db]['compliance'] = False
-            db[state_db].write_record_and_buffer(current_state[state_db])
+            with sm.lock[state_db]:
+                current_state[state_db]['compliance'] = False
+                db[state_db].write_record_and_buffer(current_state[state_db])
             log_str = " Releasing DAQ, other processes waiting in the queue"
             log.log_info(mod_name, func_name, log_str)
         elif not(dev[device_db]['driver'].reserve_cont()):
@@ -495,8 +497,9 @@ def touch(state_db):
         # Dequeue
             dev[device_db]['queue'].remove()
         # Update state variable
-            current_state[state_db]['compliance'] = False
-            db[state_db].write_record_and_buffer(current_state[state_db])
+            with sm.lock[state_db]:
+                current_state[state_db]['compliance'] = False
+                db[state_db].write_record_and_buffer(current_state[state_db])
             log_str = " Releasing DAQ, continuous acquisition has not been reserved"
             log.log_info(mod_name, func_name, log_str)
         else:

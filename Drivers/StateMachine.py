@@ -677,6 +677,8 @@ class Machine():
         # Check for errors ----------------------------------------------------
             error_caught = bool(len([error for error in errors if (error!=None)]))
             if error_caught:
+                log_str = " Exeception detected, reinitializing threads."
+                log.log_info(mod_name, func_name, log_str)
             # Trigger shutdown events
                 for state_db in self.STATE_DBs:
                     self.event[state_db].set()

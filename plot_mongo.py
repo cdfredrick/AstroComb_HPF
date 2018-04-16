@@ -18,8 +18,9 @@ central_tz = pytz.timezone('US/Central')
 utc_tz = pytz.utc
 
 # %% Choose data
-start_time = central_tz.localize(datetime.datetime(2018, 3, 26, 12))
-stop_time = central_tz.localize(datetime.datetime(2018, 3, 29, 12))
+start_time = central_tz.localize(datetime.datetime(2018, 4, 10, 12))
+#stop_time = central_tz.localize(datetime.datetime(2018, 3, 30, 12))
+stop_time = central_tz.localize(datetime.datetime.now())
 DBs = {
         'filter_cavity/HV_output':{
         'start':start_time,

@@ -82,10 +82,6 @@ class DatabaseRead():
         self.record = self.database[self.collection_name+'record']
     # Get the buffer
         self.buffer = self.database[self.collection_name+'buffer']
-    # Get the log
-        self.log = self.database[self.collection_name+'log']
-    # Get the log buffer
-        self.log_buffer = self.database[self.collection_name+'log_buffer']
     # Set constants
         self.COLLECTION_KEYS = [self.collection_name+key for key in self.COLLECTION_KEYS]
     
@@ -144,6 +140,102 @@ class DatabaseRead():
         else:
         # Return the cursor in full
             return cursor
+
+    def read_record(self, start, stop, number_of_documents=0, sort_ascending=True):
+        '''
+        Returns an iterable cursor object containing documents from the record.
+        The start and stop times are given as datetime.datetime objects. These
+            can be formed directly with datetime.datetime.utcnow() or with
+            datetime.datetime(year, month, day, hour=0, minute=0, second=0, microsecond=0),
+            and with differences between datetime.datetime objects and 
+            datetime.timedelta(days=0, seconds=0, microseconds=0, milliseconds=0, minutes=0, hours=0, weeks=0)
+            objects. All times should be given in UTC.
+        With the timestamp ordering, ascending order gives the oldest documents
+            first, while descending gives the newest documents first.
+        When only one document is requested this method autmatically returns 
+            the dictionary as given by the "entry_dict" of the write methods.
+            Otherwise an interable Cursor object is returned.
+        
+        *args
+        start: a datetime.datetime instance marking the start of the query period.
+        stop: a datetime.datetime instance marking the end of the query period.
+        
+        **kwargs
+        number_of_documents: int, maximum number of documents collected into the
+            cursor. A maximum number of "0" is equivalent to an unlimited amount.
+        sort_ascending: bool, selects to sort the cursor either by ascending or
+            descending order. 
+        '''
+    # Sort order
+        if sort_ascending:
+            sort_order = [('_timestamp', pymongo.ASCENDING)]
+        else:
+            sort_order = [('_timestamp', pymongo.DESCENDING)]
+    # Ranged filter
+        ranged_filter = {'_timestamp':{'$gte':start, '$lte':stop}}
+    # Cursor
+        cursor = self.record.find(ranged_filter, limit=number_of_documents, sort=sort_order)
+        if number_of_documents == 1:
+        # Return the object if one exists
+            cursor = list(cursor)
+            if len(cursor) == 1:
+                cursor = cursor[0]
+                cursor.pop('_id')
+                cursor.pop('_timestamp')
+                return cursor
+            else:
+                return
+        else:
+        # Return the cursor in full
+            return cursor
+
+
+# %% LogRead =============================================================
+class LogRead():
+    def __init__(self, mongo_client, database):
+        '''
+        The "read only" handler for the database. This subclass is used to form
+            a read only connection to a database, without needing to specify
+            the database specific settings. The methods in this subclass can not 
+            change values in the database.
+        In order to allow for a more hierarchical structure, names may be 
+            separated by a single forward slash '/'. The preceding name will be
+            the name of the database and the following name will be that of a 
+            collection. The sub collection names ('record', 'buffer', 
+            'log', 'log_buffer') will be appended to the collection name. Only 
+            one level is supported, mongoDB does not support nested collections.
+        
+        *args
+        mongo_client: a MongoClient object
+        database: str, the name of the requested database. Use the '/' separator
+            to include multiple collections in a single database file.
+        '''
+    # Initialize
+        self.get_collections(mongo_client, database)
+
+    def get_collections(self, mongo_client, database):
+    # Get the MongoDB client
+        self.client = mongo_client.client
+        self.COLLECTION_KEYS = mongo_client.COLLECTION_KEYS
+        self.DOCUMENT_KEYS = mongo_client.DOCUMENT_KEYS
+    # Parse database name
+        database = database.split('/')
+        if len(database) is 2:
+            collection = database[1]+'_'
+            database = database[0]
+        else:
+            collection = ''
+            database = database[0]
+    # Get the requested database
+        self.database_name = database
+        self.collection_name = collection
+        self.database = self.client[self.database_name]
+    # Get the log
+        self.log = self.database[self.collection_name+'log']
+    # Get the log buffer
+        self.log_buffer = self.database[self.collection_name+'log_buffer']
+    # Set constants
+        self.COLLECTION_KEYS = [self.collection_name+key for key in self.COLLECTION_KEYS]
 
     def read_log(self, start, stop, number_of_documents=0, log_level=logging.INFO, sort_ascending=True):
         '''
@@ -255,53 +347,6 @@ class DatabaseRead():
         # Return the cursor in full
             return cursor
 
-    def read_record(self, start, stop, number_of_documents=0, sort_ascending=True):
-        '''
-        Returns an iterable cursor object containing documents from the record.
-        The start and stop times are given as datetime.datetime objects. These
-            can be formed directly with datetime.datetime.utcnow() or with
-            datetime.datetime(year, month, day, hour=0, minute=0, second=0, microsecond=0),
-            and with differences between datetime.datetime objects and 
-            datetime.timedelta(days=0, seconds=0, microseconds=0, milliseconds=0, minutes=0, hours=0, weeks=0)
-            objects. All times should be given in UTC.
-        With the timestamp ordering, ascending order gives the oldest documents
-            first, while descending gives the newest documents first.
-        When only one document is requested this method autmatically returns 
-            the dictionary as given by the "entry_dict" of the write methods.
-            Otherwise an interable Cursor object is returned.
-        
-        *args
-        start: a datetime.datetime instance marking the start of the query period.
-        stop: a datetime.datetime instance marking the end of the query period.
-        
-        **kwargs
-        number_of_documents: int, maximum number of documents collected into the
-            cursor. A maximum number of "0" is equivalent to an unlimited amount.
-        sort_ascending: bool, selects to sort the cursor either by ascending or
-            descending order. 
-        '''
-    # Sort order
-        if sort_ascending:
-            sort_order = [('_timestamp', pymongo.ASCENDING)]
-        else:
-            sort_order = [('_timestamp', pymongo.DESCENDING)]
-    # Ranged filter
-        ranged_filter = {'_timestamp':{'$gte':start, '$lte':stop}}
-    # Cursor
-        cursor = self.record.find(ranged_filter, limit=number_of_documents, sort=sort_order)
-        if number_of_documents == 1:
-        # Return the object if one exists
-            cursor = list(cursor)
-            if len(cursor) == 1:
-                cursor = cursor[0]
-                cursor.pop('_id')
-                cursor.pop('_timestamp')
-                return cursor
-            else:
-                return
-        else:
-        # Return the cursor in full
-            return cursor
 
 # %% DatabaseReadWrite ========================================================
 
@@ -325,19 +370,6 @@ class DatabaseReadWrite(DatabaseRead):
         '''
     # Initialize
         super(DatabaseReadWrite, self).__init__(mongo_client, database)
-   
-    def write_document_to_log(self, document):
-        '''
-        Writes a document into the log. This is intended to be used to write
-            documents from the log buffer into the record. Since the database 
-            requires object IDs to be unique, the old object ID is dropped and
-            a new one is automatically created upon insertion.
-        
-        *args
-        document: a document in the format as given by the read_log function.
-        '''
-        document.pop('_id')
-        self.log.insert_one(document)
 
     def write_document_to_record(self, document):
         '''
@@ -367,6 +399,76 @@ class DatabaseReadWrite(DatabaseRead):
             document = {'_timestamp':timestamp}
         document = dict(list(document.items()) + list(entry_dict.items()))
         self.buffer.insert_one(document)
+
+    def write_record(self, entry_dict, timestamp=None):
+        '''
+        Writes an entry into the record. This bypasses the buffer and directly 
+            writes an entry into the record. For compatibility considerations, 
+            the entry should have the same format as those written to the buffer.
+        
+        *args
+        entry_dict: a dictionary containing thing to write to the record.
+        '''
+        if (timestamp == None) or (type(timestamp) != datetime.datetime):
+            document = {'_timestamp':datetime.datetime.utcnow()}
+        else:
+            document = {'_timestamp':timestamp}
+        document = dict(list(document.items()) + list(entry_dict.items()))
+        self.record.insert_one(document)
+    
+    def write_record_and_buffer(self, entry_dict, timestamp=None):
+        '''
+        Writes an entry into the record and into the buffer. For compatibility
+        considerations, the entry should have the same format as those written
+        to the buffer.
+        
+        *args
+        entry_dict: a dictionary containing thing to write to the record.
+        '''
+        if (timestamp == None) or (type(timestamp) != datetime.datetime):
+            document = {'_timestamp':datetime.datetime.utcnow()}
+        else:
+            document = {'_timestamp':timestamp}
+        document = dict(list(document.items()) + list(entry_dict.items()))
+        self.buffer.insert_one(document)
+        self.record.insert_one(document)
+
+
+# %% LogReadWrite ========================================================
+
+class LogReadWrite(LogRead):
+    def __init__(self, mongo_client, database):
+        '''
+        The "read and write" handler for the database. This subclass is used to
+            form a read and write connection to a database, without needing to
+            specify the database specific settings.
+        In order to allow for a more hierarchical structure, names may be 
+            separated by a single forward slash '/'. The preceding name will be
+            the name of the database and the following name will be that of a 
+            collection. The sub collection names ('record', 'buffer', 
+            'log', 'log_buffer') will be appended to the collection name. Only 
+            one level is supported, mongoDB does not support nested collections.
+        
+        *args
+        mongo_client: a MongoClient object
+        database: str, the name of the requested database. Use the '/' separator
+            to include multiple collections in a single database file.
+        '''
+    # Initialize
+        super(LogReadWrite, self).__init__(mongo_client, database)
+   
+    def write_document_to_log(self, document):
+        '''
+        Writes a document into the log. This is intended to be used to write
+            documents from the log buffer into the record. Since the database 
+            requires object IDs to be unique, the old object ID is dropped and
+            a new one is automatically created upon insertion.
+        
+        *args
+        document: a document in the format as given by the read_log function.
+        '''
+        document.pop('_id')
+        self.log.insert_one(document)
 
     def write_log(self, entry, log_level, timestamp=None):
         '''
@@ -425,39 +527,6 @@ class DatabaseReadWrite(DatabaseRead):
         self.log.insert_one(document)
         self.log_buffer.insert_one(document)
 
-    def write_record(self, entry_dict, timestamp=None):
-        '''
-        Writes an entry into the record. This bypasses the buffer and directly 
-            writes an entry into the record. For compatibility considerations, 
-            the entry should have the same format as those written to the buffer.
-        
-        *args
-        entry_dict: a dictionary containing thing to write to the record.
-        '''
-        if (timestamp == None) or (type(timestamp) != datetime.datetime):
-            document = {'_timestamp':datetime.datetime.utcnow()}
-        else:
-            document = {'_timestamp':timestamp}
-        document = dict(list(document.items()) + list(entry_dict.items()))
-        self.record.insert_one(document)
-    
-    def write_record_and_buffer(self, entry_dict, timestamp=None):
-        '''
-        Writes an entry into the record and into the buffer. For compatibility
-        considerations, the entry should have the same format as those written
-        to the buffer.
-        
-        *args
-        entry_dict: a dictionary containing thing to write to the record.
-        '''
-        if (timestamp == None) or (type(timestamp) != datetime.datetime):
-            document = {'_timestamp':datetime.datetime.utcnow()}
-        else:
-            document = {'_timestamp':timestamp}
-        document = dict(list(document.items()) + list(entry_dict.items()))
-        self.buffer.insert_one(document)
-        self.record.insert_one(document)
-
 
 # %% DatabaseMaster ===========================================================
 
@@ -483,7 +552,7 @@ class DatabaseMaster(DatabaseReadWrite):
         capped_collection_size: int, the size of the capped collection (buffer)
             in bytes.
         '''
-        super(DatabaseReadWrite, self).__init__(mongo_client, database)
+        super(DatabaseMaster, self).__init__(mongo_client, database)
         self.ensure_compliance(capped_collection_size)
 
     def ensure_compliance(self, capped_collection_size):
@@ -499,6 +568,36 @@ class DatabaseMaster(DatabaseReadWrite):
         elif (not buffer_options['capped']) or (buffer_options['size'] != capped_collection_size):
             # Convert the collection if it is not capped or if it is the wrong size
             self.database.command({'convertToCapped':self.COLLECTION_KEYS[1], 'size':capped_collection_size})
+
+
+# %% LogMaster ===========================================================
+
+class LogMaster(LogReadWrite):
+    def __init__(self, mongo_client, database, capped_collection_size=int(1e6)):
+        '''
+        The "master" handler for the database. This class enforces the database
+            settings as given in the kwargs and ensures that the record and log
+            have the correct indexes.
+        In order to allow for a more hierarchical structure, names may be 
+            separated by a single forward slash '/'. The preceding name will be
+            the name of the database and the following name will be that of a 
+            collection. The sub collection names ('record', 'buffer', 
+            'log', 'log_buffer') will be appended to the collection name. Only 
+            one level is supported, mongoDB does not support nested collections.
+        
+        *args
+        mongo_client: a MongoClient object
+        database: str, the name of the requested database. Use the '/' separator
+            to include multiple collections in a single database file.
+        
+        **kwargs
+        capped_collection_size: int, the size of the capped collection (buffer)
+            in bytes.
+        '''
+        super(LogMaster, self).__init__(mongo_client, database)
+        self.ensure_compliance(capped_collection_size)
+
+    def ensure_compliance(self, capped_collection_size):
     # The log
         # Create a descending index with timestamps for documents in the log
         self.log.create_index([('_timestamp', pymongo.DESCENDING)])
@@ -525,11 +624,13 @@ class MongoLogBufferHandler(logging.Handler):
     """
     def __init__(self, database):
         """
-        A DatabaseMaster or DatabaseReadWrite object must be specified.
+        A LogMaster or LogReadWrite object must be specified.
         The resulting handler object will have a 'database_name' attribute that
             can be used to identify the handler's destination.
         """
         logging.Handler.__init__(self)
+        if (type(database) != LogMaster) or (type(database) != LogReadWrite):
+            raise TypeError('A LogMaster or LogReadWrite object must be specified.')
         self.database_name = database.database_name
         self.write_log_buffer = database.write_log_buffer
         
@@ -638,7 +739,7 @@ def MongoLogger(database, name=None, logger_level=logging.DEBUG, log_buffer_hand
 if __name__ == '__main__':
     mongo_client = MongoClient()
 # Testing
-    print('\n Testing the connection ========================================')
+    print('\n Testing Database connection ===================================')
     test_database = DatabaseMaster(mongo_client, 'test_database')
     #test_database = DatabaseReadWrite(mongo_client, 'test_database')
     #test_database = DatabaseRead(mongo_client, 'test_database')
@@ -734,7 +835,12 @@ if __name__ == '__main__':
         test_database.write_document_to_record(doc)
     for doc in test_database.read_record(start, datetime.datetime.utcnow(), number_of_documents=5, sort_ascending=False):
         print(doc)
-    
+#  Log Testing and Examples ---------------------------------------------------
+    print('\n Testing Log connection ========================================')
+    test_database = LogMaster(mongo_client, 'test_database')
+    #test_database = DatabaseReadWrite(mongo_client, 'test_database')
+    #test_database = DatabaseRead(mongo_client, 'test_database')
+    # Read and write to buffer
     # Read and write to the log buffer
     print('\n Read and write to the log buffer ------------------------------')
     for x in range(int(2e1)):

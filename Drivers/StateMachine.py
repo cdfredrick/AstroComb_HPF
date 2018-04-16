@@ -347,7 +347,10 @@ class Machine():
         self.mongo_client = MongoDB.MongoClient()
         self.db = db
         for database in self.MASTER_DBs:
-            self.db[database] = MongoDB.DatabaseMaster(self.mongo_client, database)
+            if database in self.LOG_DB:
+                self.db[database] = MongoDB.LogMaster(self.mongo_client, database)
+            else:
+                self.db[database] = MongoDB.DatabaseMaster(self.mongo_client, database)
         for database in self.READ_DBs:
             self.db[database] = MongoDB.DatabaseRead(self.mongo_client, database)
 

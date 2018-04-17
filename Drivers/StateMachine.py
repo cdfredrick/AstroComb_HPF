@@ -422,7 +422,7 @@ class Machine():
                             settings_list.append({setting:self.SETTINGS[database][setting]})
                     else:
                         self.local_settings[database][setting] = self.SETTINGS[database][setting]
-                elif (device_db_condition and update_device_condition):
+                elif (update_device_condition):
                     settings_list.append({setting:None})
                 if (control_db_condition and setting == 'main_loop'):
                     if self.local_settings[database][setting]['value'] !=True:
@@ -944,11 +944,11 @@ class Machine():
                         updated = True
                         self.local_settings[device_db][setting] = new_setting
             # Log the returned result if stringable
-                try:
-                    epilogue_str = ' Returned: {:}'.format(str(result))
-                except:
-                    epilogue_str = ' Returned successfully, but result was not stringable'
                 if write_log:
+                    try:
+                        epilogue_str = ' device: {:}\n method: {:}\n result: {:}'.format(device_db, setting, str(result))
+                    except:
+                        epilogue_str = epilogue_str = ' device: {:}\n method: {:}\n result: {:}'.format(device_db, setting, '<result was not string-able>')
                     log.log_info(mod_name, func_name, epilogue_str)
             # Touch queue (prevent timeout)
                 self.dev[device_db]['queue'].touch()

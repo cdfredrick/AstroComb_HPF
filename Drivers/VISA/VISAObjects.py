@@ -72,6 +72,10 @@ def _handle_visa_error(func):
                 self.close_resource()
             except:
                 pass
+            try:
+                self.resource.unlock()
+            except:
+                pass
             raise first_error
     return wrapper
 

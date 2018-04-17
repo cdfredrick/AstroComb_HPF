@@ -117,7 +117,7 @@ MONITOR_DBs = [
     'filter_cavity/PID_output', 'filter_cavity/PID_output_limits',
     'filter_cavity/PID_action', 'filter_cavity/HV_output',
     'filter_cavity/DAQ_Vout_vs_reflect']
-LOG_DB = 'filter_cavity/log'
+LOG_DB = 'filter_cavity'
 CONTROL_DB = 'filter_cavity/control'
 MASTER_DBs = STATE_DBs + DEVICE_DBs + MONITOR_DBs + [LOG_DB] + [CONTROL_DB]
 sm.init_master_DB_names(STATE_DBs, DEVICE_DBs, MONITOR_DBs, LOG_DB, CONTROL_DB)

@@ -110,7 +110,7 @@ STATE_DBs = [
 DEVICE_DBs =[
         'comb_generator/device_PDU_12V']
 MONITOR_DBs = []
-LOG_DB = 'comb_generator/log'
+LOG_DB = 'comb_generator'
 CONTROL_DB = 'comb_generator/control'
 MASTER_DBs = STATE_DBs + DEVICE_DBs + MONITOR_DBs + [LOG_DB] + [CONTROL_DB]
 sm.init_master_DB_names(STATE_DBs, DEVICE_DBs, MONITOR_DBs, LOG_DB, CONTROL_DB)

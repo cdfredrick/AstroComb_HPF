@@ -125,7 +125,7 @@ MONITOR_DBs = [
     'mll_fR/TEC_temperature', 'mll_fR/TEC_current',  'mll_fR/TEC_event_status', 
     'mll_fR/PID_output', 'mll_fR/PID_output_limits', 'mll_fR/PID_action',
     'mll_fR/HV_output', 'mll_fR/DAQ_Vout_vs_freq',]
-LOG_DB = 'mll_fR/log'
+LOG_DB = 'mll_fR'
 CONTROL_DB = 'mll_fR/control'
 MASTER_DBs = STATE_DBs + DEVICE_DBs + MONITOR_DBs + [LOG_DB] + [CONTROL_DB]
 sm.init_master_DB_names(STATE_DBs, DEVICE_DBs, MONITOR_DBs, LOG_DB, CONTROL_DB)

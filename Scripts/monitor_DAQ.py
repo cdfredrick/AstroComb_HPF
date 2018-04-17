@@ -123,7 +123,7 @@ MONITOR_DBs = [
         # Digital In
         #'rf_osc/100MHz_alarm', 'rf_osc/1GHz_alarm', 'rf_osc/10GHz_alarm',
         #'chiller/system_alarm', 'chiller/pump_alarm']
-LOG_DB = 'monitor_DAQ/log'
+LOG_DB = 'monitor_DAQ'
 CONTROL_DB = 'monitor_DAQ/control'
 MASTER_DBs = STATE_DBs + DEVICE_DBs + MONITOR_DBs + [LOG_DB] + [CONTROL_DB]
 sm.init_master_DB_names(STATE_DBs, DEVICE_DBs, MONITOR_DBs, LOG_DB, CONTROL_DB)

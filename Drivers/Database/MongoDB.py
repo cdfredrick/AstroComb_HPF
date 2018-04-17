@@ -629,8 +629,8 @@ class MongoLogBufferHandler(logging.Handler):
             can be used to identify the handler's destination.
         """
         logging.Handler.__init__(self)
-        if (type(database) != LogMaster) or (type(database) != LogReadWrite):
-            raise TypeError('A LogMaster or LogReadWrite object must be specified.')
+        if (not(isinstance(database,LogMaster)) and not(isinstance(database,LogReadWrite))):
+            raise TypeError('A LogMaster or LogReadWrite object must be specified. A {:} was specified instead'.format(type(database)))
         self.database_name = database.database_name
         self.write_log_buffer = database.write_log_buffer
         
@@ -659,8 +659,8 @@ class MongoLogHandler(logging.Handler):
             can be used to identify the handler's destination.
         """
         logging.Handler.__init__(self)
-        if (type(database) != LogMaster) or (type(database) != LogReadWrite):
-            raise TypeError('A LogMaster or LogReadWrite object must be specified.')
+        if (not(isinstance(database,LogMaster)) and not(isinstance(database,LogReadWrite))):
+            raise TypeError('A LogMaster or LogReadWrite object must be specified. A {:} was specified instead'.format(type(database)))
         self.database_name = database.database_name
         self.write_log = database.write_log
         

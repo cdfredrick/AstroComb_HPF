@@ -662,7 +662,7 @@ class MongoLogHandler(logging.Handler):
         if (type(database) != LogMaster) or (type(database) != LogReadWrite):
             raise TypeError('A LogMaster or LogReadWrite object must be specified.')
         self.database_name = database.database_name
-        self.write_log_buffer = database.write_log
+        self.write_log = database.write_log
         
     def emit(self, record):
         """
@@ -672,7 +672,7 @@ class MongoLogHandler(logging.Handler):
         try:
             msg = self.format(record)
             log_level = record.levelno
-            self.write_log_buffer(msg, log_level)
+            self.write_log(msg, log_level)
         except Exception:
             self.handleError(record)
 
@@ -711,7 +711,7 @@ def MongoLogger(database, name=None, logger_level=logging.DEBUG, log_buffer_hand
     mongo_log_buffer_handler = MongoLogBufferHandler(database)
     mongo_log_buffer_handler.setLevel(log_buffer_handler_level)
 # Create the mongoDB log handler and set level
-    mongo_log_handler = MongoLogBufferHandler(database)
+    mongo_log_handler = MongoLogHandler(database)
     mongo_log_handler.setLevel(log_handler_level)
 # Create formatter
     if format_str is not None:

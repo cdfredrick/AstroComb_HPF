@@ -718,7 +718,7 @@ class Machine():
             else:
                 log_str = " Execution time exceeded the set loop interval {:}s by {:.2g}s".format(self.main_loop_interval, abs(pause))
                 log.log_info(mod_name, func_name, log_str)
-                self.main_loop_timer['check_for_messages'] = get_lap(self.main_loop_interval)+1
+                self.main_loop_timer['main'] = get_lap(self.main_loop_interval)+1
     # Main Loop has exited ----------------------------------------------------
         log_str = " Shut down command accepted. Exiting the control script."
         log.log_info(mod_name, func_name, log_str)

@@ -163,7 +163,7 @@ def log_exception_info(mod_name, func_name, exc_info, log_str=''):
     Note that if function is in error handling function decorator
         you'll need to use functools.wraps on the function in the
         error handler that calls log_error (see log_this above)"""
-    log_str = log_str+'\n'+''.join(traceback.format_exception(*exc_info))
+    log_str = '\n'.join([log_str,''.join(traceback.format_exception(*exc_info))])
     logger = logging.getLogger('{:}.{:}.{:}'.format(LOGGER_NAME,mod_name, func_name))
     logger.error(log_str)
 

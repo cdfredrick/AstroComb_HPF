@@ -12,6 +12,7 @@ import datetime
 
 import sys
 import traceback
+import gc
 
 import threading
 from functools import wraps
@@ -393,6 +394,7 @@ class Machine():
                     'driver':self.send_args(self.DEVICE_SETTINGS[device_db]['driver'],
                                        self.DEVICE_SETTINGS[device_db]['__init__']),
                     'queue':CouchbaseDB.PriorityQueue(self.DEVICE_SETTINGS[device_db]['queue'])}
+        gc.collect() # garbage collect old references
     # Settings
         self.local_settings = local_settings
         for database in self.SETTINGS:
@@ -684,7 +686,8 @@ class Machine():
         # Check for errors ----------------------------------------------------
             error_caught = bool(len([error for error in errors if (error!=None)]))
             if error_caught:
-                log_str = " Exeception detected, reinitializing threads."
+                error_str = [''.join(traceback.format_exception_only(error[0], error[1])).strip() for error in errors if (error!=None)]
+                log_str = '\n'.join([" Exeception detected, reinitializing threads.",*error_str])
                 log.log_info(mod_name, func_name, log_str)
             # Trigger shutdown events
                 for state_db in self.STATE_DBs:
@@ -697,8 +700,9 @@ class Machine():
             # Update the state variables
                 for state_db in self.STATE_DBs:
                     with self.lock[state_db]:
-                        self.current_state[state_db]['initialized'] = False
-                        self.db[state_db].write_record_and_buffer(self.current_state[state_db])
+                        if self.current_state[state_db]['initialized'] != False:
+                            self.current_state[state_db]['initialized'] = False
+                            self.db[state_db].write_record_and_buffer(self.current_state[state_db])
             # Reinitialize the devices and settings
                 self.init_device_drivers_and_settings(dev=self.dev, local_settings=self.local_settings)
             # Reset shutdown trigger
@@ -789,9 +793,9 @@ class Machine():
                     self.STATES[state_db][self.current_state[state_db]['state']]['routines']['search'](state_db)
         
         # State initialized ---------------------------------------------------
-            if not(self.current_state[state_db]['initialized']):
+            with self.lock[state_db]:
+                if not(self.current_state[state_db]['initialized']):
             # Update the state variable
-                with self.lock[state_db]:
                     self.current_state[state_db]['initialized'] = True
                     self.db[state_db].write_record_and_buffer(self.current_state[state_db])
         
@@ -926,31 +930,25 @@ class Machine():
                     prologue_str = ' device: {:}\n method: {:}\n   args: {:}'.format(device_db, setting, settings_group[setting])
                     log.log_info(mod_name, func_name, prologue_str)
             # Try sending the command to the device
+                result = self.send_args(getattr(self.dev[device_db]['driver'], setting),settings_group[setting])
+            # Update the local copy if it exists in the device settings
+                if (setting in self.local_settings[device_db]):
+                    if settings_group[setting] == None:
+                    # A setting was read from the device
+                        new_setting = result
+                    else:
+                    # A new setting was applied to the device
+                        new_setting = settings_group[setting]
+                    if (self.local_settings[device_db][setting] != new_setting):
+                        updated = True
+                        self.local_settings[device_db][setting] = new_setting
+            # Log the returned result if stringable
                 try:
-                    result = self.send_args(getattr(self.dev[device_db]['driver'], setting),settings_group[setting])
-                except: 
-                # Log exception and raise
-                    log.log_exception(mod_name, func_name)
-                    raise
-                else:
-                # Update the local copy if it exists in the device settings
-                    if (setting in self.local_settings[device_db]):
-                        if settings_group[setting] == None:
-                        # A setting was read from the device
-                            new_setting = result
-                        else:
-                        # A new setting was applied to the device
-                            new_setting = settings_group[setting]
-                        if (self.local_settings[device_db][setting] != new_setting):
-                            updated = True
-                            self.local_settings[device_db][setting] = new_setting
-                # Log the returned result if stringable
-                    try:
-                        epilogue_str = ' Returned: {:}'.format(str(result))
-                    except:
-                        epilogue_str = ' Returned successfully, but result was not stringable'
-                    if write_log:
-                        log.log_info(mod_name, func_name, epilogue_str)
+                    epilogue_str = ' Returned: {:}'.format(str(result))
+                except:
+                    epilogue_str = ' Returned successfully, but result was not stringable'
+                if write_log:
+                    log.log_info(mod_name, func_name, epilogue_str)
             # Touch queue (prevent timeout)
                 self.dev[device_db]['queue'].touch()
     # Remove from queue
@@ -1019,9 +1017,9 @@ class Machine():
                     if ('state' in message['state'][state_db]):
                         desired_state = message['state'][state_db]['state']
                         if (desired_state in self.STATES[state_db]):
-                            if self.current_state[state_db]['desired_state'] != desired_state:
+                            with self.lock[state_db]:
+                                if self.current_state[state_db]['desired_state'] != desired_state:
                             # Update the state variable
-                                with self.lock[state_db]:
                                     self.current_state[state_db]['desired_state'] = desired_state
                                     self.db[state_db].write_record_and_buffer(self.current_state[state_db])
         # If requesting to change device settings,

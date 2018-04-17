@@ -406,9 +406,7 @@ def get_srs_data():
     dev[device_db]['queue'].queue_and_wait()
     # Get values
         # Current output voltage
-    new_v_out = dev[device_db]['driver'].new_output_monitor()
-    if new_v_out:
-        v_out = dev[device_db]['driver'].output_monitor()
+    v_out = dev[device_db]['driver'].output_monitor()
         # Output voltage limits
     v_min = dev[device_db]['driver'].lower_limit
     v_max = dev[device_db]['driver'].upper_limit
@@ -419,22 +417,21 @@ def get_srs_data():
     dev[device_db]['queue'].remove()
     # Update buffers and databases ----------
         # Output voltage ----------
-    if new_v_out:
-        mon['mll_fR/PID_output']['new'] = True
-        mon['mll_fR/PID_output']['data'] = update_buffer(
-                mon['mll_fR/PID_output']['data'],
-                v_out, 500)
-        db['mll_fR/PID_output'].write_buffer({'V':v_out})
-            # Append to the record array
-        array['srs:v_out'] = np.append(array['srs:v_out'], v_out)
-        if new_record_lap > timer['srs:record']:
-            # Record statistics
-            db['mll_fR/PID_output'].write_record({
-                    'V':array['srs:v_out'].mean(),
-                    'std':array['srs:v_out'].std(),
-                    'n':array['srs:v_out'].size})
-            # Empty the array
-            array['srs:v_out'] = np.array([])
+    mon['mll_fR/PID_output']['new'] = True
+    mon['mll_fR/PID_output']['data'] = update_buffer(
+            mon['mll_fR/PID_output']['data'],
+            v_out, 500)
+    db['mll_fR/PID_output'].write_buffer({'V':v_out})
+        # Append to the record array
+    array['srs:v_out'] = np.append(array['srs:v_out'], v_out)
+    if new_record_lap > timer['srs:record']:
+        # Record statistics
+        db['mll_fR/PID_output'].write_record({
+                'V':array['srs:v_out'].mean(),
+                'std':array['srs:v_out'].std(),
+                'n':array['srs:v_out'].size})
+        # Empty the array
+        array['srs:v_out'] = np.array([])
         # Voltage limits ----------
     if (mon['mll_fR/PID_output_limits']['data'] != {'min':v_min, 'max':v_max}):
         mon['mll_fR/PID_output_limits']['new'] = True

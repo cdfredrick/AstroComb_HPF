@@ -78,10 +78,6 @@ def _handle_visa_error(func):
                 self.resource.unlock()
             except:
                 pass
-            try:
-                self.res_man.close()
-            except:
-                pass
             raise error[1].with_traceback(error[2])
     return wrapper
 

@@ -137,7 +137,7 @@ class ThreadFactory():
         if not(alive):
             with self.error_lock:
                 if (self.thread.ident in self.thread_errors):
-                    error = self.thread_errors[self.thread.ident]
+                    error = self.thread_errors.pop(self.thread.ident)
         return (alive, error)
 
 
@@ -948,7 +948,7 @@ class Machine():
                     try:
                         epilogue_str = ' device: {:}\n method: {:}\n result: {:}'.format(device_db, setting, str(result))
                     except:
-                        epilogue_str = epilogue_str = ' device: {:}\n method: {:}\n result: {:}'.format(device_db, setting, '<result was not string-able>')
+                        epilogue_str = ' device: {:}\n method: {:}\n result: {:}'.format(device_db, setting, '<result was not string-able>')
                     log.log_info(mod_name, func_name, epilogue_str)
             # Touch queue (prevent timeout)
                 self.dev[device_db]['queue'].touch()

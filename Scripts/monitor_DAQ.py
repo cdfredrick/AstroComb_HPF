@@ -717,14 +717,14 @@ def read_ai_DAQ(state_db):
             thread_name = 'daq:ai_buffer'
             (alive, error) = thread[thread_name].check_thread()
             if error != None:
-                raise error[1]
+                raise error[1].with_traceback(error[2])
             if not(alive):
             # Start new thread
                 thread[thread_name].start()
             thread_name = 'daq:ai_record'
             (alive, error) = thread[thread_name].check_thread()
             if error != None:
-                raise error[1]
+                raise error[1].with_traceback(error[2])
             if not(alive):
             # Start new thread
                 thread[thread_name].start()

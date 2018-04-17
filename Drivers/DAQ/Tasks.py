@@ -7,6 +7,7 @@ Created on Tue Mar 13 15:33:09 2018
 # %% Modules
 import nidaqmx
 import time
+import sys
 from functools import wraps
 
 from Drivers.Logging import EventLog as log
@@ -34,12 +35,13 @@ def _handle_daq_error(func):
         try:
             result = func(self, *args, **kwargs)
             return result
-        except Exception as first_error:
+        except:
+            error = sys.exc_info()
             try:
                 self._close_tasks()
             except:
                 pass
-            raise first_error
+            raise error[1].with_traceback(error[2])
     return wrapper
 
 

@@ -30,6 +30,7 @@ disconnected()
 #Python imports
 from functools import wraps
 import time
+import sys
 
 #3rd party imports
 import visa
@@ -63,7 +64,8 @@ def _handle_visa_error(func):
         try:
             result = func(self, *args, **kwargs)
             return result
-        except Exception as first_error:
+        except:
+            error = sys.exc_info()
             try:
                 self.clear_resource()
             except:
@@ -76,7 +78,7 @@ def _handle_visa_error(func):
                 self.resource.unlock()
             except:
                 pass
-            raise first_error
+            raise error[1].with_traceback(error[2])
     return wrapper
 
 @log.log_this()

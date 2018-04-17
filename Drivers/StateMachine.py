@@ -82,10 +82,11 @@ class ThreadFactory():
                 self.thread_errors[ident] = None
                 result = func(*args, **kwargs)
             except:
+                error = sys.exc_info()
                 with self.error_lock:
                     if (self.thread.ident in self.thread_errors):
-                        self.thread_errors[ident] = sys.exc_info()
-                raise
+                        self.thread_errors[ident] = error
+                raise error[1].with_traceback(error[2])
             else:
                 return result
         return wrapper

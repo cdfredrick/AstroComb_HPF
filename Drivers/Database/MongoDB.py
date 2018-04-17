@@ -654,11 +654,13 @@ class MongoLogHandler(logging.Handler):
     """
     def __init__(self, database):
         """
-        A DatabaseMaster or DatabaseReadWrite object must be specified.
+        A LogMaster or LogReadWrite object must be specified.
         The resulting handler object will have a 'database_name' attribute that
             can be used to identify the handler's destination.
         """
         logging.Handler.__init__(self)
+        if (type(database) != LogMaster) or (type(database) != LogReadWrite):
+            raise TypeError('A LogMaster or LogReadWrite object must be specified.')
         self.database_name = database.database_name
         self.write_log_buffer = database.write_log
         

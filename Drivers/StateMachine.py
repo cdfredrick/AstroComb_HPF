@@ -10,6 +10,9 @@ import numpy as np
 import time
 import datetime
 
+import sys
+import traceback
+
 import threading
 from functools import wraps
 
@@ -77,11 +80,11 @@ class ThreadFactory():
                 ident = threading.get_ident()
                 self.thread_errors[ident] = None
                 result = func(*args, **kwargs)
-            except Exception as err:
+            except:
                 with self.error_lock:
                     if (self.thread.ident in self.thread_errors):
-                        self.thread_errors[ident] = err
-                raise err
+                        self.thread_errors[ident] = sys.exc_info()
+                raise
             else:
                 return result
         return wrapper
@@ -448,12 +451,13 @@ class Machine():
                     'driver':<driver object>,
                     'queue':<queue objecct>}
         '''
-        name = __name__
+        self.dev = dev
+        self.local_settings = local_settings
         thread_name = self.init_device_drivers_and_settings.__name__
         self.thread[thread_name] = ThreadFactory(
                 target=self._init_device_drivers_and_settings,
-                kwargs={'dev':dev,'local_settings':local_settings})
-        self.thread_to_completion(name, thread_name)
+                kwargs={'dev':self.dev,'local_settings':self.local_settings})
+        self.thread_to_completion(thread_name)
 
 # Initialize Local Copy of Monitors -------------------------------------------
     @log.log_this()
@@ -1132,7 +1136,7 @@ class Machine():
     
 # Threading Functions ---------------------------------------------------------
     @log.log_this()
-    def thread_to_completion(self, name, thread_name):
+    def thread_to_completion(self, thread_name):
         '''A helper function that blocks until a thread has sucessfully
         completed its execution. It automatically retries the thread if it
         catches errors.
@@ -1145,23 +1149,20 @@ class Machine():
             self.thread[thread_name].join()
             (alive, error) = self.thread[thread_name].check_thread()
             if (error != None):
-                if (str(error) in self.error):
-                    if (time.time() - self.error[str(error)]) > self.error_interval:
-                        try:
-                            raise error
-                        except:
-                            log.log_exception(name, thread_name)
+                mod_name = __name__
+                func_name = self.thread[thread_name].target.__name__
+                err_str = thread_name+''.join(traceback.format_exception(*error))
+                if (err_str in self.error):
+                    if (time.time() - self.error[err_str]) > self.error_interval:
+                        log.log_exception_info(mod_name, func_name, error)
                 else:
-                    self.error[str(error)] = time.time()
-                    try:
-                        raise error
-                    except:
-                        log.log_exception(name, thread_name)
+                    self.error[err_str] = time.time()
+                    log.log_exception_info(mod_name, func_name, error)
             else:
                 completed = True
                 if loop_count > 1:
                     log_str = 'Returned successfully after {:} iterations.'.format(loop_count)
-                    log.log_error(name, thread_name, log_str)
+                    log.log_error(mod_name, func_name, log_str)
     
     @log.log_this()
     def maintain_thread(self, thread_name):
@@ -1169,22 +1170,17 @@ class Machine():
         thread. The method checks if the thread is still alive, restarting the 
         thread or returning error messages if it has stopped.
         '''
-        mod_name = __name__
-        func_name = self.thread[thread_name].target.__name__
         (alive, error) = self.thread[thread_name].check_thread()
         if (error != None):
-            if (str(error) in self.error):
-                if (time.time() - self.error[str(error)]) > self.error_interval:
-                    try:
-                        raise error
-                    except:
-                        log.log_exception(mod_name, func_name)
+            mod_name = __name__
+            func_name = self.thread[thread_name].target.__name__
+            err_str = thread_name+''.join(traceback.format_exception(*error))
+            if (err_str in self.error):
+                if (time.time() - self.error[err_str]) > self.error_interval:
+                    log.log_exception_info(mod_name, func_name, error)
             else:
-                self.error[str(error)] = time.time()
-                try:
-                    raise error
-                except:
-                    log.log_exception(mod_name, func_name)
+                self.error[err_str] = time.time()
+                log.log_exception_info(mod_name, func_name, error)
         elif (alive == False):
             self.thread[thread_name].start()
         return error

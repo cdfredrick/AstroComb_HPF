@@ -24,6 +24,7 @@ LOGGER_NAME = 'Astrocomb'
 
 # %% Python imports
 import logging
+import traceback
 import sys
 from functools import wraps
 from Drivers.Database.MongoDB import MongoLogger
@@ -41,6 +42,7 @@ def start_logging(database=None, logger_level=logging.DEBUG, log_buffer_handler_
     If no format str is specified then a default is provided, which includes the
         hierarchical name of the logger and the log message.
     """
+    logger = None
     if database is not None:
     # If a database is specified, initialize the mongo logger
         if format_str is None:
@@ -48,7 +50,8 @@ def start_logging(database=None, logger_level=logging.DEBUG, log_buffer_handler_
         logger = MongoLogger(database, name=LOGGER_NAME, logger_level=logger_level, log_buffer_handler_level=log_buffer_handler_level, log_handler_level=log_handler_level, format_str=format_str, remove_all_handlers=remove_all_handlers)
     # Setup a simple stream handler
     format_str='%(asctime)s [%(levelname)s] %(name)s:\n%(message)s'
-    logger = logging.getLogger(LOGGER_NAME)
+    if logger == None:
+        logger = logging.getLogger(LOGGER_NAME)
     logger.setLevel(logger_level)
     stream_handler = logging.StreamHandler(sys.stdout)
     stream_handler.setLevel(log_buffer_handler_level)
@@ -145,6 +148,24 @@ def log_exception(mod_name, func_name, log_str=''):
         error handler that calls log_error (see log_this above)"""
     logger = logging.getLogger('{:}.{:}.{:}'.format(LOGGER_NAME,mod_name, func_name))
     logger.exception(log_str)
+
+def log_exception_info(mod_name, func_name, exc_info, log_str=''):
+    """Writes function name, module, and exception to the ERROR log level.
+    Exception info contained in a sys.exc_info() object is added to the
+    logging message.
+    
+    Programmatically retreive the module name with "__name__",
+    and the function name with "<func>.__name__", to return the same values
+    as those in the "log_this" function wrapper.
+    
+    Optional descriptive string
+    
+    Note that if function is in error handling function decorator
+        you'll need to use functools.wraps on the function in the
+        error handler that calls log_error (see log_this above)"""
+    log_str = log_str+'\n'+''.join(traceback.format_exception(*exc_info))
+    logger = logging.getLogger('{:}.{:}.{:}'.format(LOGGER_NAME,mod_name, func_name))
+    logger.error(log_str)
 
 def log_warning(mod_name, func_name, log_str):
     """Writes function name, module, and log string to the WARNING log level.

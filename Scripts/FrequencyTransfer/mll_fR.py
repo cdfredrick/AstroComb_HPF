@@ -570,7 +570,7 @@ def monitor(state_db):
         thread_name = 'get_srs_data'
         (alive, error) = thread[thread_name].check_thread()
         if error != None:
-            raise error
+            raise error[1]
         if not(alive):
         # Start new thread
             thread[thread_name].start()
@@ -592,7 +592,7 @@ def monitor(state_db):
         thread_name = 'get_ilx_data'
         (alive, error) = thread[thread_name].check_thread()
         if error != None:
-            raise error
+            raise error[1]
         if not(alive):
         # Start new thread
             thread[thread_name].start()
@@ -600,7 +600,7 @@ def monitor(state_db):
         thread_name = 'get_HV_data'
         (alive, error) = thread[thread_name].check_thread()
         if error != None:
-            raise error
+            raise error[1]
         if not(alive):
         # Start new thread
             thread[thread_name].start()

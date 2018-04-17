@@ -123,7 +123,7 @@ DEVICE_DBs =[
     'mll_fR/device_HV', 'mll_fR/device_DAQ_Vout_vs_freq']
 MONITOR_DBs = [
     'mll_fR/TEC_temperature', 'mll_fR/TEC_current',  'mll_fR/TEC_event_status', 
-    'mll_fR/PID_output', 'mll_fR/PID_output_limits', 'mll_fR/PID_action',
+    'mll_fR/PID_output', 'mll_fR/PID_output_limits',
     'mll_fR/HV_output', 'mll_fR/DAQ_Vout_vs_freq',]
 LOG_DB = 'mll_fR'
 CONTROL_DB = 'mll_fR/control'
@@ -353,10 +353,6 @@ mon['mll_fR/TEC_event_status'] = {
         'device':dev['mll_fR/device_TEC'],
         'new':False}
     # SRS -----------------------------
-mon['mll_fR/PID_action'] = {
-        'data':np.array([]),
-        'device':dev['mll_fR/device_PID'],
-        'new':False}
 mon['mll_fR/PID_output'] = {
         'data':np.array([]),
         'device':dev['mll_fR/device_PID'],
@@ -417,7 +413,8 @@ def get_srs_data():
     v_min = dev[device_db]['driver'].lower_limit
     v_max = dev[device_db]['driver'].upper_limit
         # PID action
-    pid_action = dev[device_db]['driver'].pid_action()
+    settings_list = [{'pid_action':None}]
+    sm.update_device_settings(device_db, settings_list, write_log=False)
     # Remove from queue
     dev[device_db]['queue'].remove()
     # Update buffers and databases ----------
@@ -443,11 +440,6 @@ def get_srs_data():
         mon['mll_fR/PID_output_limits']['new'] = True
         mon['mll_fR/PID_output_limits']['data'] = {'min':v_min, 'max':v_max}
         db['mll_fR/PID_output_limits'].write_record_and_buffer({'min':v_min, 'max':v_max})
-        # PID action --------------
-    if (mon['mll_fR/PID_action']['data'] != pid_action):
-        mon['mll_fR/PID_action']['new'] = True
-        mon['mll_fR/PID_action']['data'] = pid_action
-        db['mll_fR/PID_action'].write_record_and_buffer({'Action':pid_action})
     # Propogate lap numbers ---------------------------------------------
     if new_record_lap > timer['srs:record']:
         timer['srs:record'] = new_record_lap
@@ -677,11 +669,6 @@ def find_lock(state_db, last_good_position=None):
             with sm.lock[state_db]:
                 current_state[state_db]['compliance'] = True
                 db[state_db].write_record_and_buffer(current_state[state_db])
-        # Update the monitor variable if necessary
-            if (mon['mll_fR/PID_action']['data'] != True):
-                mon['mll_fR/PID_action']['new'] = True
-                mon['mll_fR/PID_action']['data'] = True
-                db['mll_fR/PID_action'].write_record_and_buffer({'Action':True})
 # If unlocked -------------------------------------------------------
     else:
         '''The current state has failed the lock tests. The PID controller is
@@ -852,7 +839,7 @@ def keep_lock(state_db):
     mon['mll_fR/PID_output']['new'] = False
     mon['mll_fR/PID_output_limits']['new'] = False
 # Check if the PID controller is on ---------------------------------
-    if (mon['mll_fR/PID_action']['data'] != True):
+    if (local_settings['mll_fR/device_PID']['pid_action'] != True):
     # It is not locked
         locked = False
         log_str = " mll_fR lock lost, PID controller was disabled"
@@ -928,7 +915,7 @@ def lock_disabled(state_db):
     mod_name = __name__
     func_name = lock_disabled.__name__
 # Check if the PID controller is on ---------------------------------
-    if (mon['mll_fR/PID_action']['data'] != False):
+    if (local_settings['mll_fR/device_PID']['pid_action'] != False):
     # Update state variable
         with sm.lock[state_db]:
             current_state[state_db]['compliance'] = False

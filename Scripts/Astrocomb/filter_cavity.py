@@ -115,8 +115,7 @@ DEVICE_DBs =[
     'filter_cavity/device_DAQ_Vout_vs_reflect']
 MONITOR_DBs = [
     'filter_cavity/PID_output', 'filter_cavity/PID_output_limits',
-    'filter_cavity/PID_action', 'filter_cavity/HV_output',
-    'filter_cavity/DAQ_Vout_vs_reflect']
+    'filter_cavity/HV_output', 'filter_cavity/DAQ_Vout_vs_reflect']
 LOG_DB = 'filter_cavity'
 CONTROL_DB = 'filter_cavity/control'
 MASTER_DBs = STATE_DBs + DEVICE_DBs + MONITOR_DBs + [LOG_DB] + [CONTROL_DB]
@@ -326,10 +325,6 @@ format is as follows:
 '''
 mon = {}
     # SRS -----------------------------
-mon['filter_cavity/PID_action'] = {
-        'data':np.array([]),
-        'device':dev['filter_cavity/device_PID'],
-        'new':False}
 mon['filter_cavity/PID_output'] = {
         'data':np.array([]),
         'device':dev['filter_cavity/device_PID'],
@@ -390,7 +385,8 @@ def get_srs_data():
     v_min = dev[device_db]['driver'].lower_limit
     v_max = dev[device_db]['driver'].upper_limit
         # PID action ------------------
-    pid_action = dev[device_db]['driver'].pid_action()
+    settings_list = [{'pid_action':None}]
+    sm.update_device_settings(device_db, settings_list, write_log=False)
     # Remove from queue
     dev[device_db]['queue'].remove()
     # Update buffers and databases ----------
@@ -417,11 +413,6 @@ def get_srs_data():
         mon['filter_cavity/PID_output_limits']['new'] = True
         mon['filter_cavity/PID_output_limits']['data'] = {'min':v_min, 'max':v_max}
         db['filter_cavity/PID_output_limits'].write_record_and_buffer({'min':v_min, 'max':v_max})
-        # PID action --------------
-    if (mon['filter_cavity/PID_action']['data'] != pid_action):
-        mon['filter_cavity/PID_action']['new'] = True
-        mon['filter_cavity/PID_action']['data'] = pid_action
-        db['filter_cavity/PID_action'].write_record_and_buffer({'Action':pid_action})
     # Propogate lap numbers ---------------------------------------------
     if new_record_lap > timer['srs:record']:
         timer['srs:record'] = new_record_lap
@@ -585,11 +576,6 @@ def find_lock(state_db, last_good_position=None):
                 db[state_db].write_record_and_buffer(current_state[state_db])
             log_str = ' filter_cavity lock successful'
             log.log_info(mod_name, func_name, log_str)
-        # Update the monitor variable if necessary
-            if (mon['filter_cavity/PID_action']['data'] != True):
-                mon['filter_cavity/PID_action']['new'] = True
-                mon['filter_cavity/PID_action']['data'] = True
-                db['filter_cavity/PID_action'].write_record_and_buffer({'Action':True})
 # If unlocked -------------------------------------------------------
     else:
         '''The current state has failed the lock tests. The PID controller is
@@ -729,7 +715,7 @@ def keep_lock(state_db):
     mon['filter_cavity/PID_output']['new'] = False
     mon['filter_cavity/PID_output_limits']['new'] = False
 # Check if the PID controller is on ---------------------------------
-    if (mon['filter_cavity/PID_action']['data'] != True):
+    if (local_settings['filter_cavity/device_PID']['pid_action'] != True):
     # It is not locked
         locked = False
         log_str = " filter_cavity lock lost, PID controller was disabled"
@@ -833,7 +819,7 @@ def keep_lock(state_db):
 def lock_disabled(state_db):
     mod_name = __name__
     func_name = lock_disabled.__name__
-    if (mon['filter_cavity/PID_action']['data'] != False):
+    if (local_settings['filter_cavity/device_PID']['pid_action'] != False):
     # Update state variable
         with sm.lock[state_db]:
             current_state[state_db]['compliance'] = False

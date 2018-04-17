@@ -60,7 +60,7 @@ def start_logging(database=None, logger_level=logging.DEBUG, log_buffer_handler_
     old_handlers = logger.handlers
     for handler in old_handlers:
         if remove_all_handlers:
-            if (type(handler) == logging.StreamHandler):
+            if isinstance(handler,logging.StreamHandler):
                 logger.removeHandler(handler)
     logger.addHandler(stream_handler)
     logger.info('Logging started!')

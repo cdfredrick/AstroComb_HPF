@@ -710,6 +710,9 @@ class Machine():
                 for state_db in self.STATE_DBs:
                     self.event[state_db].clear()
                 self.event[self.COMMS].clear()
+            # Update log
+                log_str = " Operating state machine"
+                log.log_info(mod_name, func_name, log_str)
         # Pause ---------------------------------------------------------------
             pause = (self.main_loop_timer['main']+1)*self.main_loop_interval - time.time()
             if pause > 0:

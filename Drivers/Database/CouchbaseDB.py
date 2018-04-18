@@ -10,6 +10,7 @@ Created on Sun Mar 11 16:01:52 2018
 from couchbase.cluster import Cluster
 from couchbase.cluster import PasswordAuthenticator
 from couchbase.exceptions import NotFoundError, KeyExistsError, QueueEmpty, TemporaryFailError
+from couchbase.bucket import LOCKMODE_WAIT
 
 import threading
 
@@ -31,7 +32,7 @@ class PriorityQueue():
         self.cluster = Cluster('couchbase://{:}'.format(host))
         authenticator = PasswordAuthenticator(username, password)
         self.cluster.authenticate(authenticator)
-        self.cb = self.cluster.open_bucket(bucket)
+        self.cb = self.cluster.open_bucket(bucket, lockmode=LOCKMODE_WAIT)
         # Create id counter (if it does not exist)
         self.c_ID = 'id_counter'
         self.cb.counter(self.c_ID, initial=0)

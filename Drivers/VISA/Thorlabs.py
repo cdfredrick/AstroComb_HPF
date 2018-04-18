@@ -42,10 +42,8 @@ class MDT639B(vo.VISA):
         if self.resource is None:
             raise ACExceptions.VirtualDeviceError(
                 'Could not create piezo instrument!', self.__init__)
-        self.open_resource()
         self.read_termination = r'>'
         self.write_termination = '\r'
-        self.close_resource()
         self.echo(set_echo=False)
         self.x_min_limit()
         self.x_max_limit()

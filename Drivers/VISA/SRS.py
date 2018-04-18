@@ -540,10 +540,31 @@ class SIM940(SIM900):
     @log.log_this()
     def __init__(self, visa_address, port, res_manager=None):
         super(SIM940, self).__init__(visa_address, port, res_manager=res_manager)
-        self.resource.open_resource()
-        self.resource.read_termination = '\r'
-        self.resource.write_termination = '\r'
-        self.resource.close_resource()
+        self.open_resource()
+        self.write_termination = '\r' # different termination than mainframe
+        self.read_termination = '\r'
+        self.close_resource()
+
+    @vo._handle_visa_error
+    @_auto_connect
+    @log.log_this()
+    def read(self, encoding=None):
+        result = self.resource.read(termination=self.read_termination, encoding=encoding).strip()
+        return result
+    
+    @vo._handle_visa_error
+    @_auto_connect
+    @log.log_this()
+    def write(self, message, encoding=None):
+        self.resource.write(message, termination=self.write_termination, encoding=encoding)
+    
+    @vo._handle_visa_error
+    @_auto_connect
+    @log.log_this()
+    def query(self, message, delay=None):
+        self.resource.write(message, termination=self.write_termination)
+        result = self.resource.read(termination=self.read_termination).strip()
+        return result
     
     @log.log_this()
     def status(self):
@@ -625,7 +646,7 @@ class SIM940(SIM900):
     # Parse result
         results = list(map(int,''.join(result.split()).split(',')))
         results = ['{:08b}'.format(bit) for bit in results]
-        results = [[bit for bit, value in enumerate(binary_string[::-1]) if value == '1'] for binary_string in results]
+        results = {byte:{bit:bool(int(value)) for (bit,value) in enumerate(binary_string[::-1])} for (byte,binary_string) in enumerate(results)}
         return results
     
     def lock(self, set_lock=None):
@@ -979,7 +1000,7 @@ class SIM940(SIM900):
         # Send query
             result = self.query('SP?')
         # Parse result
-            results = [int(ds.strip()) for ds in result.split(',')]
+            results = {key:int(ds.strip()) for (key,ds) in zip(['R','N','A'],result.split(','))}
             return results
         else:
         # Limit range
@@ -1025,7 +1046,7 @@ class SIM940(SIM900):
         if (set_switching == None):
             # Send query
             result = self.query('MS?')
-            return bool(float(result))
+            return bool(int(result))
         else:
         # Limit range
             set_switching = vo.tf_to_10(set_switching)
@@ -1159,7 +1180,13 @@ class SIM940(SIM900):
         '''
     # Send query
         result = self.query('TT?')
-        return int(result)
+    # Format result
+        result = int(result)
+        if (result < 0):
+            result = None
+        elif (result > 1000000000//2):
+            result = int(result - 1000000000)
+        return result
     
     def time_slope(self):
         '''Time slope. This command is used to calibrate the analog portion of

@@ -929,12 +929,16 @@ class Machine():
     # Push device settings
         for settings_group in settings_list:
             for setting in settings_group:
-            # Log the device, method, and arguments
-                if write_log:
-                    prologue_str = ' device: {:}\n method: {:}\n   args: {:}'.format(device_db, setting, settings_group[setting])
-                    log.log_info(mod_name, func_name, prologue_str)
             # Try sending the command to the device
-                result = self.send_args(getattr(self.dev[device_db]['driver'], setting),settings_group[setting])
+                try:
+                    result = self.send_args(getattr(self.dev[device_db]['driver'], setting),settings_group[setting])
+                except:
+                    error = sys.exc_info()
+                    # Log the device, method, and arguments
+                    if write_log:
+                        prologue_str = ' device: {:}\n method: {:}\n   args: {:}'.format(device_db, setting, settings_group[setting])
+                        log.log_info(mod_name, func_name, prologue_str)
+                    raise error[1].with_traceback(error[2])
             # Update the local copy if it exists in the device settings
                 if (setting in self.local_settings[device_db]):
                     if settings_group[setting] == None:
@@ -949,9 +953,9 @@ class Machine():
             # Log the returned result if stringable
                 if write_log:
                     try:
-                        epilogue_str = ' device: {:}\n method: {:}\n result: {:}'.format(device_db, setting, str(result))
+                        epilogue_str = ' device: {:}\n method: {:}\n   args: {:}\n result: {:}'.format(device_db, setting, settings_group[setting], str(result))
                     except:
-                        epilogue_str = ' device: {:}\n method: {:}\n result: {:}'.format(device_db, setting, '<result was not string-able>')
+                        epilogue_str = ' device: {:}\n method: {:}\n   args: {:}\n result: {:}'.format(device_db, setting, settings_group[setting], '<result was not string-able>')
                     log.log_info(mod_name, func_name, epilogue_str)
             # Touch queue (prevent timeout)
                 self.dev[device_db]['queue'].touch()

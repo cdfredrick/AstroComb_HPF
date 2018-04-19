@@ -646,7 +646,7 @@ class SIM940(SIM900):
     # Parse result
         results = list(map(int,''.join(result.split()).split(',')))
         results = ['{:08b}'.format(bit) for bit in results]
-        results = {byte:{bit:bool(int(value)) for (bit,value) in enumerate(binary_string[::-1])} for (byte,binary_string) in enumerate(results)}
+        results = {str(byte):{str(bit):bool(int(value)) for (bit,value) in enumerate(binary_string[::-1])} for (byte,binary_string) in enumerate(results)}
         return results
     
     def lock(self, set_lock=None):

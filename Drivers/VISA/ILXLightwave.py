@@ -268,7 +268,7 @@ class LaserModule(LDC3900):
         result = self.query_las('STB?')
     # Parse result
         results = '{:04b}'.format(int(result))
-        results = {bit:bool(int(value)) for (bit,value) in enumerate(results[::-1])}
+        results = {str(bit):bool(int(value)) for (bit,value) in enumerate(results[::-1])}
         return results
     
     @log.log_this()
@@ -308,7 +308,7 @@ class LaserModule(LDC3900):
         result = self.query_las('COND?')
     # Parse result
         results = '{:016b}'.format(int(result))
-        results = {bit:bool(int(value)) for (bit,value) in enumerate(results[::-1])}
+        results = {str(bit):bool(int(value)) for (bit,value) in enumerate(results[::-1])}
         return results
 
     @log.log_this()
@@ -343,7 +343,7 @@ class LaserModule(LDC3900):
         result = self.query_las('EVE?')
     # Parse result
         results = '{:016b}'.format(int(result))
-        results = {bit:bool(int(value)) for (bit,value) in enumerate(results[::-1])}
+        results = {str(bit):bool(int(value)) for (bit,value) in enumerate(results[::-1])}
         return results
 
     @log.log_this()
@@ -353,7 +353,7 @@ class LaserModule(LDC3900):
         of the selected channel’s LASER operations for summary (in bit 3 of the
         status byte) and generation of service requests. "enable_bits" accepts 
         a list of the enabled bits (i.e. [4, 7, 8, 13, 14]) or a dictionary
-        specifying both enabled and disabled bits (i.e. {0:False,1:False,...}):
+        specifying both enabled and disabled bits (i.e. {'0':False,'1':False,...}):
             Bit     Condition which sets bit
             0       LASER Current Limit 
             1       LASER Voltage Limit
@@ -386,14 +386,14 @@ class LaserModule(LDC3900):
             result = self.query_las('ENAB:COND?')
         # Parse result
             results = '{:016b}'.format(int(result))
-            results = {bit:bool(int(value)) for (bit,value) in enumerate(results[::-1])}
+            results = {str(bit):bool(int(value)) for (bit,value) in enumerate(results[::-1])}
             return results
         else:
         # Parse input
             if isinstance(enable_bits, list):
                 enable_bits=''.join([str(int(bit in enable_bits)) for bit in range(16)][::-1])
             elif isinstance(enable_bits, dict):
-                enable_bits=''.join([str(int(enable_bits[bit])) for bit in range(16)][::-1])
+                enable_bits=''.join([str(int(enable_bits[str(bit)])) for bit in range(16)][::-1])
             enable_bits=int(enable_bits, 2)
         # Send command
             self.write_las('ENAB:COND {:}'.format(enable_bits))
@@ -405,7 +405,7 @@ class LaserModule(LDC3900):
         the LASER operations for the selected LAS channel. These events are 
         summarized in bit 2 of the status byte register. "enable_bits" accepts 
         a list of the enabled bits (i.e. [4, 7, 8, 13, 14]) or a dictionary
-        specifying both enabled and disabled bits (i.e. {0:False,1:False,...}):
+        specifying both enabled and disabled bits (i.e. {'0':False,'1':False,...}):
             Bit     Condition which sets bit
             0       LASER Current Limit 
             1       LASER Voltage Limit
@@ -436,14 +436,14 @@ class LaserModule(LDC3900):
             result = self.query_las('ENAB:EVE?')
         # Parse result
             results = '{:016b}'.format(int(result))
-            results = {bit:bool(int(value)) for (bit,value) in enumerate(results[::-1])}
+            results = {str(bit):bool(int(value)) for (bit,value) in enumerate(results[::-1])}
             return results
         else:
         # Parse input
             if isinstance(enable_bits, list):
                 enable_bits=''.join([str(int(bit in enable_bits)) for bit in range(16)][::-1])
             elif isinstance(enable_bits, dict):
-                enable_bits=''.join([str(int(enable_bits[bit])) for bit in range(16)][::-1])
+                enable_bits=''.join([str(int(enable_bits[str(bit)])) for bit in range(16)][::-1])
             enable_bits=int(enable_bits, 2)
         # Send command
             self.write_las('ENAB:EVE {:}'.format(enable_bits))
@@ -455,7 +455,7 @@ class LaserModule(LDC3900):
         of the selected channel’s LASER operations (things which will turn the 
         LASER output off). "trigger_bits" accepts a list of the enabled bits
         (i.e. [0, 1, 2, 4, 12]) or a dictionary specifying both enabled and
-        disabled bits (i.e. {0:False,1:False,...}):
+        disabled bits (i.e. {'0':False,'1':False,...}):
             Bit     Condition which disables laser output
             0       LASER Current Limit 
             1       LASER Voltage Limit 
@@ -490,14 +490,14 @@ class LaserModule(LDC3900):
             result = self.query_las('ENAB:OUTOFF?')
         # Parse result
             results = '{:016b}'.format(int(result))
-            results = {bit:bool(int(value)) for (bit,value) in enumerate(results[::-1])}
+            results = {str(bit):bool(int(value)) for (bit,value) in enumerate(results[::-1])}
             return results
         else:
         # Parse input
             if isinstance(trigger_bits, list):
                 trigger_bits=''.join([str(int(bit in trigger_bits)) for bit in range(16)][::-1])
             elif isinstance(trigger_bits, dict):
-                trigger_bits=''.join([str(int(trigger_bits[bit])) for bit in range(16)][::-1])
+                trigger_bits=''.join([str(int(trigger_bits[str(bit)])) for bit in range(16)][::-1])
             trigger_bits=int(trigger_bits, 2)
         # Send command
             self.write_las('ENAB:OUTOFF {:}'.format(trigger_bits))
@@ -689,7 +689,7 @@ class TECModule(LDC3900):
         result = self.query_tec('STB?')
     # Parse result
         results = '{:02b}'.format(int(result))
-        results = [bit for bit, value in enumerate(results[::-1]) if value == '1']
+        results = {str(bit):bool(int(value)) for (bit,value) in enumerate(results[::-1])}
         return results
     
     @log.log_this()
@@ -724,7 +724,7 @@ class TECModule(LDC3900):
         result = self.query_tec('COND?')
     # Parse result
         results = '{:016b}'.format(int(result))
-        results = {bit:bool(int(value)) for (bit,value) in enumerate(results[::-1])}
+        results = {str(bit):bool(int(value)) for (bit,value) in enumerate(results[::-1])}
         return results
     
     @log.log_this()
@@ -760,7 +760,7 @@ class TECModule(LDC3900):
         result = self.query_tec('EVE?')
     # Parse result
         results = '{:016b}'.format(int(result))
-        results = {bit:bool(int(value)) for (bit,value) in enumerate(results[::-1])}
+        results = {str(bit):bool(int(value)) for (bit,value) in enumerate(results[::-1])}
         return results
     
     @log.log_this()
@@ -770,7 +770,7 @@ class TECModule(LDC3900):
         of the TEC operations for the selected TEC channel. These conditions 
         are summarized in bit 1 of the status byte. "enable_bits" accepts 
         a list of the enabled bits (i.e. [4, 7, 8, 13, 14]) or a dictionary
-        specifying both enabled and disabled bits (i.e. {0:False,1:False,...}):
+        specifying both enabled and disabled bits (i.e. {'0':False,'1':False,...}):
             Bit     Condition which sets bit
             0       TE Current Limit 
             1       Voltage Limit Error 
@@ -801,14 +801,14 @@ class TECModule(LDC3900):
             result = self.query_tec('ENAB:COND?')
         # Parse result
             results = '{:016b}'.format(int(result))
-            results = {bit:bool(int(value)) for (bit,value) in enumerate(results[::-1])}
+            results = {str(bit):bool(int(value)) for (bit,value) in enumerate(results[::-1])}
             return results
         else:
         # Parse input
             if isinstance(enable_bits, list):
                 enable_bits=''.join([str(int(bit in enable_bits)) for bit in range(16)][::-1])
             elif isinstance(enable_bits, dict):
-                enable_bits=''.join([str(int(enable_bits[bit])) for bit in range(16)][::-1])
+                enable_bits=''.join([str(int(enable_bits[str(bit)])) for bit in range(16)][::-1])
             enable_bits=int(enable_bits, 2)
         # Send command
             self.write_tec('ENAB:COND {:}'.format(enable_bits))
@@ -820,7 +820,7 @@ class TECModule(LDC3900):
         the TEC operations for the selected TEC channel. These events are 
         summarized in bit 0 of the status byte register. "enable_bits" accepts 
         a list of the enabled bits (i.e. [4, 7, 8, 13, 14]) or a dictionary
-        specifying both enabled and disabled bits (i.e. {0:False,1:False,...}):
+        specifying both enabled and disabled bits (i.e. {'0':False,'1':False,...}):
             Bit     Condition which sets bit
             0       TE Current Limit 
             1       TE Voltage Limit
@@ -849,14 +849,14 @@ class TECModule(LDC3900):
             result = self.query_tec('ENAB:EVE?')
         # Parse result
             results = '{:016b}'.format(int(result))
-            results = {bit:bool(int(value)) for (bit,value) in enumerate(results[::-1])}
+            results = {str(bit):bool(int(value)) for (bit,value) in enumerate(results[::-1])}
             return results
         else:
         # Parse input
             if isinstance(enable_bits, list):
                 enable_bits=''.join([str(int(bit in enable_bits)) for bit in range(16)][::-1])
             elif isinstance(enable_bits, dict):
-                enable_bits=''.join([str(int(enable_bits[bit])) for bit in range(16)][::-1])
+                enable_bits=''.join([str(int(enable_bits[str(bit)])) for bit in range(16)][::-1])
             enable_bits=int(enable_bits, 2)
         # Send command
             self.write_tec('ENAB:EVE {:}'.format(enable_bits))
@@ -868,7 +868,7 @@ class TECModule(LDC3900):
         of the TEC operations (things which will turn the TEC output off) for 
         the selected TEC channel. "trigger_bits" accepts a list of the enabled 
         bits (i.e. [0, 1, 2, 4, 12]) or a dictionary specifying both enabled
-        and disabled bits (i.e. {0:False,1:False,...}):
+        and disabled bits (i.e. {'0':False,'1':False,...}):
             Bit     Condition which disables tec output
             0       TE Current Limit Condition 
             1       Voltage Limit Condition 
@@ -906,14 +906,14 @@ class TECModule(LDC3900):
             result = self.query_tec('ENAB:OUTOFF?')
         # Parse result
             results = '{:016b}'.format(int(result))
-            results = {bit:bool(int(value)) for (bit,value) in enumerate(results[::-1])}
+            results = {str(bit):bool(int(value)) for (bit,value) in enumerate(results[::-1])}
             return results
         else:
         # Parse input
             if isinstance(trigger_bits, list):
                 trigger_bits=''.join([str(int(bit in trigger_bits)) for bit in range(16)][::-1])
             elif isinstance(trigger_bits, dict):
-                trigger_bits=''.join([str(int(trigger_bits[bit])) for bit in range(16)][::-1])
+                trigger_bits=''.join([str(int(trigger_bits[str(bit)])) for bit in range(16)][::-1])
             trigger_bits=int(trigger_bits, 2)
         # Send command
             self.write_tec('ENAB:OUTOFF {:}'.format(trigger_bits))

@@ -665,7 +665,9 @@ def find_lock(state_db, last_good_position=None):
         # Lock is succesful, update state variable
             with sm.lock[state_db]:
                 current_state[state_db]['compliance'] = True
-                db[state_db].write_record_and_buffer(current_state[state_db])
+                db[state_db].write_record_and_buffer(
+                        current_state[state_db],
+                        timestamp=datetime.datetime.utcfromtimestamp(timer['find_lock:locked']))
 # If unlocked -------------------------------------------------------
     else:
         '''The current state has failed the lock tests. The PID controller is

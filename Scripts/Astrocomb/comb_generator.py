@@ -574,11 +574,13 @@ STATES = {
                                 'critical':[
                                     {'db':'ambience/box_temperature_0',
                                      'key':'V',
-                                     'test':(lambda t: t<0.35)}], # Below max temperature threshold 35 C
-                                'necessary':[
-                                    {'db':'comb_generator/device_PDU_12V',
-                                     'key':'outlet_state',
-                                     'test':(lambda outlet_state: outlet_state==2)}], # Outlet must already be on
+                                     'test':(lambda t: t<0.27),
+                                     'doc':"lambda t: t<0.27"}], # Below max temperature threshold 35 C
+                                'necessary':[],
+#                                    {'db':'comb_generator/device_PDU_12V',
+#                                     'key':'outlet_state',
+#                                     'test':(lambda outlet_state: outlet_state==2),
+#                                     'doc':"lambda outlet_state: outlet_state==2"}], # Outlet must already be on
                                 'optional':[]},
                         'routines':{
                                 'monitor':monitor, 'search':turn_outlet_on,
@@ -588,7 +590,12 @@ STATES = {
                         'prerequisites':{
                                 'critical':[],
                                 'necessary':[],
-                                'optional':[]},
+                                'optional':[],
+                                'exit':[
+                                    {'db':'ambience/box_temperature_0',
+                                     'key':'V',
+                                     'test':(lambda t: t<0.245),
+                                     'doc':"lambda t: t<0.245"}]},
                         'routines':{
                                 'monitor':monitor, 'search':turn_outlet_off,
                                 'maintain':keep_outlet_off, 'operate':nothing}},

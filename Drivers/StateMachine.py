@@ -521,11 +521,16 @@ class Machine():
                         {'critical':[{
                             'db':<database path>,
                             'key':<entry's key>,
-                            'test':<desired value>},...], 
+                            'test':<lambda function>,
+                            'doc':<>},...],
                         'necessary':[{...},...],
                         'optional':[{...}]}}
                 -The "test" should be a lambda function that evaluates to true
                 if the prerequisite has passed.
+                -The "doc" is a recommended keyword that may be used to store
+                stringable text for more readable prerequisite logs. Since the
+                code of a lambda function is not printable, this key should
+                contain a string version of the lambda function.
                 -The automated "from_keys()" checks for lists of keys needed to
                 retrieve values from nested dictionaries.
                 -Prereqs should be separated by severity:
@@ -553,6 +558,17 @@ class Machine():
                         optional prereqs are listed as failed.
                         -The system is allowed to move into the applied state upon 
                         failure of an optional prereq.
+                    exit:
+                        -The failure of an exit prereq prevents the system from
+                        moving away from the current state.
+                        -These are only checked during normal operation when 
+                        the desired state does not equal the current.
+                        -Exit prereqs are not checked if the state change is
+                        caused by the failure of a critical prereq (critical
+                        has priority).
+                        -This prereq is most useful for preventing the transfer
+                        away from the "safe" state before the actual problem
+                        has been resolved.
             routines:
                 -The routines are the functions needed to monitor the state, bring
                 the state into compliance, maintain the state in compliance, and
@@ -627,7 +643,7 @@ class Machine():
 # Run the main loop -----------------------------------------------------------
     @log.log_this()
     def operate_machine(self, current_state={}, main_loop_interval=0.5):
-        mod_name = __name__
+        mod_name = self.operate_machine.__module__
         func_name = self.operate_machine.__name__
         log_str = " Operating state machine"
         log.log_info(mod_name, func_name, log_str)
@@ -642,7 +658,7 @@ class Machine():
         '''
         self.lock = {}
         for state_db in self.STATE_DBs:
-            self.lock[state_db] = threading.Lock()
+            self.lock[state_db] = threading.RLock()
         
     # Initialize failed prereq log timers -------------------------------------
         '''These are set so that the logs do not become cluttered with
@@ -742,7 +758,7 @@ class Machine():
         '''This runs the state machine routines. Each state_db should have
         a separate thread of execution.
         '''
-        mod_name = __name__
+        mod_name = self.state_machine.__module__
         func_name = '.'.join([self.state_machine.__name__, state_db])
         while not(self.event[state_db].is_set()):
         # Check the Critical Prerequisites ------------------------------------
@@ -752,6 +768,10 @@ class Machine():
                     'critical', log_all_failures=True)
             # Place into safe state if critical prereqs fail
             if not critical_pass:
+                # Update the state variable
+                with self.lock[state_db]:
+                    self.current_state[state_db]['prerequisites']['critical'] = critical_pass
+                    self.db[state_db].write_record_and_buffer(self.current_state[state_db])
                 self.setup_state(state_db, 'safe')
     
         # Monitor the Current State -------------------------------------------
@@ -809,29 +829,50 @@ class Machine():
                 self.STATES[state_db][self.current_state[state_db]['state']]['routines']['operate'](state_db)
                             
         # Check Desired State -------------------------------------------------
-            with self.lock[state_db]:
-                if self.current_state[state_db]['state'] != self.current_state[state_db]['desired_state']:
-                # Check the prerequisites of the desired states
+            state = self.current_state[state_db]['state']
+            desired_state = self.current_state[state_db]['desired_state']
+            if state != desired_state:
+                state = self.current_state[state_db]['state']
+                desired_state = self.current_state[state_db]['desired_state']
+            # Check the prerequisites of the desired states
+                if 'critical' in self.STATES[state_db][desired_state]['prerequisites']:
                     critical_pass = self.check_prereqs(
                             state_db,
-                            self.current_state[state_db]['desired_state'],
+                            desired_state,
                             'critical')
+                else:
+                    critical_pass = True
+                if 'necessary' in self.STATES[state_db][desired_state]['prerequisites']:
                     necessary_pass = self.check_prereqs(
                             state_db,
-                            self.current_state[state_db]['desired_state'],
+                            desired_state,
                             'necessary')
+                else:
+                    necessary_pass = True
+                if 'optional' in self.STATES[state_db][desired_state]['prerequisites']:
                     optional_pass = self.check_prereqs(
                             state_db,
-                            self.current_state[state_db]['desired_state'],
+                            desired_state,
                             'optional')
-                    if critical_pass:
-                    # Initialize the transition into the desired state
-                        self.setup_state(
-                                state_db,
-                                self.current_state[state_db]['desired_state'],
-                                critical=critical_pass,
-                                necessary=necessary_pass,
-                                optional=optional_pass)
+                else:
+                    optional_pass = True
+            # Check the "exit" prerequisites of the current state
+                if 'exit' in self.STATES[state_db][desired_state]['prerequisites']:
+                    exit_pass = self.check_prereqs(
+                            state_db,
+                            state,
+                            'exit')
+                else:
+                    exit_pass = True
+            # Update the current state
+                if (critical_pass and exit_pass):
+                # Initialize the transition into the desired state
+                    self.setup_state(
+                            state_db,
+                            desired_state,
+                            critical=critical_pass,
+                            necessary=necessary_pass,
+                            optional=optional_pass)
         
         # Write Heartbeat to Buffer -----------------------------------------------
             with self.lock[state_db]:
@@ -847,28 +888,6 @@ class Machine():
                 log_str = " Execution time exceeded the set loop interval {:}s by {:.2g}s".format(self.main_loop_interval, abs(pause))
                 log.log_info(mod_name, func_name, log_str)
                 self.main_loop_timer[state_db] = get_lap(self.main_loop_interval)+1
-
-# Check the Communications Queue ----------------------------------------------
-    @log.log_this()
-    def check_for_messages(self):
-        '''This checks for and parses new messages in the communications queue.
-        '''
-        mod_name = __name__
-        func_name = self.check_for_messages.__name__
-        while not(self.event[self.COMMS].is_set()):
-        # Parse the message ---------------------------------------------------
-            for message in range(len(self.comms.get_queue())):
-                message = self.comms.pop()
-                self.parse_message(message)
-        # Pause ---------------------------------------------------------------
-            pause = (self.main_loop_timer['check_for_messages']+1)*self.main_loop_interval - time.time()
-            if pause > 0:
-                time.sleep(pause)
-                self.main_loop_timer['check_for_messages'] += 1
-            else:
-                log_str = " Execution time exceeded the set loop interval {:}s by {:.2g}s".format(self.main_loop_interval, abs(pause))
-                log.log_info(mod_name, func_name, log_str)
-                self.main_loop_timer['check_for_messages'] = get_lap(self.main_loop_interval)+1
 
 # Check the Prerequisites of a Given State ------------------------------------
     @log.log_this()
@@ -889,27 +908,54 @@ class Machine():
                         else:
                         # Catch the failure for the first time
                             log_failure = True
-                        if (log_failure == True):
-                        # Update the error timer
-                            self.log_failed_prereqs_timer[state_db][state][level][str(prereq)] = time.time()
                     else:
                     # If "log_all_failures" is set, use it.
                         log_failure = log_all_failures
-                    if log_failure:
-                        mod_name = __name__
+                    if (log_failure == True):
+                    # Update the error timer
+                        self.log_failed_prereqs_timer[state_db][state][level][str(prereq)] = time.time()
+                    # Log failure
+                        mod_name = self.check_prereqs.__module__
                         func_name = self.check_prereqs.__name__
                         if (level=='critical'):
-                            log_str = 'Critical prerequisite failure:\n state_db:\t{:}\n state:\t\t{:}\n prereq:\t{:}\n current:\t{:}'.format(state_db, state, prereq, prereq_value)
+                            log_str = '"Critical" prerequisite failure:\n state_db:\t{:}\n state:\t\t{:}\n prereq:\t{:}\n current:\t{:}'.format(state_db, state, prereq, prereq_value)
                             log.log_critical(mod_name,func_name,log_str)
                         elif (level=='necessary'):
-                            log_str = 'Necessary prerequisite failure:\n state_db:\t{:}\n state:\t\t{:}\n prereq:\t{:}\n current:\t{:}'.format(state_db, state, prereq, prereq_value)
+                            log_str = '"Necessary" prerequisite failure:\n state_db:\t{:}\n state:\t\t{:}\n prereq:\t{:}\n current:\t{:}'.format(state_db, state, prereq, prereq_value)
                             log.log_warning(mod_name,func_name,log_str)
                         elif (level=='optional'):
-                            log_str = 'Optional prerequisite failure:\n state_db:\t{:}\n state:\t\t{:}\n prereq:\t{:}\n current:\t{:}'.format(state_db, state, prereq, prereq_value)
+                            log_str = '"Optional" prerequisite failure:\n state_db:\t{:}\n state:\t\t{:}\n prereq:\t{:}\n current:\t{:}'.format(state_db, state, prereq, prereq_value)
+                            log.log_warning(mod_name,func_name,log_str)
+                        elif (level=='exit'):
+                            log_str = '"Exit" prerequisite failure:\n state_db:\t{:}\n state:\t\t{:}\n prereq:\t{:}\n current:\t{:}'.format(state_db, state, prereq, prereq_value)
                             log.log_warning(mod_name,func_name,log_str)
                 # Propogate prereq status
                 prereqs_pass *= prereq_status
         return prereqs_pass
+    
+# Setup the Transition to a New State -----------------------------------------
+    @log.log_this()
+    def setup_state(self, state_db, state, critical=True, necessary=True, optional=True):
+        '''A helper function to automate the process of setting up new states.
+        '''
+    # Log
+        mod_name = self.setup_state.__module__
+        func_name = self.setup_state.__name__
+        log_str = ' Setting up {:}:{:}'.format(state_db, state)
+        log.log_info(mod_name,func_name,log_str)
+    # Update the device settings
+        for device_db in self.STATES[state_db][state]['settings']:
+            self.update_device_settings(device_db, self.STATES[state_db][state]['settings'][device_db])
+    # Update the state variable
+        with self.lock[state_db]:
+            self.current_state[state_db]['state'] = state
+            self.current_state[state_db]['prerequisites'] = {
+                    'critical':critical,
+                    'necessary':necessary,
+                    'optional':optional}
+            self.current_state[state_db]['compliance'] = False
+            self.db[state_db].write_record_and_buffer(self.current_state[state_db]) # The desired state should be left unaltered
+ 
     
 # Update Device Settings ------------------------------------------------------
     @log.log_this()
@@ -917,7 +963,7 @@ class Machine():
         '''A helper function to automate the process of updating the settings
         of a single device.
         '''
-        mod_name = __name__
+        mod_name = self.update_device_settings.__module__
         func_name = self.update_device_settings.__name__
         updated = False
     # Check settings_list type
@@ -966,24 +1012,28 @@ class Machine():
     # Update the database if the local copy changed
         if updated:
             self.db[device_db].write_record_and_buffer(self.local_settings[device_db])
-    
-# Setup the Transition to a New State -----------------------------------------
+
+# Check the Communications Queue ----------------------------------------------
     @log.log_this()
-    def setup_state(self, state_db, state, critical=True, necessary=True, optional=True):
-        '''A helper function to automate the process of setting up new states.
+    def check_for_messages(self):
+        '''This checks for and parses new messages in the communications queue.
         '''
-    # Update the device settings
-        for device_db in self.STATES[state_db][state]['settings']:
-            self.update_device_settings(device_db, self.STATES[state_db][state]['settings'][device_db])
-    # Update the state variable
-        with self.lock[state_db]:
-            self.current_state[state_db]['state'] = state
-            self.current_state[state_db]['prerequisites'] = {
-                    'critical':critical,
-                    'necessary':necessary,
-                    'optional':optional}
-            self.current_state[state_db]['compliance'] = False
-            self.db[state_db].write_record_and_buffer(self.current_state[state_db]) # The desired state should be left unaltered
+        mod_name = self.check_for_messages.__module__
+        func_name = self.check_for_messages.__name__
+        while not(self.event[self.COMMS].is_set()):
+        # Parse the message ---------------------------------------------------
+            for message in range(len(self.comms.get_queue())):
+                message = self.comms.pop()
+                self.parse_message(message)
+        # Pause ---------------------------------------------------------------
+            pause = (self.main_loop_timer['check_for_messages']+1)*self.main_loop_interval - time.time()
+            if pause > 0:
+                time.sleep(pause)
+                self.main_loop_timer['check_for_messages'] += 1
+            else:
+                log_str = " Execution time exceeded the set loop interval {:}s by {:.2g}s".format(self.main_loop_interval, abs(pause))
+                log.log_info(mod_name, func_name, log_str)
+                self.main_loop_timer['check_for_messages'] = get_lap(self.main_loop_interval)+1
     
 # Parse Messages from the Communications Queue --------------------------------
     @log.log_this()
@@ -1013,7 +1063,7 @@ class Machine():
                 'device_setting':{<device driver DB path>:{<method name>:<args>,...},...},
                 'control_parameter':{<parameter name>:<value>,...}}
         '''
-        mod_name = __name__
+        mod_name = self.parse_message.__module__
         func_name = self.parse_message.__name__
         if ('message' in message):
             message = message['message']
@@ -1155,7 +1205,7 @@ class Machine():
             self.thread[thread_name].join()
             (alive, error) = self.thread[thread_name].check_thread()
             if (error != None):
-                mod_name = __name__
+                mod_name = self.thread[thread_name].target.__module__
                 func_name = self.thread[thread_name].target.__name__
                 err_str = thread_name+''.join(traceback.format_exception(*error))
                 if (err_str in self.error):
@@ -1178,7 +1228,7 @@ class Machine():
         '''
         (alive, error) = self.thread[thread_name].check_thread()
         if (error != None):
-            mod_name = __name__
+            mod_name = self.thread[thread_name].target.__module__
             func_name = self.thread[thread_name].target.__name__
             err_str = thread_name+''.join(traceback.format_exception(*error))
             if (err_str in self.error):

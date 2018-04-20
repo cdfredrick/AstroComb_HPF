@@ -646,10 +646,61 @@ class SIM940(SIM900):
     # Parse result
         results = list(map(int,''.join(result.split()).split(',')))
         results = ['{:08b}'.format(bit) for bit in results]
-        results = {str(byte):{str(bit):bool(int(value)) for (bit,value) in enumerate(binary_string[::-1])} for (byte,binary_string) in enumerate(results)}
+        results = {str(byte+1):{str(bit):bool(int(value)) for (bit,value) in enumerate(binary_string[::-1])} for (byte,binary_string) in enumerate(results)}
         return results
     
-    def lock(self, set_lock=None):
+    def lock_mode(self, set_mode=None):
+        '''Lock mode and pin configuration. This command is used to configure
+        the 1pps prefilter and the LOCK/1PPS output (pin 1 on the main
+        connector, J100.)
+        
+        The LOCK/1PPS pin may be configured per the following table:
+            LM  Description of LOCK/1pps Output
+            0   Output goes low when locked to Rb
+                pulses high for 10 µs at 1 Hz
+                1pps locking pre-filter disabled
+            1   Output goes low when locked to Rb
+                pulses high for 10 µs at 1 Hz
+                1pps locking pre-filter enabled (default)
+            2   Output goes low when locked to Rb
+                1pps is disabled
+            3   Output goes high when locked to Rb
+                1pps is disabled
+        
+        The default value is 1, so that pin 1 will go low when the unit is
+        locked to rubidium, and will pulse high for 10 µs at a 1 Hz rate. The
+        position of the 1pps pulse may be moved with the PP command. 
+        
+        To configure the unit for no 1pps output, the command string LM 2
+        followed by LM! will change the unit’s power on default for no 1pps
+        output. 
+        
+        LM {value}  value = 0, 1, 2, or 3
+        LM?
+        LM!
+        LM!? 
+        
+        Example:
+            LM?
+            could return 1, indicating that the unit is in its default
+            configuration so that the lock pin goes low when locked to Rb,
+            pulsing high for 10 µs at a 1 Hz rate.
+        '''
+        if (set_mode == None):
+        # Send query
+            result = self.query('LM?')
+            return int(result)
+        else:
+        # Limit range
+            if (set_mode < 0):
+                set_mode = 0
+            elif (set_mode > 4):
+                set_mode = 4
+        # Send command
+            self.write('LM {:}'.format(int(set_mode)))
+            self.write('LM!')
+    
+    def lock_Rb(self, set_lock=None):
         '''Lock. This command can be used to stop the frequency lock-loop (FLL).
         
         It is essentially the same as setting the gain parameter to zero. It
@@ -680,7 +731,7 @@ class SIM940(SIM900):
         # Send command
             self.write('LO {:}'.format(set_lock))
     
-    def frequency_control(self):
+    def OCXO_control(self):
         '''Frequency control. These commands allow direct control of the 22bit
         value which controls the frequency of the 10 MHz ovenized oscillator.
         
@@ -771,7 +822,7 @@ class SIM940(SIM900):
         results = {key:int(ds) for (key,ds) in zip(['mod','2mod'],result.split(','))}
         return results
     
-    def set_frequency(self):
+    def frequency_offset(self):
         '''Set frequency. This command is used to override the internal
         calibration pot (or external calibration voltage) to set the frequency
         directly, relative to the calibration values in EEPROM (see the SP and
@@ -832,7 +883,7 @@ class SIM940(SIM900):
         result = self.query('SS?')
         return int(result)
     
-    def gain(self):
+    def time_constant_Rb(self):
         '''Gain. This command sets the gain parameter in the frequency 
         lock-loop algorithm. Higher gain values have shorter time constants, 
         (the time constant is the time it takes for the frequency lock-loop to
@@ -1116,7 +1167,7 @@ class SIM940(SIM900):
         if (set_offset == None):
         # Send query
             result = self.query('MO?')
-            return int(result.strip())
+            return int(result)
         else:
         # Limit range
             if (set_offset < 2300):
@@ -1159,7 +1210,9 @@ class SIM940(SIM900):
         
         If a new time-tag value is not available then -1 (the only case for
         which the returned value is negative) will be returned. Returned values
-        range from 0 to 999999999.
+        range from 0 to 999999999. => The range of values is shifted by
+        500000000 in this functions output, so that the range is from
+        -499999999ns to +500000000ns.
         
         To facilitate system integration, the PRS10 provides a 1pps output
         which may be set over an interval from 0 to 999,999,999 ns with 1ns
@@ -1232,7 +1285,7 @@ class SIM940(SIM900):
         result = self.query('TS?')
         return int(result)
     
-    def phase_lock_control(self, set_lock=None):
+    def lock_1pps(self, set_lock=None):
         '''Phase lock control. This command may be used to disable the 1pps
         PLL, or to re-enable (and so restart) the 1pps PLL.
         
@@ -1270,7 +1323,7 @@ class SIM940(SIM900):
             self.write('PL {:}'.format(set_lock))
             self.write('PL!')
     
-    def integrator_time_constant(self, set_constant=None):
+    def time_constant_1pps(self, set_constant=None):
         '''Phase-lock integrator time constant. This command is used to set the
         PLL’s integrator’s time constant, τ1, which phase-locks the PRS10 to an
         external 1pps input.
@@ -1366,7 +1419,7 @@ class SIM940(SIM900):
             self.write('PT {:}'.format(int(set_constant)))
             self.write('PT!')
     
-    def stability_factor(self, set_factor=None):
+    def stability_factor_1pps(self, set_factor=None):
         '''Phase-lock stability factor. This command is used to set the 
         stability factor, ζ, of the 1pps PLL.
         
@@ -1405,33 +1458,7 @@ class SIM940(SIM900):
                 set_factor = 4
         # Send command
             self.write('PF {:}'.format(int(set_factor)))
-    
-    def integrator_gain(self):
-        '''Phase-lock integrator. This command is used to set the value of the
-        integral term in the PLL’s digital filter.
-        
-        It is not necessary to set this value, as it will be initialized by the
-        PLL routine to the current frequency setting parameter when the PLL
-        begins. Users may want access to the value to alter the PLL
-        characteristics, or to investigate its operation.
-        
-        PI? will return the current value of the PLL integrator (there are two
-        terms which control the phase locking of the PRS10 to an external 1pps
-        source: the integral term and the proportional term. The proportional
-        term is equal to the value returned by an SF? minus the value returned
-        by the PI?).
-        
-        PI?
-        PI {value}  -2000 ≤ value ≤ 2000
-        
-        Example: 
-            PI 0
-            will set the integrator in the PLL’s digital filter to 0, which is
-            the center of the ±2000 bit range. 
-        '''
-    # Send query
-        result = self.query('PI?')
-        return int(result)
+            self.write('PF!')
     
     def dac(self, port):
         '''Set DAC. This command is used to set (or read the settings of) an

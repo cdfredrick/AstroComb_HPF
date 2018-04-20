@@ -567,12 +567,14 @@ def find_lock(state_db, last_good_position=None):
     # Check lock interval ---------------------------------
         if (time.time() - timer['find_lock:locked']) > lock_hold_interval:
         # TODO: if reflect error signal is high -> locked = False
+            log_str = ' filter_cavity lock successful'
+            log.log_info(mod_name, func_name, log_str)
         # Lock is succesful, update state variable
             with sm.lock[state_db]:
                 current_state[state_db]['compliance'] = True
-                db[state_db].write_record_and_buffer(current_state[state_db])
-            log_str = ' filter_cavity lock successful'
-            log.log_info(mod_name, func_name, log_str)
+                db[state_db].write_record_and_buffer(
+                        current_state[state_db],
+                        timestamp=datetime.datetime.utcfromtimestamp(timer['find_lock:locked']))
 # If unlocked -------------------------------------------------------
     else:
         '''The current state has failed the lock tests. The PID controller is

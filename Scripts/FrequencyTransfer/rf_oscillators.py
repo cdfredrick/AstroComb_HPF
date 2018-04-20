@@ -385,6 +385,8 @@ for ind in range(8): # 0 through 7
     array['rf_oscillators/Rb_dac_{:}'.format(ind)] = np.array([])
 array['rf_oscillators/Rb_OCXO_control'+'high'] = np.array([])
 array['rf_oscillators/Rb_OCXO_control'+'low'] = np.array([])
+array['rf_oscillators/Rb_OCXO_control'+'mod'] = np.array([])
+array['rf_oscillators/Rb_OCXO_control'+'2mod'] = np.array([])
     # Timers
 control_interval = 0.5 # s
 passive_interval = 1.0 # s
@@ -1066,17 +1068,11 @@ and routines:
 '''
 STATES = {
         'rf_oscillators/state_12V_supply':{
-                'on':{
+                'lock':{
                         'settings':{},
                         'prerequisites':{
-                                'critical':[
-                                    {'db':'ambience/box_temperature_0',
-                                     'key':'V',
-                                     'test':(lambda t: t<0.35)}], # Below max temperature threshold 35 C
-                                'necessary':[
-                                    {'db':'rf_oscillators/device_PDU_12V',
-                                     'key':'outlet_state',
-                                     'test':(lambda outlet_state: outlet_state==2)}], # Outlet must already be on
+                                'critical':[],
+                                'necessary':[],
                                 'optional':[]},
                         'routines':{
                                 'monitor':monitor_Rb_clock, 'search':wait_for_locks,

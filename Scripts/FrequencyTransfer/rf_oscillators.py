@@ -406,6 +406,8 @@ def monitor_Rb_clock(state_db):
     # Get values
         # Status Bytes: 'rf_oscillators/Rb_status
         status_bytes = dev[device_db]['driver'].status()
+            # Ignore "No 1pps Input" Warning
+        status_bytes['5']['7'] = None
         # Time tag: 'rf_oscillators/Rb_time_tag'
         tm_tag = dev[device_db]['driver'].time_tag()
         # Select other monitor
@@ -848,7 +850,7 @@ def status_warnings(status_bytes):
         if ((time.time() - timer['Rb_status_{:}_{:}'.format(byte, bit)]) >= warning_interval):
             timer['Rb_status_{:}_{:}'.format(byte, bit)] = time.time()
             log_str = '\n '.join([byte_str,'No 1pps input','Provide 1pps input'])
-            log.log_warning(mod_name, func_name, log_str)
+            log.log_debug(mod_name, func_name, log_str)
 # ST6: System Level Events
     byte = '6'
     byte_str = ' ST6: System Level Events'

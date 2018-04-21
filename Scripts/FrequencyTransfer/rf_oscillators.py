@@ -381,27 +381,20 @@ def nothing(state_db):
 
 # monitor_Rb_clock ------------------------------------------------------------
     # Arrays
-for ind in range(8): # 0 through 7
-    array['rf_oscillators/Rb_dac_{:}'.format(ind)] = np.array([])
 array['rf_oscillators/Rb_OCXO_control'+'high'] = np.array([])
 array['rf_oscillators/Rb_OCXO_control'+'low'] = np.array([])
 array['rf_oscillators/Rb_detected_signals'+'mod'] = np.array([])
 array['rf_oscillators/Rb_detected_signals'+'2mod'] = np.array([])
-array['rf_oscillators/Rb_frequency_offset'] = np.array([])
-array['rf_oscillators/Rb_magnetic_read'] = np.array([])
 array['rf_oscillators/Rb_time_tag'] = np.array([])
     # Timers
-control_interval = 1.0 # s
-passive_interval = 1.0 # s
+control_interval = 0.5 # seconds
 record_interval = 10 # seconds
 timer['Rb:control'] = get_lap(control_interval)
-timer['Rb:passive'] = get_lap(passive_interval)
 timer['Rb:record'] = get_lap(record_interval)
 def monitor_Rb_clock(state_db):
     device_db = 'rf_oscillators/device_Rb_clock'
 # Get lap number
     new_control_lap = get_lap(control_interval)
-    new_passive_lap = get_lap(passive_interval)
     new_record_lap = get_lap(record_interval)
 # Update control loop variables -------------------------------------
     if (new_control_lap > timer['Rb:control']):
@@ -413,41 +406,54 @@ def monitor_Rb_clock(state_db):
     # Get values
         # Status Bytes: 'rf_oscillators/Rb_status
         status_bytes = dev[device_db]['driver'].status()
-        # DAC: 'rf_oscillators/Rb_dac_{:}
-        dac_port = int(new_control_lap % 8)
-        dac_byte = dev[device_db]['driver'].dac(dac_port)
-        # ADC: 'rf_oscillators/Rb_adc_{:}'
-        adc_port = int(new_control_lap % 20)
-        adc_v = dev[device_db]['driver'].adc(adc_port)
-# Update passive variables ------------------------------------------
-    if (new_passive_lap > timer['Rb:passive']):
-    # Ensure that the instrument is queued
-        if not(dev[device_db]['queue'].queue_and_wait()):
-        # Optimize I/O
-            dev[device_db]['driver'].auto_connect = False
-            dev[device_db]['driver'].open_port()
-        dev[device_db]['queue'].touch()
-    # Get values
-        # OCXO parameters: 'rf_oscillators/Rb_OCXO_control'
-        ocxo_ctrl = dev[device_db]['driver'].OCXO_control()
-        # Detected signals: 'rf_oscillators/Rb_detected_signals'
-        dtc_sig = dev[device_db]['driver'].detected_signals()
-        # Frequency offset: 'rf_oscillators/Rb_frequency_offset'
-        frq_offset = dev[device_db]['driver'].frequency_offset()
-        # Magnetic reading: 'rf_oscillators/Rb_magnetic_read'
-        mag_read = dev[device_db]['driver'].magnetic_read()
         # Time tag: 'rf_oscillators/Rb_time_tag'
         tm_tag = dev[device_db]['driver'].time_tag()
-    if ((new_control_lap > timer['Rb:control']) or (new_passive_lap > timer['Rb:passive'])):
+        # Select other monitor
+        if ((new_control_lap % 2)==0):
+            selector= new_control_lap // 2
+            if ((selector % 2) == 0):
+                # OCXO parameters: 'rf_oscillators/Rb_OCXO_control'
+                ocxo_ctrl = dev[device_db]['driver'].OCXO_control()
+            else:
+                # Detected signals: 'rf_oscillators/Rb_detected_signals'
+                dtc_sig = dev[device_db]['driver'].detected_signals()
+        else:
+            selector = new_control_lap // 2
+            if ((selector % 2)==0):
+                # ADC: 'rf_oscillators/Rb_adc_{:}'
+                selector = selector // 2
+                adc_port = int(selector % 16)
+                adc_v = dev[device_db]['driver'].adc(adc_port)
+            else:
+                selector = selector // 2
+                if ((selector % 2)==0):
+                    # DAC: 'rf_oscillators/Rb_dac_{:}
+                    selector = selector // 2
+                    dac_port = int(selector % 8)
+                    dac_byte = dev[device_db]['driver'].dac(dac_port)
+                else:
+                    selector = selector // 2
+                    if ((selector % 2)==0):
+                        # ADC: 'rf_oscillators/Rb_adc_{:}'
+                        selector = selector // 2
+                        adc_port = int(16 + (selector % 4))
+                        adc_v = dev[device_db]['driver'].adc(adc_port)
+                    else:
+                        selector = selector // 2
+                        if ((selector % 2)==0):
+                            # Frequency offset: 'rf_oscillators/Rb_frequency_offset'
+                            frq_offset = dev[device_db]['driver'].frequency_offset()
+                        else:
+                            # Magnetic reading: 'rf_oscillators/Rb_magnetic_read'
+                            mag_read = dev[device_db]['driver'].magnetic_read()
 # Dequeue -----------------------------------------------------------
     # Return to normal I/O
         dev[device_db]['driver'].close_port()
         dev[device_db]['driver'].auto_connect = True
     # Remove from queue
         dev[device_db]['queue'].remove()
-# Update control buffers and databases ------------------------------
-    if (new_control_lap > timer['Rb:control']):
-    # Status Bytes: 'rf_oscillators/Rb_status' -----------------
+# Update buffers (and records) --------------------------------------
+    # Status Bytes: --------------------------------------------
         monitor_db = 'rf_oscillators/Rb_status'
         if (mon[monitor_db]['data'] != status_bytes):
             mon[monitor_db]['new'] = True
@@ -455,124 +461,7 @@ def monitor_Rb_clock(state_db):
             db[monitor_db].write_record_and_buffer(status_bytes)
         # Raise warnings
         status_warnings(status_bytes)
-    # DAC: 'rf_oscillators/Rb_dac_{:}' -------------------------
-        monitor_db = 'rf_oscillators/Rb_dac_{:}'.format(dac_port)
-        mon[monitor_db]['new'] = True
-        mon[monitor_db]['data'] = update_buffer(
-                mon[monitor_db]['data'],
-                dac_byte, 500)
-        db[monitor_db].write_buffer({'DAC':dac_byte})
-        # Append to the record array
-        array[monitor_db] = np.append(array[monitor_db], dac_byte)
-        if (new_record_lap > timer['Rb:record']):
-            for ind in range(8): # 0 through 7
-                monitor_db = 'rf_oscillators/Rb_dac_{:}'.format(ind)
-                # Record statistics
-                if array[monitor_db].size:
-                    db[monitor_db].write_record({
-                            'DAC':array[monitor_db].mean(),
-                            'std':array[monitor_db].std(),
-                            'n':array[monitor_db].size})
-                    # Empty the array
-                    array[monitor_db] = np.array([])
-    # ADC: 'rf_oscillators/Rb_adc_{:}' -------------------------
-        monitor_db = 'rf_oscillators/Rb_adc_{:}'.format(adc_port)
-        mon[monitor_db]['new'] = True
-        mon[monitor_db]['data'] = update_buffer(
-                mon[monitor_db]['data'],
-                adc_v, 500)
-        db[monitor_db].write_record_and_buffer({'V':adc_v})
-# Update passive buffers and databases ------------------------------
-    if (new_passive_lap > timer['Rb:passive']):
-    # OCXO parameters: 'rf_oscillators/Rb_OCXO_control' --------
-        monitor_db = 'rf_oscillators/Rb_OCXO_control'
-        data = ocxo_ctrl
-        keys = data.keys()
-        db[monitor_db].write_buffer(data)
-        mon[monitor_db]['new'] = True
-        mon[monitor_db]['data'] = update_buffer(
-                mon[monitor_db]['data'],
-                list(data.values()), 500)
-        for key in keys:
-            # Append to the record array
-            array[monitor_db+key] = np.append(array[monitor_db+key], data[key])
-        if (new_record_lap > timer['Rb:record']):
-            # Record statistics
-            record = {}
-            update = False
-            for key in keys:
-                if array[monitor_db+key].size:
-                    record[key] = array[monitor_db+key].mean()
-                    record[key+'_std'] = array[monitor_db+key].std()
-                    record[key+'_n'] = array[monitor_db+key].size
-                    # Empty the array
-                    update = True
-                    array[monitor_db+key] = np.array([])
-            if update:
-                db[monitor_db].write_record(record)
-    # Detected signals: 'rf_oscillators/Rb_detected_signals' ---
-        monitor_db = 'rf_oscillators/Rb_detected_signals'
-        data = dtc_sig
-        keys = data.keys()
-        db[monitor_db].write_buffer(data)
-        mon[monitor_db]['new'] = True
-        mon[monitor_db]['data'] = update_buffer(
-                mon[monitor_db]['data'],
-                list(data.values()), 500)
-        for key in keys:
-            # Append to the record array
-            array[monitor_db+key] = np.append(array[monitor_db+key], data[key])
-        if (new_record_lap > timer['Rb:record']):
-            # Record statistics
-            record = {}
-            update = False
-            for key in keys:
-                if array[monitor_db+key].size:
-                    record[key] = array[monitor_db+key].mean()
-                    record[key+'_std'] = array[monitor_db+key].std()
-                    record[key+'_n'] = array[monitor_db+key].size
-                    # Empty the array
-                    update = True
-                    array[monitor_db+key] = np.array([])
-            if update:
-                db[monitor_db].write_record(record)
-    # Frequency offset: 'rf_oscillators/Rb_frequency_offset' ---
-        monitor_db = 'rf_oscillators/Rb_frequency_offset'
-        mon[monitor_db]['new'] = True
-        mon[monitor_db]['data'] = update_buffer(
-                mon[monitor_db]['data'],
-                frq_offset, 500)
-        db[monitor_db].write_buffer({'1e-12':frq_offset})
-        # Append to the record array
-        array[monitor_db] = np.append(array[monitor_db], frq_offset)
-        if (new_record_lap > timer['Rb:record']):
-            # Record statistics
-            if array[monitor_db].size:
-                db[monitor_db].write_record({
-                        '1e-12':array[monitor_db].mean(),
-                        'std':array[monitor_db].std(),
-                        'n':array[monitor_db].size})
-                # Empty the array
-                array[monitor_db] = np.array([])
-    # Magnetic reading: 'rf_oscillators/Rb_magnetic_read' ------
-        monitor_db = 'rf_oscillators/Rb_magnetic_read'
-        mon[monitor_db]['new'] = True
-        mon[monitor_db]['data'] = update_buffer(
-                mon[monitor_db]['data'],
-                mag_read, 500)
-        db[monitor_db].write_buffer({'DAC':mag_read})
-        # Append to the record array
-        array[monitor_db] = np.append(array[monitor_db], mag_read)
-        if (new_record_lap > timer['Rb:record']):
-            # Record statistics
-            if array[monitor_db].size:
-                db[monitor_db].write_record({
-                        'DAC':array[monitor_db].mean(),
-                        'std':array[monitor_db].std(),
-                        'n':array[monitor_db].size})
-                # Empty the array
-                array[monitor_db] = np.array([])
-    # Time tag: 'rf_oscillators/Rb_time_tag' -------------------
+    # Time tag: ------------------------------------------------
         monitor_db = 'rf_oscillators/Rb_time_tag'
         if (tm_tag != None):
             mon[monitor_db]['new'] = True
@@ -582,19 +471,130 @@ def monitor_Rb_clock(state_db):
             db[monitor_db].write_buffer({'ns':tm_tag})
             # Append to the record array
             array[monitor_db] = np.append(array[monitor_db], tm_tag)
-        if (new_record_lap > timer['Rb:record']):
-            # Record statistics
-            if array[monitor_db].size:
-                db[monitor_db].write_record({
-                        'ns':array[monitor_db].mean(),
-                        'std':array[monitor_db].std(),
-                        'n':array[monitor_db].size})
+    # Select other monitor
+        if ((new_control_lap % 2)==0):
+            selector= new_control_lap // 2
+            if ((selector % 2) == 0):
+            # OCXO parameters: ---------------------------------
+                monitor_db = 'rf_oscillators/Rb_OCXO_control'
+                data = ocxo_ctrl
+                keys = data.keys()
+                db[monitor_db].write_buffer(data)
+                mon[monitor_db]['new'] = True
+                mon[monitor_db]['data'] = update_buffer(
+                        mon[monitor_db]['data'],
+                        list(data.values()), 500)
+                for key in keys:
+                    # Append to the record array
+                    array[monitor_db+key] = np.append(array[monitor_db+key], data[key])
+            else:
+            # Detected signals: --------------------------------
+                monitor_db = 'rf_oscillators/Rb_detected_signals'
+                data = dtc_sig
+                keys = data.keys()
+                db[monitor_db].write_buffer(data)
+                mon[monitor_db]['new'] = True
+                mon[monitor_db]['data'] = update_buffer(
+                        mon[monitor_db]['data'],
+                        list(data.values()), 500)
+                for key in keys:
+                    # Append to the record array
+                    array[monitor_db+key] = np.append(array[monitor_db+key], data[key])
+        else:
+            selector = new_control_lap // 2
+            if ((selector % 2)==0):
+            # ADC (0-15): --------------------------------------
+                monitor_db = 'rf_oscillators/Rb_adc_{:}'.format(adc_port)
+                mon[monitor_db]['new'] = True
+                mon[monitor_db]['data'] = update_buffer(
+                        mon[monitor_db]['data'],
+                        adc_v, 500)
+                db[monitor_db].write_record_and_buffer({'V':adc_v})
+            else:
+                selector = selector // 2
+                if ((selector % 2)==0):
+                # DAC (0-7): -----------------------------------
+                    monitor_db = 'rf_oscillators/Rb_dac_{:}'.format(dac_port)
+                    mon[monitor_db]['new'] = True
+                    mon[monitor_db]['data'] = update_buffer(
+                            mon[monitor_db]['data'],
+                            dac_byte, 500)
+                    db[monitor_db].write_record_and_buffer({'DAC':dac_byte})
+                else:
+                    selector = selector // 2
+                    if ((selector % 2)==0):
+                    # ADC (16-19): -----------------------------
+                        monitor_db = 'rf_oscillators/Rb_adc_{:}'.format(adc_port)
+                        mon[monitor_db]['new'] = True
+                        mon[monitor_db]['data'] = update_buffer(
+                                mon[monitor_db]['data'],
+                                adc_v, 500)
+                        db[monitor_db].write_record_and_buffer({'V':adc_v})
+                    else:
+                        selector = selector // 2
+                        if ((selector % 2)==0):
+                        # Frequency offset: --------------------
+                            monitor_db = 'rf_oscillators/Rb_frequency_offset'
+                            mon[monitor_db]['new'] = True
+                            mon[monitor_db]['data'] = update_buffer(
+                                    mon[monitor_db]['data'],
+                                    frq_offset, 500)
+                            db[monitor_db].write_record_and_buffer({'1e-12':frq_offset})
+                        else:
+                        # Magnetic reading: --------------------
+                            monitor_db = 'rf_oscillators/Rb_magnetic_read'
+                            mon[monitor_db]['new'] = True
+                            mon[monitor_db]['data'] = update_buffer(
+                                    mon[monitor_db]['data'],
+                                    mag_read, 500)
+                            db[monitor_db].write_record_and_buffer({'DAC':mag_read})
+    # Propogate lap numbers ------------------------------------
+        timer['Rb:control'] = new_control_lap
+# Update records ----------------------------------------------------
+    if (new_record_lap > timer['Rb:record']):
+    # Time tag: ------------------------------------------------
+        monitor_db = 'rf_oscillators/Rb_time_tag'
+        # Record statistics
+        if array[monitor_db].size:
+            db[monitor_db].write_record({
+                    'ns':array[monitor_db].mean(),
+                    'std':array[monitor_db].std(),
+                    'n':array[monitor_db].size})
+            # Empty the array
+            array[monitor_db] = np.array([])
+    # OCXO parameters: -----------------------------------------
+        monitor_db = 'rf_oscillators/Rb_OCXO_control'
+        # Record statistics
+        record = {}
+        update = False
+        for key in keys:
+            if array[monitor_db+key].size:
+                record[key] = array[monitor_db+key].mean()
+                record[key+'_std'] = array[monitor_db+key].std()
+                record[key+'_n'] = array[monitor_db+key].size
                 # Empty the array
-                array[monitor_db] = np.array([])
-# Propogate lap numbers ---------------------------------------------
-    timer['Rb:control'] = new_control_lap
-    timer['Rb:passive'] = new_passive_lap
-    timer['Rb:record'] = new_record_lap
+                update = True
+                array[monitor_db+key] = np.array([])
+        if update:
+            db[monitor_db].write_record(record)
+    # Detected signals: ----------------------------------------
+        monitor_db = 'rf_oscillators/Rb_detected_signals'
+        # Record statistics
+        record = {}
+        update = False
+        for key in keys:
+            if array[monitor_db+key].size:
+                record[key] = array[monitor_db+key].mean()
+                record[key+'_std'] = array[monitor_db+key].std()
+                record[key+'_n'] = array[monitor_db+key].size
+                # Empty the array
+                update = True
+                array[monitor_db+key] = np.array([])
+        if update:
+            db[monitor_db].write_record(record)
+    # Propogate lap numbers -------------------------------------
+        timer['Rb:record'] = new_record_lap
+
 
 # Status Warnings -------------------------------------------------------------
 for byte in range(1,6+1):
@@ -900,6 +900,7 @@ def status_warnings(status_bytes):
             log.log_warning(mod_name, func_name, log_str)
 
 
+
 # %% Search Functions =========================================================
 '''This section is for defining the methods needed to bring the system into
     its defined states.'''
@@ -1125,6 +1126,6 @@ sm.init_states(STATES)
 
 '''Operates the state machine.'''
 current_state={}
-sm.operate_machine(current_state=current_state, main_loop_interval=1.0)
+sm.operate_machine(current_state=current_state, main_loop_interval=0.5)
 
 

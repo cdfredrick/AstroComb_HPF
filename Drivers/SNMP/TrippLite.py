@@ -76,7 +76,6 @@ class PDUOutlet():
                        rfc1902.ObjectType(obj_id))
             errorIndication, errorStatus, errorIndex, varBinds = next(g)
             oid, value = varBinds[0]
-            print(oid)
             return int(value)
         else:
         # Send outlet state

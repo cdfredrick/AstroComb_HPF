@@ -857,7 +857,7 @@ class Machine():
                 else:
                     optional_pass = True
             # Check the "exit" prerequisites of the current state
-                if 'exit' in self.STATES[state_db][desired_state]['prerequisites']:
+                if 'exit' in self.STATES[state_db][state]['prerequisites']:
                     exit_pass = self.check_prereqs(
                             state_db,
                             state,
@@ -904,7 +904,7 @@ class Machine():
                     # Check the error timer
                         if (str(prereq) in self.log_failed_prereqs_timer[state_db][state][level]):
                         # If the failure has been caught before, wait for the timer
-                            log_failure = ((time.time() - self.log_failed_prereqs_timer[state_db][state][level][str(prereq)]) > self.log_error_interval)
+                            log_failure = ((time.time() - self.log_failed_prereqs_timer[state_db][state][level][str(prereq)]) > self.error_interval)
                         else:
                         # Catch the failure for the first time
                             log_failure = True

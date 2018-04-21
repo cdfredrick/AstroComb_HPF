@@ -21,7 +21,7 @@ from Drivers.Logging import EventLog as log
 
 from Drivers.StateMachine import ThreadFactory, Machine
 
-from Drivers.SNMP.Tripplite import PDUOutlet
+from Drivers.SNMP.TrippLite import PDUOutlet
 
 
 # %% Helper Functions =========================================================
@@ -320,13 +320,10 @@ def nothing(state_db):
 
 # Monitor ---------------------------------------------------------------------
 control_interval = 0.5 # s
-passive_interval = 1.0 # s
 timer['monitor:control'] = get_lap(control_interval)
-timer['monitor:passive'] = get_lap(passive_interval)
 def monitor(state_db):
 # Get lap number
     new_control_lap = get_lap(control_interval)
-    new_passive_lap = get_lap(passive_interval)
 # Update control loop variables -------------------------------------
     if (new_control_lap > timer['monitor:control']):
     # PDU -------------------------------------------------
@@ -343,9 +340,8 @@ def monitor(state_db):
             mon['ambience/box_temperature_0']['data'] = update_buffer(
                 mon['ambience/box_temperature_0']['data'],
                 new_data, 500)
-# Propogate lap numbers ---------------------------------------------
-    timer['monitor:control'] = new_control_lap
-    timer['monitor:passive'] = new_passive_lap
+    # Propogate lap numbers -----------------------------------------
+        timer['monitor:control'] = new_control_lap
 
 
 # %% Search Functions =========================================================
@@ -354,7 +350,7 @@ def monitor(state_db):
     
 # Outlet Off ------------------------------------------------------------------
 def turn_outlet_off(state_db):
-    mod_name = __name__
+    mod_name = turn_outlet_off.__module__
     func_name = turn_outlet_off.__name__
     device_db = 'comb_generator/device_PDU_12V'
     # Get outlet state
@@ -375,7 +371,7 @@ def turn_outlet_off(state_db):
 
 # Outlet on -------------------------------------------------------------------
 def turn_outlet_on(state_db):
-    mod_name = __name__
+    mod_name = turn_outlet_on.__module__
     func_name = turn_outlet_on.__name__
     device_db = 'comb_generator/device_PDU_12V'
     # Get outlet state
@@ -401,7 +397,7 @@ def turn_outlet_on(state_db):
 
 # Keep Off --------------------------------------------------------------------
 def keep_outlet_off(state_db):
-    mod_name = __name__
+    mod_name = keep_outlet_off.__module__
     func_name = keep_outlet_off.__name__
     device_db = 'comb_generator/device_PDU_12V'
     # Get outlet state
@@ -416,7 +412,7 @@ def keep_outlet_off(state_db):
 
 # Keep On ---------------------------------------------------------------------
 def keep_outlet_on(state_db):
-    mod_name = __name__
+    mod_name = keep_outlet_on.__module__
     func_name = keep_outlet_on.__name__
     device_db = 'comb_generator/device_PDU_12V'
     # Get outlet state
@@ -574,8 +570,8 @@ STATES = {
                                 'critical':[
                                     {'db':'ambience/box_temperature_0',
                                      'key':'V',
-                                     'test':(lambda t: t<0.27),
-                                     'doc':"lambda t: t<0.27"}], # Below max temperature threshold 35 C
+                                     'test':(lambda t: t<0.35),
+                                     'doc':"lambda t: t<0.35"}], # Below max temperature threshold 35 C
                                 'necessary':[],
 #                                    {'db':'comb_generator/device_PDU_12V',
 #                                     'key':'outlet_state',

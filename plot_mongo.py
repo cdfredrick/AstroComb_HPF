@@ -18,7 +18,7 @@ central_tz = pytz.timezone('US/Central')
 utc_tz = pytz.utc
 
 # %% Choose data
-start_time = central_tz.localize(datetime.datetime(2018, 4, 20, 0))
+start_time = central_tz.localize(datetime.datetime(2018, 4, 21, 14, 40))
 #stop_time = central_tz.localize(datetime.datetime(2018, 3, 29, 6))
 stop_time = central_tz.localize(datetime.datetime.now())
 DBs = {

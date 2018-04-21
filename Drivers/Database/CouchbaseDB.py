@@ -13,6 +13,7 @@ from couchbase.exceptions import NotFoundError, KeyExistsError, QueueEmpty, Temp
 from couchbase.bucket import LOCKMODE_WAIT
 
 import threading
+import time
 
 from Drivers.Logging import EventLog as log
 
@@ -225,7 +226,7 @@ class PriorityQueue():
                 self.push(priority=priority, message=message)
             else:
             # Wait for queue
-                pass
+                time.sleep(0.01)
         return queued
 
 

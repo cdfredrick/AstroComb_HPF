@@ -658,7 +658,7 @@ class Machine():
         '''
         self.lock = {}
         for state_db in self.STATE_DBs:
-            self.lock[state_db] = threading.RLock()
+            self.lock[state_db] = threading.Lock()
         
     # Initialize failed prereq log timers -------------------------------------
         '''These are set so that the logs do not become cluttered with

@@ -18,30 +18,30 @@ central_tz = pytz.timezone('US/Central')
 utc_tz = pytz.utc
 
 # %% Choose data
-start_time = central_tz.localize(datetime.datetime(2018, 4, 10, 12))
-#stop_time = central_tz.localize(datetime.datetime(2018, 3, 30, 12))
+start_time = central_tz.localize(datetime.datetime(2018, 4, 20, 0))
+#stop_time = central_tz.localize(datetime.datetime(2018, 3, 29, 6))
 stop_time = central_tz.localize(datetime.datetime.now())
 DBs = {
-        'filter_cavity/HV_output':{
-        'start':start_time,
-        'stop':stop_time,
-        'keys':{
-                '_timestamp':lambda dt: utc_tz.localize(dt).astimezone(central_tz),
-                'V':lambda v: v}}
-#        'ambience/box_temperature_0':{
-#                'start':start_time,
-#                'stop':stop_time,
-#                'keys':{
-#                        '_timestamp':lambda dt: utc_tz.localize(dt).astimezone(central_tz),
-#                        'V':lambda v: v*100,
-#                        'ste':lambda v: v*100}},
-#        'ambience/box_temperature_1':{
-#                'start':start_time,
-#                'stop':stop_time,
-#                'keys':{
-#                        '_timestamp':lambda dt: utc_tz.localize(dt).astimezone(central_tz),
-#                        'V':lambda v: v*100,
-#                        'ste':lambda v: v*100}},
+#        'filter_cavity/HV_output':{
+#        'start':start_time,
+#        'stop':stop_time,
+#        'keys':{
+#                '_timestamp':lambda dt: utc_tz.localize(dt).astimezone(central_tz),
+#                'V':lambda v: v}}
+        'ambience/box_temperature_0':{
+                'start':start_time,
+                'stop':stop_time,
+                'keys':{
+                        '_timestamp':lambda dt: utc_tz.localize(dt).astimezone(central_tz),
+                        'V':lambda v: v*100,
+                        'std':lambda v: v*100}},
+        'ambience/box_temperature_1':{
+                'start':start_time,
+                'stop':stop_time,
+                'keys':{
+                        '_timestamp':lambda dt: utc_tz.localize(dt).astimezone(central_tz),
+                        'V':lambda v: v*100,
+                        'std':lambda v: v*100}}
 #        'ambience/rack_temperature_0':{
 #                'start':start_time,
 #                'stop':stop_time,
@@ -56,19 +56,21 @@ DBs = {
 
 mongo_client = MongoDB.MongoClient()
 data = {}
-for database in DBs:
-    data[database] = {}
-    start = DBs[database]['start'].astimezone(utc_tz)
-    stop = DBs[database]['stop'].astimezone(utc_tz)
-    keys = DBs[database]['keys']
-    for key in keys:
-        data[database][key] = []
-    db = MongoDB.DatabaseRead(mongo_client, database)
-    cursor = db.read_record(start, stop)
-    for doc in cursor:
+try:
+    for database in DBs:
+        data[database] = {}
+        start = DBs[database]['start'].astimezone(utc_tz)
+        stop = DBs[database]['stop'].astimezone(utc_tz)
+        keys = DBs[database]['keys']
         for key in keys:
-            data[database][key].append(keys[key](doc[key]))
-mongo_client.close()
+            data[database][key] = []
+        db = MongoDB.DatabaseRead(mongo_client, database)
+        cursor = db.read_record(start, stop)
+        for doc in cursor:
+            for key in keys:
+                data[database][key].append(keys[key](doc[key]))
+finally:
+    mongo_client.close()
 
 # %% Plot Data
 

@@ -567,6 +567,7 @@ def monitor_Rb_clock(state_db):
         # Record statistics
         record = {}
         update = False
+        keys = ['high','low']
         for key in keys:
             if array[monitor_db+key].size:
                 record[key] = array[monitor_db+key].mean()
@@ -582,6 +583,7 @@ def monitor_Rb_clock(state_db):
         # Record statistics
         record = {}
         update = False
+        keys = ['mod','2mod']
         for key in keys:
             if array[monitor_db+key].size:
                 record[key] = array[monitor_db+key].mean()

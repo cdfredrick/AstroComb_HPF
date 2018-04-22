@@ -20,6 +20,7 @@ sys.path.append(os.getcwd())
 from Drivers.Logging import EventLog as log
 
 from Drivers.StateMachine import ThreadFactory, Machine
+import threading
 
 from Drivers.VISA.SRS import SIM940
 
@@ -368,6 +369,7 @@ sm.init_monitors(mon=mon)
 timer = {}
 array = {}
 thread = {}
+lock = {}
 
 # Do nothing function ---------------------------------------------------------
 '''A functional placeholder for cases where nothing should happen.'''
@@ -386,12 +388,14 @@ array['rf_oscillators/Rb_OCXO_control'+'low'] = np.array([])
 array['rf_oscillators/Rb_detected_signals'+'mod'] = np.array([])
 array['rf_oscillators/Rb_detected_signals'+'2mod'] = np.array([])
 array['rf_oscillators/Rb_time_tag'] = np.array([])
+    # Locks
+lock['rf_oscillators/Rb_status'] = threading.Lock()
     # Timers
 control_interval = 0.5 # seconds
 record_interval = 10 # seconds
 timer['Rb:control'] = get_lap(control_interval)
 timer['Rb:record'] = get_lap(record_interval)
-def monitor_Rb_clock(state_db):
+def get_Rb_clock_data():
     device_db = 'rf_oscillators/device_Rb_clock'
 # Get lap number
     new_control_lap = get_lap(control_interval)
@@ -404,7 +408,7 @@ def monitor_Rb_clock(state_db):
         dev[device_db]['driver'].auto_connect = False
         dev[device_db]['driver'].open_port()
     # Get values
-        # Status Bytes: 'rf_oscillators/Rb_status
+        # Status Bytes: 'rf_oscillators/Rb_status'
         status_bytes = dev[device_db]['driver'].status()
             # Ignore "No 1pps Input" Warning
         status_bytes['5']['7'] = None
@@ -458,8 +462,9 @@ def monitor_Rb_clock(state_db):
     # Status Bytes: --------------------------------------------
         monitor_db = 'rf_oscillators/Rb_status'
         if (mon[monitor_db]['data'] != status_bytes):
-            mon[monitor_db]['new'] = True
-            mon[monitor_db]['data'] = status_bytes
+            with lock[monitor_db]:
+                mon[monitor_db]['new'] = True
+                mon[monitor_db]['data'] = status_bytes
             db[monitor_db].write_record_and_buffer(status_bytes)
         # Raise warnings
         status_warnings(status_bytes)
@@ -598,7 +603,20 @@ def monitor_Rb_clock(state_db):
             db[monitor_db].write_record(record)
     # Propogate lap numbers -------------------------------------
         timer['Rb:record'] = new_record_lap
+thread['get_Rb_clock_data'] = ThreadFactory(target=get_Rb_clock_data)
 
+# Monitor Rb Clock ------------------------------------------------------------
+def monitor_Rb_clock(state_db):
+    new_control_lap = get_lap(control_interval)
+    if (new_control_lap > timer['Rb:control']):
+    # Pull data from SRS ----------------------------------
+        thread_name = 'get_Rb_clock_data'
+        (alive, error) = thread[thread_name].check_thread()
+        if error != None:
+            raise error[1].with_traceback(error[2])
+        if not(alive):
+        # Start new thread
+            thread[thread_name].start()
 
 # Status Warnings -------------------------------------------------------------
 for byte in range(1,6+1):
@@ -914,18 +932,19 @@ def wait_for_locks(state_db):
     mod_name = wait_for_locks.__module__
     func_name = wait_for_locks.__name__
     monitor_db = 'rf_oscillators/Rb_status'
-    if mon[monitor_db]['new']:
-        locked_Rb = not(mon[monitor_db]['data']['4']['0'])
-        locked_1pps = mon[monitor_db]['data']['5']['2']
-        mon[monitor_db]['new'] = False
-        if (locked_Rb and locked_1pps):
-        # Everything is locked
-            # Update the state variable
-            with sm.lock[state_db]:
-                current_state[state_db]['compliance'] = True
-                db[state_db].write_record_and_buffer(current_state[state_db])
-            log_str = ' Rb and 1pps locks engaged'
-            log.log_info(mod_name, func_name, log_str)
+    with lock[monitor_db]:
+        if mon[monitor_db]['new']:
+            locked_Rb = not(mon[monitor_db]['data']['4']['0'])
+            locked_1pps = mon[monitor_db]['data']['5']['2']
+            mon[monitor_db]['new'] = False
+            if (locked_Rb and locked_1pps):
+            # Everything is locked
+                # Update the state variable
+                with sm.lock[state_db]:
+                    current_state[state_db]['compliance'] = True
+                    db[state_db].write_record_and_buffer(current_state[state_db])
+                log_str = ' Rb and 1pps locks engaged'
+                log.log_info(mod_name, func_name, log_str)
 
 
 # %% Maintain Functions =======================================================
@@ -937,23 +956,24 @@ def check_locks(state_db):
     mod_name = check_locks.__module__
     func_name = check_locks.__name__
     monitor_db = 'rf_oscillators/Rb_status'
-    if mon[monitor_db]['new']:
-        locked_Rb = not(mon[monitor_db]['data']['4']['0'])
-        locked_1pps = mon[monitor_db]['data']['5']['2']
-        mon[monitor_db]['new'] = False
-        if not(locked_Rb and locked_1pps):
-        # Something is unlocked
-            # Update the state variable
-            with sm.lock[state_db]:
-                current_state[state_db]['compliance'] = False
-                db[state_db].write_record_and_buffer(current_state[state_db])
-            if not(locked_Rb) and not(locked_1pps):
-                log_str = ' Rb and 1pps locks not engaged'
-            elif not(locked_Rb):
-                log_str = ' Rb lock not engaged'
-            elif not(locked_1pps):
-                log_str = ' 1pps lock not engaged'
-            log.log_info(mod_name, func_name, log_str)
+    with lock[monitor_db]:
+        if mon[monitor_db]['new']:
+            locked_Rb = not(mon[monitor_db]['data']['4']['0'])
+            locked_1pps = mon[monitor_db]['data']['5']['2']
+            mon[monitor_db]['new'] = False
+            if not(locked_Rb and locked_1pps):
+            # Something is unlocked
+                # Update the state variable
+                with sm.lock[state_db]:
+                    current_state[state_db]['compliance'] = False
+                    db[state_db].write_record_and_buffer(current_state[state_db])
+                if not(locked_Rb) and not(locked_1pps):
+                    log_str = ' Rb and 1pps locks not engaged'
+                elif not(locked_Rb):
+                    log_str = ' Rb lock not engaged'
+                elif not(locked_1pps):
+                    log_str = ' 1pps lock not engaged'
+                log.log_info(mod_name, func_name, log_str)
 
 
 # %% Operate Functions ========================================================

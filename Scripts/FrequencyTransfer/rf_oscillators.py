@@ -381,7 +381,7 @@ def nothing(state_db):
 # %% Monitor Functions ========================================================
 '''This section is for defining the methods needed to monitor the system.'''
 
-# monitor_Rb_clock ------------------------------------------------------------
+# Get Rb clock data -----------------------------------------------------------
     # Arrays
 array['rf_oscillators/Rb_OCXO_control'+'high'] = np.array([])
 array['rf_oscillators/Rb_OCXO_control'+'low'] = np.array([])

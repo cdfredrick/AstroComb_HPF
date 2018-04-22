@@ -307,6 +307,7 @@ sm.init_monitors(mon=mon)
 
 # Global Timing Variable ------------------------------------------------------
 timer = {}
+thread = {}
 
 # Do nothing function ---------------------------------------------------------
 '''A functional placeholder for cases where nothing should happen.'''
@@ -318,10 +319,10 @@ def nothing(state_db):
 # %% Monitor Functions ========================================================
 '''This section is for defining the methods needed to monitor the system.'''
 
-# Monitor ---------------------------------------------------------------------
+# Get PDU Data -------------------------------------------------------------
 control_interval = 0.5 # s
 timer['monitor:control'] = get_lap(control_interval)
-def monitor(state_db):
+def get_PDU_data():
 # Get lap number
     new_control_lap = get_lap(control_interval)
 # Update control loop variables -------------------------------------
@@ -342,7 +343,21 @@ def monitor(state_db):
                 new_data, 500)
     # Propogate lap numbers -----------------------------------------
         timer['monitor:control'] = new_control_lap
+thread['get_PDU_data'] = ThreadFactory(target=get_PDU_data)
 
+
+# Monitor Outlet --------------------------------------------------------------
+def monitor(state_db):
+    new_control_lap = get_lap(control_interval)
+    if (new_control_lap > timer['monitor:control']):
+    # Pull data from SRS ----------------------------------
+        thread_name = 'get_PDU_data'
+        (alive, error) = thread[thread_name].check_thread()
+        if error != None:
+            raise error[1].with_traceback(error[2])
+        if not(alive):
+        # Start new thread
+            thread[thread_name].start()
 
 # %% Search Functions =========================================================
 '''This section is for defining the methods needed to bring the system into

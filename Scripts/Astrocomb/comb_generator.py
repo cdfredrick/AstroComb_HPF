@@ -320,7 +320,7 @@ def nothing(state_db):
 '''This section is for defining the methods needed to monitor the system.'''
 
 # Get PDU Data -------------------------------------------------------------
-control_interval = 0.5 # s
+control_interval = 1 # s
 timer['monitor:control'] = get_lap(control_interval)
 def get_PDU_data():
 # Get lap number

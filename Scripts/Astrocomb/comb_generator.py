@@ -602,7 +602,7 @@ STATES = {
                                     {'db':'ambience/box_temperature_0',
                                      'key':'V',
                                      'test':(lambda t: (t<0.245) and (t>0.10)),
-                                     'doc':"lambda t: t<0.245"}]},
+                                     'doc':"(lambda t: (t<0.245) and (t>0.10))"}]},
                         'routines':{
                                 'monitor':monitor, 'search':turn_outlet_off,
                                 'maintain':keep_outlet_off, 'operate':nothing}},

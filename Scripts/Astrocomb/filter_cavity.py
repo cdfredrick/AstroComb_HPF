@@ -536,10 +536,11 @@ def find_lock(state_db, last_good_position=None):
                 {'manual_output':last_good_position},
                 {'pid_action':False},
                 {'offset_action':True,'offset':last_good_position},
-                {'pid_action':True}] # TODO: add delay?
+                {'pid_action':True}]
         sm.update_device_settings(device_db, settings_list)
     # Update lock timer -----------------------------------
         timer['find_lock:locked'] = time.time()
+        mon['filter_cavity/DAQ_error_signal']['new'] = False
         locked = True
 # Check if locked ---------------------------------------------------
     elif dev[device_db]['driver'].pid_action():
@@ -551,12 +552,16 @@ def find_lock(state_db, last_good_position=None):
         if (current_output < v_low) or (current_output > v_high):
         # Output is beyond voltage thresholds
             locked = False
+            log_str = ' filter_cavity lock failed, PID output was outside the acceptable range'
+            log.log_info(mod_name, func_name, log_str)
         else:
         # Lock is holding
             locked = True
     else:
     # PID is disabled
         locked = False
+        log_str = ' filter_cavity lock failed, PID disabled'
+        log.log_info(mod_name, func_name, log_str)
 # If locked ---------------------------------------------------------            
     if locked:
         '''If the current state passed the previous tests the control script
@@ -566,15 +571,20 @@ def find_lock(state_db, last_good_position=None):
         dev[device_db]['queue'].remove()
     # Check lock interval ---------------------------------
         if (time.time() - timer['find_lock:locked']) > lock_hold_interval:
-        # TODO: if reflect error signal is high -> locked = False
-            log_str = ' filter_cavity lock successful'
-            log.log_info(mod_name, func_name, log_str)
-        # Lock is succesful, update state variable
-            with sm.lock[state_db]:
-                current_state[state_db]['compliance'] = True
-                db[state_db].write_record_and_buffer(
-                        current_state[state_db],
-                        timestamp=datetime.datetime.utcfromtimestamp(timer['find_lock:locked']))
+            if mon['filter_cavity/DAQ_error_signal']['new']:
+                if (mon['filter_cavity/DAQ_error_signal']['data'][-1] > 0.5):
+                    locked = False
+                    log_str = ' filter_cavity lock failed, reflection signal too high'
+                    log.log_info(mod_name, func_name, log_str)
+            if locked:
+                log_str = ' filter_cavity lock successful'
+                log.log_info(mod_name, func_name, log_str)
+            # Lock is succesful, update state variable
+                with sm.lock[state_db]:
+                    current_state[state_db]['compliance'] = True
+                    db[state_db].write_record_and_buffer(
+                            current_state[state_db],
+                            timestamp=datetime.datetime.utcfromtimestamp(timer['find_lock:locked']))
 # If unlocked -------------------------------------------------------
     else:
         '''The current state has failed the lock tests. The PID controller is
@@ -644,12 +654,13 @@ def find_lock(state_db, last_good_position=None):
             settings_list = [{'manual_output':new_output,
                               'offset_action':True,
                               'offset':new_output},
-                             {'pid_action':True}] #TODO: add delay?
+                             {'pid_action':True}]
             sm.update_device_settings(device_db, settings_list)
         # Remove the SRS PID controller from queue
             dev[device_db]['queue'].remove()
         # Update lock timer ---------------------
             timer['find_lock:locked'] = time.time()
+            mon['filter_cavity/DAQ_error_signal']['new'] = False
         else:
             '''If not, something is wrong. This could be that the temperature
             control is not on, the temperature has not settled at the setpoint,
@@ -701,6 +712,7 @@ def keep_lock(state_db):
     locked = True
 # Evaluate conditions
     new_output_condition = mon['filter_cavity/PID_output']['new']
+    new_daq_err_signal_condition = mon['filter_cavity/DAQ_error_signal']['new']
     lock_age_condition = ((time.time() - timer['find_lock:locked']) > lock_age_threshold)
     no_new_limits_condition = not(mon['filter_cavity/PID_output_limits']['new'])
 # Get most recent values --------------------------------------------
@@ -712,6 +724,7 @@ def keep_lock(state_db):
     v_low = (1-v_range_threshold)*current_limits['min'] + v_range_threshold*current_limits['max']
     # Clear 'new' data flags
     mon['filter_cavity/PID_output']['new'] = False
+    mon['filter_cavity/DAQ_error_signal']['new'] = False
     mon['filter_cavity/PID_output_limits']['new'] = False
 # Check if the PID controller is on ---------------------------------
     if (local_settings['filter_cavity/device_PID']['pid_action'] != True):
@@ -720,13 +733,19 @@ def keep_lock(state_db):
         log_str = " filter_cavity lock lost, PID controller was disabled"
         log.log_error(mod_name, func_name, log_str)
 # Check if the output is outside the acceptable range ---------------
-    elif new_output_condition:
+    if new_output_condition:
         if (current_output < v_low) or (current_output > v_high):
         # It is not locked
             locked = False
             log_str = " filter_cavity lock lost, output was outside the acceptable range"
             log.log_error(mod_name, func_name, log_str)
-    # TODO: check error signal std
+# Check DAQ error signal --------------------------------------------
+    if new_daq_err_signal_condition:
+        if (mon['filter_cavity/DAQ_error_signal']['data'][-1] > 0.5):
+        # It is not locked
+            locked = False
+            log_str = " filter_cavity lock lost, reflection signal too high"
+            log.log_error(mod_name, func_name, log_str)
 # If not locked -----------------------------------------------------
     if not(locked):
     # Update state variable

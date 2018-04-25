@@ -585,13 +585,9 @@ STATES = {
                                 'critical':[
                                     {'db':'ambience/box_temperature_0',
                                      'key':'V',
-                                     'test':(lambda t: t<0.35),
-                                     'doc':"lambda t: t<0.35"}], # Below max temperature threshold 35 C
+                                     'test':(lambda t: (t<0.35) and (t>0.10)),
+                                     'doc':"lambda t: (t<0.35) and (t>0.10)"}], # Below max temperature threshold 35 C
                                 'necessary':[],
-#                                    {'db':'comb_generator/device_PDU_12V',
-#                                     'key':'outlet_state',
-#                                     'test':(lambda outlet_state: outlet_state==2),
-#                                     'doc':"lambda outlet_state: outlet_state==2"}], # Outlet must already be on
                                 'optional':[]},
                         'routines':{
                                 'monitor':monitor, 'search':turn_outlet_on,
@@ -605,7 +601,7 @@ STATES = {
                                 'exit':[
                                     {'db':'ambience/box_temperature_0',
                                      'key':'V',
-                                     'test':(lambda t: t<0.245),
+                                     'test':(lambda t: (t<0.245) and (t>0.10)),
                                      'doc':"lambda t: t<0.245"}]},
                         'routines':{
                                 'monitor':monitor, 'search':turn_outlet_off,

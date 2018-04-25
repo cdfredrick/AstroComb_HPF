@@ -973,7 +973,7 @@ STATES = {
                                         'proportional_gain':-0.2, 'integral_gain':1.0e2,
                                         'upper_output_limit':2.00, 'lower_output_limit':0.00},
                                 'filter_cavity/device_HV':{
-                                        'y_min_limit':0.00, 'y_max_limit':150.00, 'y_voltage':99.1}},
+                                        'y_min_limit':0.00, 'y_max_limit':150.00, 'y_voltage':95}},
                         'prerequisites':{
                                 'critical':[],
                                 'necessary':[],

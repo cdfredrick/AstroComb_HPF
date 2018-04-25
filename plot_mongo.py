@@ -41,14 +41,14 @@ DBs = {
                 'keys':{
                         '_timestamp':lambda dt: utc_tz.localize(dt).astimezone(central_tz),
                         'V':lambda v: v*100,
+                        'std':lambda v: v*100}},
+        'ambience/rack_temperature_0':{
+                'start':start_time,
+                'stop':stop_time,
+                'keys':{
+                        '_timestamp':lambda dt: utc_tz.localize(dt).astimezone(central_tz),
+                        'V':lambda v: v*100,
                         'std':lambda v: v*100}}
-#        'ambience/rack_temperature_0':{
-#                'start':start_time,
-#                'stop':stop_time,
-#                'keys':{
-#                        '_timestamp':lambda dt: utc_tz.localize(dt).astimezone(central_tz),
-#                        'V':lambda v: v*100,
-#                        'ste':lambda v: v*100}}
 }
 
 

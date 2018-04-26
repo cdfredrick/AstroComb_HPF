@@ -513,6 +513,11 @@ class Machine():
                     'settings':{
                         <device database path>:[
                             {<first group>},{<second group>},...]
+                -"settings" may also be used as a repository for any non-device
+                associated parameters. The only requirement is that the
+                setting's key is not a device databse:
+                    'settings':{
+                        <NOT device database path>:<something general>}
             prerequisites:
                 -Prerequisites should be entered as lists of dictionaries that
                 include the database and key:value pair that corresponds to a
@@ -944,8 +949,9 @@ class Machine():
         log_str = ' Setting up {:}:{:}'.format(state_db, state)
         log.log_info(mod_name,func_name,log_str)
     # Update the device settings
-        for device_db in self.STATES[state_db][state]['settings']:
-            self.update_device_settings(device_db, self.STATES[state_db][state]['settings'][device_db])
+        for database in self.STATES[state_db][state]['settings']:
+            if database in self.DEVICE_DBs:
+                self.update_device_settings(database, self.STATES[state_db][state]['settings'][database])
     # Update the state variable
         with self.lock[state_db]:
             self.current_state[state_db]['state'] = state

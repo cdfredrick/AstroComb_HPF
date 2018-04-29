@@ -18,8 +18,9 @@ central_tz = pytz.timezone('US/Central')
 utc_tz = pytz.utc
 
 # %% Choose data
+#start_time = central_tz.localize(datetime.datetime(2018, 3, 19, 14))
+#stop_time = central_tz.localize(datetime.datetime(2018, 3, 22, 6))
 start_time = central_tz.localize(datetime.datetime(2018, 4, 21, 14, 40))
-#stop_time = central_tz.localize(datetime.datetime(2018, 3, 29, 6))
 stop_time = central_tz.localize(datetime.datetime.now())
 DBs = {
 #        'filter_cavity/HV_output':{
@@ -41,14 +42,14 @@ DBs = {
                 'keys':{
                         '_timestamp':lambda dt: utc_tz.localize(dt).astimezone(central_tz),
                         'V':lambda v: v*100,
-                        'std':lambda v: v*100}},
-        'ambience/rack_temperature_0':{
-                'start':start_time,
-                'stop':stop_time,
-                'keys':{
-                        '_timestamp':lambda dt: utc_tz.localize(dt).astimezone(central_tz),
-                        'V':lambda v: v*100,
                         'std':lambda v: v*100}}
+#        'ambience/rack_temperature_0':{
+#                'start':start_time,
+#                'stop':stop_time,
+#                'keys':{
+#                        '_timestamp':lambda dt: utc_tz.localize(dt).astimezone(central_tz),
+#                        'V':lambda v: v*100,
+#                        'std':lambda v: v*100}}
 }
 
 

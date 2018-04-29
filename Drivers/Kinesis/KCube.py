@@ -21,19 +21,35 @@ sizeOfBuffer  = c.c_ulong(255)
 def getDeviceList():
     dc_servo.TLI_BuildDeviceList()
     dc_servo.TLI_GetDeviceListExt(c.pointer(receiveBuffer), c.pointer(sizeOfBuffer))
-    return [x for x in (receiveBuffer.value).split(',')[:-1]]
+    return [x for x in (receiveBuffer.value.decode()).split(',')[:-1]]
 
 # %%
-print(dc_servo.TLI_BuildDeviceList())
-dc_servo.CC_Open(ctypes.create_string_buffer(b"27000001"))
-
+#print(dc_servo.TLI_BuildDeviceList())
+#
+SN = c.create_string_buffer(b"27251608")
 # %%
-receiveBuffer = c.c_buffer(200)
+#receiveBuffer = c.c_buffer(200)
 #dc_servo.TLI_GetDeviceList(receiveBuffer)
 
 # %% TEST
-dc_servo.CC_CheckConnection(ctypes.c_buffer(b"27000001")) 
+try:
+    print('Connecting')
+    dc_servo.CC_Open(c.byref(SN))
+    print(dc_servo.CC_CheckConnection(c.byref(SN)))
+    print('Device Position')
+    pos = dc_servo.CC_GetPosition(c.byref(SN))
+    print(pos)
+    print('Real Value')
+    print('{:.6g}'.format(pos/1919.64))
 
+finally:
+    dc_servo.CC_Close(SN)
+
+# %% Rotation Stage and DC Motor
+#    dc_servo.CC_GetPosition(c.byref(serialNo))
+#    dc_servo.CC_NeedsHoming(c.byref(serialNo))
+#    dc_servo.CC_MoveToPosition(c.byref(serialNo), int index)
+#    dc_servo.CC_Home(c.byref(serialNo))
 
 
 # %% OLD STUFF

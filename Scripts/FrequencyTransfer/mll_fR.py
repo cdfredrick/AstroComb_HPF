@@ -846,10 +846,6 @@ def keep_lock(state_db):
     # Temperature adjustment threshold
     v_high2 = (1-2*v_range_threshold)*current_limits['max'] + 2*v_range_threshold*current_limits['min']
     v_low2 = (1-2*v_range_threshold)*current_limits['min'] + 2*v_range_threshold*current_limits['max']
-# Clear 'new' data flags --------------------------------------------
-    mon['mll_fR/PID_output']['new'] = False
-    mon['mll_fR/DAQ_error_signal']['new'] = False
-    mon['mll_fR/PID_output_limits']['new'] = False
 # Check if the PID controller is on ---------------------------------
     if (local_settings['mll_fR/device_PID']['pid_action'] != True):
     # It is not locked
@@ -927,6 +923,10 @@ def keep_lock(state_db):
                     # Lower the resistance setpoint
                         settings_list = [{'tec_step':-1}, {'tec_resistance_setpoint':None}]
                         sm.update_device_settings(device_db, settings_list)
+# Clear 'new' data flags --------------------------------------------
+    mon['mll_fR/PID_output']['new'] = False
+    mon['mll_fR/DAQ_error_signal']['new'] = False
+    mon['mll_fR/PID_output_limits']['new'] = False
 
 # Lock Disabled ---------------------------------------------------------------
 def lock_disabled(state_db):

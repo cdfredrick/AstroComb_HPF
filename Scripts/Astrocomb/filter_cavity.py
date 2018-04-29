@@ -12,6 +12,7 @@ import numpy as np
 import time
 import datetime
 import logging
+import threading
 
 import os
 import sys
@@ -354,6 +355,7 @@ sm.init_monitors(mon=mon)
 timer = {}
 array = {}
 thread = {}
+lock = {}
 
 # Do nothing function ---------------------------------------------------------
 '''A functional placeholder for cases where nothing should happen.'''
@@ -369,6 +371,7 @@ def nothing(state_db):
 array['srs:v_out'] = np.array([])
 srs_record_interval = 10 # seconds
 timer['srs:record'] = get_lap(srs_record_interval)
+lock['filter_cavity/PID_output'] = threading.Lock()
 def get_srs_data():
 # Get lap number
     new_record_lap = get_lap(srs_record_interval)
@@ -390,9 +393,10 @@ def get_srs_data():
     # Update buffers and databases ----------
         # Output voltage --------------
     mon['filter_cavity/PID_output']['new'] = True
-    mon['filter_cavity/PID_output']['data'] = update_buffer(
-            mon['filter_cavity/PID_output']['data'],
-            v_out, 500)
+    with lock['filter_cavity/PID_output']:
+        mon['filter_cavity/PID_output']['data'] = update_buffer(
+                mon['filter_cavity/PID_output']['data'],
+                v_out, 500)
         # Write to the buffer
     db['filter_cavity/PID_output'].write_buffer({'V':v_out})
         # Append to the record array
@@ -722,10 +726,6 @@ def keep_lock(state_db):
     # Lock threshold
     v_high = (1-v_range_threshold)*current_limits['max'] + v_range_threshold*current_limits['min']
     v_low = (1-v_range_threshold)*current_limits['min'] + v_range_threshold*current_limits['max']
-    # Clear 'new' data flags
-    mon['filter_cavity/PID_output']['new'] = False
-    mon['filter_cavity/DAQ_error_signal']['new'] = False
-    mon['filter_cavity/PID_output_limits']['new'] = False
 # Check if the PID controller is on ---------------------------------
     if (local_settings['filter_cavity/device_PID']['pid_action'] != True):
     # It is not locked
@@ -760,7 +760,8 @@ def keep_lock(state_db):
             v_avg_slope = np.mean(np.diff(data))/(len(data)-1)
             v_expected = v_avg + v_avg_slope*len(data)/2
         # Remove the last point from the local monitor
-            mon['filter_cavity/PID_output']['data'] = data
+            with lock['filter_cavity/PID_output']:
+                mon['filter_cavity/PID_output']['data'] = data
         # Attempt a quick relock
             log_str = " Attempting quick relock"
             log.log_info(mod_name, func_name, log_str)
@@ -770,7 +771,8 @@ def keep_lock(state_db):
     # If the system is at a new lock point, reinitialize the local monitors
         if (not(lock_age_condition) and not(no_new_limits_condition)):
         # Reinitialize the output voltage monitor
-            mon['filter_cavity/PID_output']['data'] = np.array([])
+            with lock['filter_cavity/PID_output']:
+                mon['filter_cavity/PID_output']['data'] = np.array([])
             mon['filter_cavity/PID_output']['new'] = False
     # If the system is at a stable lock point, adjust the hardware voltage limits
         elif (lock_age_condition and new_output_condition):
@@ -832,6 +834,10 @@ def keep_lock(state_db):
                 db['filter_cavity/PID_output_limits'].write_record_and_buffer({'min':new_lower_limit, 'max':new_upper_limit})
                 log_str = " New output limits = {:}".format(mon['filter_cavity/PID_output_limits']['data'])
                 log.log_info(mod_name, func_name, log_str)
+# Clear 'new' data flags
+    mon['filter_cavity/PID_output']['new'] = False
+    mon['filter_cavity/DAQ_error_signal']['new'] = False
+    mon['filter_cavity/PID_output_limits']['new'] = False
 
 # Lock Disabled ---------------------------------------------------------------
 def lock_disabled(state_db):

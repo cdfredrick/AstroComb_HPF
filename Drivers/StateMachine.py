@@ -494,7 +494,7 @@ class Machine():
     @log.log_this()
     def init_states(self, STATES):
         '''Defined states are composed of collections of settings, prerequisites,
-        and routines:
+        routines, and a set of optional keyword arguments:
             settings:
                 -Only the settings particular to a state need to be listed, and
                 they should be in the same format as those in SETTINGS:
@@ -642,6 +642,11 @@ class Machine():
                     are only valid while the state is in compliance. An example
                     could be to only read values from an instrument buffer while
                     the instrument's data collection state is active.
+            keywords:
+                loop_interval:
+                    -Specifies the desired loop interval, in seconds, of the
+                    state_db. If not provided, each state automatically has the
+                    same loop interval as the main loop.
         '''
         self.STATES = STATES
 
@@ -678,17 +683,26 @@ class Machine():
                 for level in self.STATES[state_db][state]['prerequisites']:
                     self.log_failed_prereqs_timer[state_db][state][level] = {}
         
-    # Initialize state machine timer ------------------------------------------
+    # Initialize state machine timers -----------------------------------------
         '''The main loop timers are used to coordinate the threads of the main
         loop. Threads are expected to execute within this time interval. This
         is also the interval in which the main loop checks on its threads.
         '''
-        self.main_loop_interval = main_loop_interval # seconds
-        self.main_loop_timer = {}
-        self.main_loop_timer['main'] = get_lap(self.main_loop_interval)+1
+        self.loop_interval = {}
+        self.loop_timer = {}
+        # Main Loop
+        self.loop_interval['main'] = main_loop_interval # seconds
+        self.loop_timer['main'] = get_lap(self.loop_interval['main'])+1
+        # State Machines
         for state_db in self.STATE_DBs:
-            self.main_loop_timer[state_db] = get_lap(self.main_loop_interval)+1
-        self.main_loop_timer['check_for_messages'] = get_lap(self.main_loop_interval)+1
+            if 'loop_interval' in self.STATE_DBs[state_db]:
+                self.loop_interval[state_db] = self.STATE_DBs[state_db]['loop_interval']
+            else:
+                self.loop_interval[state_db] = main_loop_interval
+            self.loop_timer[state_db] = get_lap(self.loop_interval[state_db])+1
+        # Communications
+        self.loop_interval['check_for_messages'] = main_loop_interval
+        self.loop_timer['check_for_messages'] = get_lap(self.loop_interval['check_for_messages'])+1
         
     # Initialize thread events ------------------------------------------------
         for state_db in self.STATE_DBs:
@@ -735,14 +749,14 @@ class Machine():
                 log_str = " Operating state machine"
                 log.log_info(mod_name, func_name, log_str)
         # Pause ---------------------------------------------------------------
-            pause = (self.main_loop_timer['main']+1)*self.main_loop_interval - time.time()
+            pause = (self.loop_timer['main']+1)*self.loop_interval['main'] - time.time()
             if pause > 0:
                 time.sleep(pause)
-                self.main_loop_timer['main'] += 1
+                self.loop_timer['main'] += 1
             else:
-                log_str = " Execution time exceeded the set loop interval {:}s by {:.2g}s".format(self.main_loop_interval, abs(pause))
+                log_str = " Execution time exceeded the set loop interval {:}s by {:.2g}s".format(self.loop_interval['main'], abs(pause))
                 log.log_info(mod_name, func_name, log_str)
-                self.main_loop_timer['main'] = get_lap(self.main_loop_interval)+1
+                self.loop_timer['main'] = get_lap(self.loop_interval['main'])+1
     # Main Loop has exited ----------------------------------------------------
         log_str = " Shut down command accepted. Exiting the control script."
         log.log_info(mod_name, func_name, log_str)
@@ -885,14 +899,14 @@ class Machine():
                 self.db[state_db].write_buffer(self.current_state[state_db])
         
         # Pause ---------------------------------------------------------------
-            pause = (self.main_loop_timer[state_db]+1)*self.main_loop_interval - time.time()
+            pause = (self.loop_timer[state_db]+1)*self.loop_interval[state_db] - time.time()
             if pause > 0:
                 time.sleep(pause)
-                self.main_loop_timer[state_db] += 1
+                self.loop_timer[state_db] += 1
             else:
-                log_str = " Execution time exceeded the set loop interval {:}s by {:.2g}s".format(self.main_loop_interval, abs(pause))
+                log_str = " Execution time exceeded the set loop interval {:}s by {:.2g}s".format(self.loop_interval[state_db], abs(pause))
                 log.log_info(mod_name, func_name, log_str)
-                self.main_loop_timer[state_db] = get_lap(self.main_loop_interval)+1
+                self.loop_timer[state_db] = get_lap(self.loop_interval[state_db])+1
 
 # Check the Prerequisites of a Given State ------------------------------------
     @log.log_this()
@@ -1032,14 +1046,14 @@ class Machine():
                 message = self.comms.pop()
                 self.parse_message(message)
         # Pause ---------------------------------------------------------------
-            pause = (self.main_loop_timer['check_for_messages']+1)*self.main_loop_interval - time.time()
+            pause = (self.loop_timer['check_for_messages']+1)*self.loop_interval['check_for_messages'] - time.time()
             if pause > 0:
                 time.sleep(pause)
-                self.main_loop_timer['check_for_messages'] += 1
+                self.loop_timer['check_for_messages'] += 1
             else:
-                log_str = " Execution time exceeded the set loop interval {:}s by {:.2g}s".format(self.main_loop_interval, abs(pause))
+                log_str = " Execution time exceeded the set loop interval {:}s by {:.2g}s".format(self.loop_interval['check_for_messages'], abs(pause))
                 log.log_info(mod_name, func_name, log_str)
-                self.main_loop_timer['check_for_messages'] = get_lap(self.main_loop_interval)+1
+                self.loop_timer['check_for_messages'] = get_lap(self.loop_interval['check_for_messages'])+1
     
 # Parse Messages from the Communications Queue --------------------------------
     @log.log_this()

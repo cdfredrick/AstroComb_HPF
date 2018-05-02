@@ -1268,6 +1268,8 @@ class Machine():
             else:
                 self.error[err_str] = time.time()
                 log.log_exception_info(mod_name, func_name, error)
+            # Remove Error
+            self.thread[thread_name].error = None
         elif (alive == False):
             self.thread[thread_name].start()
         return error

@@ -45,6 +45,7 @@ with Public Methods:
 
 #3rd party imports
 import numpy as np
+import pyvisa
 
 #Astrocomb imports
 from Drivers.VISA import VISAObjects as vo
@@ -63,6 +64,7 @@ class OSA(vo.VISA):
             raise ac_excepts.VirtualDeviceError(
                 'Could not create OSA instrument!', self.__init__)
         self.__set_command_format()
+        self.active_trace()
     
     @log.log_this()
     def reset(self):
@@ -124,36 +126,50 @@ class OSA(vo.VISA):
         """Sweepss OSA's spectrum"""
         if (active_trace!=None):
             self.active_trace(set_trace=active_trace)
-        y_trace = self.query_ascii_values(':TRAC:DATA:Y?')
-        x_trace = self.query_ascii_values(':TRAC:DATA:X?')
+        y_trace = self.query_list(':TRAC:DATA:Y? {:}'.format(self.act_trace))
+        x_trace = self.query_list(':TRAC:DATA:X? {:}'.format(self.act_trace))
         x_trace = (np.array(x_trace)*1e9).tolist()
         data = {'x':x_trace ,'y':y_trace}
         return data
 
     @vo._auto_connect
     def get_new_single(self, active_trace=None, get_parameters=True):
-    # Setup Service Request
-        self.write(':STATus:OPERation:ENABle 1')
-        self.write('*SRE {:}'.format(1 << 7))
-    # Prepare OSA
-        self.write(':ABORt')
-        self.write('*WAI')
-        self.write('*CLS')
-        self.write('*WAI')
-    # Initiate Sweep
-        self.write(':INITIATE:SMODE SING;:INIT')
-    # Wait for SRQ
-        self.resource.wait_for_srq(timeout=None)
     # Active Trace
         if (active_trace!=None):
             self.active_trace(set_trace=active_trace)
+    # Prepare OSA
+        if (self.sweep_mode() != 'SING'):
+            self.sweep_mode('SING')
+        self.write(':ABORt')
+        self.write('*WAI')
+        wait_for_setup = True
+        while wait_for_setup:
+            try:
+                wait_for_setup = not(int(self.query('*OPC?').strip()))
+            except pyvisa.VisaIOError as visa_err:
+                if (visa_err.error_code == -1073807339): #timeout error
+                    pass
+                else:
+                    raise visa_err
+    # Initiate Sweep
+        self.write(':INITiate:IMMediate')
+    # Wait for sweep to finish
+        wait_for_sweep = True
+        while wait_for_sweep:
+            try:
+                wait_for_sweep = not(int(self.query('*OPC?').strip()))
+            except pyvisa.VisaIOError as visa_err:
+                if (visa_err.error_code == -1073807339): #timeout error
+                    pass
+                else:
+                    raise visa_err
+    # Get Data
+        data = self.spectrum()
     # Get Parameters
         if (get_parameters == True):
             params = self.sweep_parameters()
         else:
             params = {}
-    # Get Data
-        data = self.spectrum()
     # Return
         return {'data':data, 'params':params}
     
@@ -183,6 +199,8 @@ class OSA(vo.VISA):
     @vo._auto_connect
     def sensitivity(self, set_sens=None):
         '''
+        set_sens={'sense':<sensitivity>, 'chop':<chopper action>}
+        
         NHLD = NORMAL HOLD
         NAUT = NORMAL AUTO
         NORM = NORMAL
@@ -231,6 +249,7 @@ class OSA(vo.VISA):
     def active_trace(self, set_trace=None):
         if (set_trace == None):
             trace = self.query(':TRACe:ACTive?').strip()
+            self.act_trace = trace
             return trace
         else:
             if set_trace in ['TRA', 'TRB', 'TRC', 'TRD', 'TRE', 'TRF', 'TRG']:
@@ -266,7 +285,7 @@ class OSA(vo.VISA):
             return {'mode':trace, 'avg':avg_cnt}
         else:
             if set_type['mode'] in ['WRIT','FIX','MAX','MIN','RAVG','CALC']:
-                self.write(':TRACE:ATTRIBUTE {:}'.format(set_type))
+                self.write(':TRACE:ATTRIBUTE {:}'.format(set_type['mode']))
                 if ((set_type['mode'] == 'RAVG') and ('avg' in set_type)):
                     self.write(':TRACe:ATTRibute:RAVG {:}'.format(int(set_type['avg'])))
             else:
@@ -295,7 +314,7 @@ class OSA(vo.VISA):
             for trace in ['TRA', 'TRB', 'TRC', 'TRD', 'TRE', 'TRF', 'TRG']:
                 trace_type = self.trace_type(active_trace=trace)
                 fixed *= (trace_type['mode'] == 'FIX')
-            return fixed
+            return bool(fixed)
         elif (fix == True):
             for trace in ['TRA', 'TRB', 'TRC', 'TRD', 'TRE', 'TRF', 'TRG']:
                 self.trace_type(set_type={'mode':'FIX'}, active_trace=trace)

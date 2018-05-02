@@ -143,23 +143,9 @@ class VISA(object):
             self.res_man = ResourceManager()
         else:
             self.res_man = res_manager
-        self.check_resource()
         self.initialize_resource()
         self.opened = False
         self.auto_connect = True
-    
-    @_handle_visa_error
-    @log.log_this()
-    def check_resource(self):
-        """
-        Checks if the resource is valid.
-        """
-        res_list = self.res_man.list_resources()
-        if self.address in res_list:
-            self.valid_resource = True
-        else:
-            self.valid_resource = False
-            raise ACExceptions.VisaConnectionError('No device at {:}'.format(self.address), self.check_resource)
     
     @_handle_visa_error
     @log.log_this()
@@ -200,6 +186,16 @@ class VISA(object):
         Send a query command to the instrument and returns the result
         '''
         result = self.resource.query(message, delay=delay)
+        return result
+    
+    @_handle_visa_error
+    @_auto_connect
+    @log.log_this()
+    def query_list(self, message, converter='f', separator=',', delay=None):
+        '''
+        Send a query command to the instrument and returns the result
+        '''
+        result = self.resource.query_ascii_values(message, converter=converter, separator=separator, container=list, delay=delay)
         return result
 
     @_handle_visa_error

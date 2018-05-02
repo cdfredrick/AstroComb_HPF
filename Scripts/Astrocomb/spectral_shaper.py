@@ -1124,16 +1124,16 @@ STATES = {
                                 'DW':[
                                         {'fix_all':True},
                                         {'active_trace':'TRA'},
-                                        {'trace_type':[{'mode':'RAVG', 'avg':10}],
-                                         'sensitivity':[{'sense':'NORM', 'chop':'OFF'}],
+                                        {'trace_type':[{'mode':'WRIT', 'avg':1}],
+                                         'sensitivity':[{'sense':'HIGH1', 'chop':'OFF'}],
                                          'wvl_range':[{'start':690, 'stop':740}],
                                          'resolution':2, 'level_scale':'LOG'}
                                         ],
                                 'full':[
                                         {'fix_all':True},
                                         {'active_trace':'TRA'},
-                                        {'trace_type':[{'mode':'RAVG', 'avg':10}],
-                                         'sensitivity':[{'sense':'MID', 'chop':'OFF'}],
+                                        {'trace_type':[{'mode':'WRIT', 'avg':1}],
+                                         'sensitivity':[{'sense':'HIGH1', 'chop':'OFF'}],
                                          'wvl_range':[{'start':690, 'stop':1320}],
                                          'resolution':2, 'level_scale':'LOG'}
                                         ]

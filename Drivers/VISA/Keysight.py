@@ -14,11 +14,12 @@ from Drivers.Logging import ACExceptions as ac_excepts
 from Drivers.Logging import EventLog as log
 
 # %% DC Power Supply
-class E36103A(vo.Visa):
+class E36103A(vo.VISA):
 #General Methods
     @log.log_this()
     def __init__(self, res_address):
-        super(E36103A, self).__init__(res_address)
+        res_manager = vo.ResourceManager('@py')
+        super(E36103A, self).__init__(res_address, res_manager=res_manager)
         if self.resource is None:
             raise ac_excepts.VirtualDeviceError(
                 'Could not create Keysight E36103A instrument!', self.__init__)

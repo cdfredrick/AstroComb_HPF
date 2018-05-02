@@ -325,40 +325,48 @@ mon = {}
 mon['rf_oscillators/Rb_status'] = {
         'data':{},
         'device':dev['rf_oscillators/device_Rb_clock'],
-        'new':False}
+        'new':False,
+        'lock':threading.Lock()}
 # Passive
 mon['rf_oscillators/Rb_OCXO_control'] = {
         'data':{},
         'device':dev['rf_oscillators/device_Rb_clock'],
-        'new':False}
+        'new':False,
+        'lock':threading.Lock()}
 mon['rf_oscillators/Rb_detected_signals'] = {
         'data':{},
         'device':dev['rf_oscillators/device_Rb_clock'],
-        'new':False}
+        'new':False,
+        'lock':threading.Lock()}
 mon['rf_oscillators/Rb_frequency_offset'] = {
         'data':np.array([]),
         'device':dev['rf_oscillators/device_Rb_clock'],
-        'new':False}
+        'new':False,
+        'lock':threading.Lock()}
 mon['rf_oscillators/Rb_magnetic_read'] = {
         'data':np.array([]),
         'device':dev['rf_oscillators/device_Rb_clock'],
-        'new':False}
+        'new':False,
+        'lock':threading.Lock()}
 mon['rf_oscillators/Rb_time_tag'] = {
         'data':np.array([]),
         'device':dev['rf_oscillators/device_Rb_clock'],
-        'new':False}
+        'new':False,
+        'lock':threading.Lock()}
 # DAC
 for ind in range(8): # 0 through 7
     mon['rf_oscillators/Rb_dac_{:}'.format(ind)] = {
             'data':np.array([]),
             'device':dev['rf_oscillators/device_Rb_clock'],
-            'new':False}
+            'new':False,
+            'lock':threading.Lock()}
 # ADC
 for ind in range(20): # 0 through 19
     mon['rf_oscillators/Rb_adc_{:}'.format(ind)] = {
             'data':np.array([]),
             'device':dev['rf_oscillators/device_Rb_clock'],
-            'new':False}
+            'new':False,
+            'lock':threading.Lock()}
     # External ------------------------
 sm.init_monitors(mon=mon)
 
@@ -369,7 +377,6 @@ sm.init_monitors(mon=mon)
 timer = {}
 array = {}
 thread = {}
-lock = {}
 
 # Do nothing function ---------------------------------------------------------
 '''A functional placeholder for cases where nothing should happen.'''
@@ -461,20 +468,21 @@ def get_Rb_clock_data():
 # Update buffers (and records) --------------------------------------
     # Status Bytes: --------------------------------------------
         monitor_db = 'rf_oscillators/Rb_status'
-        if (mon[monitor_db]['data'] != status_bytes):
-            with lock[monitor_db]:
+        with mon[monitor_db]['lock']:
+            if (mon[monitor_db]['data'] != status_bytes):
                 mon[monitor_db]['new'] = True
                 mon[monitor_db]['data'] = status_bytes
-            db[monitor_db].write_record_and_buffer(status_bytes)
+                db[monitor_db].write_record_and_buffer(status_bytes)
         # Raise warnings
         status_warnings(status_bytes)
     # Time tag: ------------------------------------------------
         monitor_db = 'rf_oscillators/Rb_time_tag'
         if (tm_tag != None):
-            mon[monitor_db]['new'] = True
-            mon[monitor_db]['data'] = update_buffer(
-                    mon[monitor_db]['data'],
-                    tm_tag, 500)
+            with mon[monitor_db]['lock']:
+                mon[monitor_db]['new'] = True
+                mon[monitor_db]['data'] = update_buffer(
+                        mon[monitor_db]['data'],
+                        tm_tag, 500)
             db[monitor_db].write_buffer({'ns':tm_tag})
             # Append to the record array
             array[monitor_db] = np.append(array[monitor_db], tm_tag)
@@ -487,10 +495,11 @@ def get_Rb_clock_data():
                 data = ocxo_ctrl
                 keys = data.keys()
                 db[monitor_db].write_buffer(data)
-                mon[monitor_db]['new'] = True
-                mon[monitor_db]['data'] = update_buffer(
-                        mon[monitor_db]['data'],
-                        list(data.values()), 500)
+                with mon[monitor_db]['lock']:
+                    mon[monitor_db]['new'] = True
+                    mon[monitor_db]['data'] = update_buffer(
+                            mon[monitor_db]['data'],
+                            list(data.values()), 500)
                 for key in keys:
                     # Append to the record array
                     array[monitor_db+key] = np.append(array[monitor_db+key], data[key])
@@ -500,10 +509,11 @@ def get_Rb_clock_data():
                 data = dtc_sig
                 keys = data.keys()
                 db[monitor_db].write_buffer(data)
-                mon[monitor_db]['new'] = True
-                mon[monitor_db]['data'] = update_buffer(
-                        mon[monitor_db]['data'],
-                        list(data.values()), 500)
+                with mon[monitor_db]['lock']:
+                    mon[monitor_db]['new'] = True
+                    mon[monitor_db]['data'] = update_buffer(
+                            mon[monitor_db]['data'],
+                            list(data.values()), 500)
                 for key in keys:
                     # Append to the record array
                     array[monitor_db+key] = np.append(array[monitor_db+key], data[key])
@@ -512,48 +522,53 @@ def get_Rb_clock_data():
             if ((selector % 2)==0):
             # ADC (0-15): --------------------------------------
                 monitor_db = 'rf_oscillators/Rb_adc_{:}'.format(adc_port)
-                mon[monitor_db]['new'] = True
-                mon[monitor_db]['data'] = update_buffer(
-                        mon[monitor_db]['data'],
-                        adc_v, 500)
+                with mon[monitor_db]['lock']:
+                    mon[monitor_db]['new'] = True
+                    mon[monitor_db]['data'] = update_buffer(
+                            mon[monitor_db]['data'],
+                            adc_v, 500)
                 db[monitor_db].write_record_and_buffer({'V':adc_v})
             else:
                 selector = selector // 2
                 if ((selector % 2)==0):
                 # DAC (0-7): -----------------------------------
                     monitor_db = 'rf_oscillators/Rb_dac_{:}'.format(dac_port)
-                    mon[monitor_db]['new'] = True
-                    mon[monitor_db]['data'] = update_buffer(
-                            mon[monitor_db]['data'],
-                            dac_byte, 500)
+                    with mon[monitor_db]['lock']:
+                        mon[monitor_db]['new'] = True
+                        mon[monitor_db]['data'] = update_buffer(
+                                mon[monitor_db]['data'],
+                                dac_byte, 500)
                     db[monitor_db].write_record_and_buffer({'DAC':dac_byte})
                 else:
                     selector = selector // 2
                     if ((selector % 2)==0):
                     # ADC (16-19): -----------------------------
                         monitor_db = 'rf_oscillators/Rb_adc_{:}'.format(adc_port)
-                        mon[monitor_db]['new'] = True
-                        mon[monitor_db]['data'] = update_buffer(
-                                mon[monitor_db]['data'],
-                                adc_v, 500)
+                        with mon[monitor_db]['lock']:
+                            mon[monitor_db]['new'] = True
+                            mon[monitor_db]['data'] = update_buffer(
+                                    mon[monitor_db]['data'],
+                                    adc_v, 500)
                         db[monitor_db].write_record_and_buffer({'V':adc_v})
                     else:
                         selector = selector // 2
                         if ((selector % 2)==0):
                         # Frequency offset: --------------------
                             monitor_db = 'rf_oscillators/Rb_frequency_offset'
-                            mon[monitor_db]['new'] = True
-                            mon[monitor_db]['data'] = update_buffer(
-                                    mon[monitor_db]['data'],
-                                    frq_offset, 500)
+                            with mon[monitor_db]['lock']:
+                                mon[monitor_db]['new'] = True
+                                mon[monitor_db]['data'] = update_buffer(
+                                        mon[monitor_db]['data'],
+                                        frq_offset, 500)
                             db[monitor_db].write_record_and_buffer({'1e-12':frq_offset})
                         else:
                         # Magnetic reading: --------------------
                             monitor_db = 'rf_oscillators/Rb_magnetic_read'
-                            mon[monitor_db]['new'] = True
-                            mon[monitor_db]['data'] = update_buffer(
-                                    mon[monitor_db]['data'],
-                                    mag_read, 500)
+                            with mon[monitor_db]['lock']:
+                                mon[monitor_db]['new'] = True
+                                mon[monitor_db]['data'] = update_buffer(
+                                        mon[monitor_db]['data'],
+                                        mag_read, 500)
                             db[monitor_db].write_record_and_buffer({'DAC':mag_read})
     # Propogate lap numbers ------------------------------------
         timer['Rb:control'] = new_control_lap
@@ -932,7 +947,7 @@ def wait_for_locks(state_db):
     mod_name = wait_for_locks.__module__
     func_name = wait_for_locks.__name__
     monitor_db = 'rf_oscillators/Rb_status'
-    with lock[monitor_db]:
+    with mon[monitor_db]['lock']:
         if mon[monitor_db]['new']:
             locked_Rb = not(mon[monitor_db]['data']['4']['0'])
             locked_1pps = mon[monitor_db]['data']['5']['2']
@@ -956,7 +971,7 @@ def check_locks(state_db):
     mod_name = check_locks.__module__
     func_name = check_locks.__name__
     monitor_db = 'rf_oscillators/Rb_status'
-    with lock[monitor_db]:
+    with mon[monitor_db]['lock']:
         if mon[monitor_db]['new']:
             locked_Rb = not(mon[monitor_db]['data']['4']['0'])
             locked_1pps = mon[monitor_db]['data']['5']['2']

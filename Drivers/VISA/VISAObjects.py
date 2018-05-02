@@ -87,11 +87,13 @@ def _auto_connect(func):
     @wraps(func)
     def wrapper(self, *args, **kwargs):
         """Wrapped function"""
-        if self.auto_connect:
-            self.open_resource()
-            result = func(self, *args, **kwargs)
-            self.close_resource()
-            return result
+        if (self.auto_connect and not(self.opened)):
+            try:
+                self.open_resource()
+                result = func(self, *args, **kwargs)
+                return result
+            finally:
+                self.close_resource()
         else:
             result = func(self, *args, **kwargs)
             return result
@@ -142,8 +144,8 @@ class VISA(object):
         else:
             self.res_man = res_manager
         self.check_resource()
-        self.opened = False
         self.initialize_resource()
+        self.opened = False
         self.auto_connect = True
     
     @_handle_visa_error

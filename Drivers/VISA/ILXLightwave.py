@@ -71,11 +71,13 @@ def _auto_connect_las(func):
     @wraps(func)
     def wrapper(self, *args, **kwargs):
         """Wrapped function"""
-        if self.auto_connect:
-            self.open_las()
-            result = func(self, *args, **kwargs)
-            self.close_resource()
-            return result
+        if (self.auto_connect and not(self.las_opened)):
+            try:
+                self.open_las()
+                result = func(self, *args, **kwargs)
+                return result
+            finally:
+                self.close_las()
         else:
             result = func(self, *args, **kwargs)
             return result
@@ -86,11 +88,13 @@ def _auto_connect_tec(func):
     @wraps(func)
     def wrapper(self, *args, **kwargs):
         """Wrapped function"""
-        if self.auto_connect:
-            self.open_tec()
-            result = func(self, *args, **kwargs)
-            self.close_resource()
-            return result
+        if (self.auto_connect and not(self.tec_opened)):
+            try:
+                self.open_tec()
+                result = func(self, *args, **kwargs)
+                return result
+            finally:
+                self.close_tec()
         else:
             result = func(self, *args, **kwargs)
             return result
@@ -212,12 +216,20 @@ class LaserModule(LDC3900):
         super(LaserModule, self).__init__(visa_address, res_manager=res_manager)
         self.las_channel = laser_channel
         self.las_open_command = 'LAS:CHAN {:}'.format(self.las_channel)
+        self.las_opened = False
     
     @vo._handle_visa_error
     @log.log_this()
     def open_las(self):
         self.open_resource()
         self.resource.write(self.las_open_command)
+        self.las_opened = True
+    
+    @vo._handle_visa_error
+    @log.log_this()
+    def close_las(self):
+        self.close_resource()
+        self.las_opened = False
     
     @vo._handle_visa_error
     @_auto_connect_las
@@ -634,6 +646,7 @@ class TECModule(LDC3900):
     def __init__(self, visa_address, tec_channel, res_manager=None):
         super(TECModule, self).__init__(visa_address, res_manager=res_manager)
         self.tec_channel = tec_channel
+        self.tec_opened = False
         self.tec_open_command = 'LAS:CHAN {:}'.format(self.tec_channel)
         self.tec_step_size = self.tec_step()
     
@@ -642,6 +655,13 @@ class TECModule(LDC3900):
     def open_tec(self):
         self.open_resource()
         self.resource.write(self.tec_open_command)
+        self.tec_opened = True
+    
+    @vo._handle_visa_error
+    @log.log_this()
+    def close_tec(self):
+        self.close_resource()
+        self.tec_opened = False
     
     @vo._handle_visa_error
     @_auto_connect_tec

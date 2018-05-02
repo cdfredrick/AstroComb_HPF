@@ -12,6 +12,7 @@ import numpy as np
 import time
 import datetime
 import logging
+import threading
 
 import os
 import sys
@@ -22,6 +23,7 @@ from Drivers.Logging import EventLog as log
 from Drivers.StateMachine import ThreadFactory, Machine
 
 from Drivers.SNMP.TrippLite import PDUOutlet
+from Drivers.VISA.Keysight import E36103A
 
 
 # %% Helper Functions =========================================================
@@ -106,10 +108,10 @@ The databases should be grouped by function:
         variables accessible to commands from the comms queue.
 '''
 STATE_DBs = [
-        'comb_generator/state_12V_supply']
+        'comb_generator/state_12V_supply', 'comb_generator/state_IM_bias']
 DEVICE_DBs =[
-        'comb_generator/device_PDU_12V']
-MONITOR_DBs = []
+        'comb_generator/device_PDU_12V', 'comb_generator/device_IM_bias']
+MONITOR_DBs = ['comb_generator/IM_bias']
 LOG_DB = 'comb_generator'
 CONTROL_DB = 'comb_generator/control'
 MASTER_DBs = STATE_DBs + DEVICE_DBs + MONITOR_DBs + [LOG_DB] + [CONTROL_DB]
@@ -229,14 +231,30 @@ STATE_SETTINGS = {
                 'compliance':False,
                 'desired_state':'on',
                 'initialized':False,
+                'heartbeat':datetime.datetime.utcnow()},
+        'comb_generator/state_IM_bias':{
+                'state':'engineering',
+                'prerequisites':{
+                        'critical':False,
+                        'necessary':False,
+                        'optional':False},
+                'compliance':False,
+                'desired_state':'on',
+                'initialized':False,
                 'heartbeat':datetime.datetime.utcnow()}}
 DEVICE_SETTINGS = {
-        # DAQ settings
+        # PDU settings
         'comb_generator/device_PDU_12V':{
                 'driver':PDUOutlet,
                 'queue':'192.168.0.2',
                 '__init__':[['192.168.0.2', 1]],
-                'outlet_state':None, 'outlet_ramp_action':0}}
+                'outlet_state':None, 'outlet_ramp_action':0},
+        # DC IM Bias settings
+        'comb_generator/device_IM_bias':{
+                'driver':E36103A,
+                'queue':'192.168.0.8',
+                '__init__':[['TCPIP0::192.168.0.8::inst0::INSTR']],
+                'output':True, 'voltage_setpoint':None}}
 CONTROL_PARAMS = {CONTROL_DB:{}}
 SETTINGS = dict(list(STATE_SETTINGS.items()) + list(DEVICE_SETTINGS.items()) + list(CONTROL_PARAMS.items()))
 sm.init_default_settings(STATE_SETTINGS, DEVICE_SETTINGS, CONTROL_PARAMS)
@@ -299,6 +317,11 @@ that only their most recent values are accessible:
 internal databases must be entered manually into "mon".
 '''
 mon = {}
+mon['comb_generator/IM_bias'] = {
+        'data':np.array([]),
+        'device':dev['comb_generator/device_IM_bias'],
+        'new':False,
+        'lock':threading.Lock()}
     # External ------------------------
 sm.init_monitors(mon=mon)
 
@@ -308,6 +331,7 @@ sm.init_monitors(mon=mon)
 # Global Timing Variable ------------------------------------------------------
 timer = {}
 thread = {}
+array = {}
 
 # Do nothing function ---------------------------------------------------------
 '''A functional placeholder for cases where nothing should happen.'''
@@ -320,37 +344,21 @@ def nothing(state_db):
 '''This section is for defining the methods needed to monitor the system.'''
 
 # Get PDU Data -------------------------------------------------------------
-control_interval = 1 # s
-timer['monitor:control'] = get_lap(control_interval)
+pdu_control_interval = 1 # s
+timer['monitor_pdu:control'] = get_lap(pdu_control_interval)
 def get_PDU_data():
-# Get lap number
-    new_control_lap = get_lap(control_interval)
 # Update control loop variables -------------------------------------
-    if (new_control_lap > timer['monitor:control']):
-    # PDU -------------------------------------------------
-        device_db = 'comb_generator/device_PDU_12V'
-        settings_list = [{'outlet_state':None}]
-        sm.update_device_settings(device_db, settings_list, write_log=False)
-    # Pull data from external databases -------------------
-        new_data = []
-        for doc in mon['ambience/box_temperature_0']['cursor']:
-            new_data.append(doc['V'])
-         # Update buffers -----------------------
-        if len(new_data) > 0:
-            mon['ambience/box_temperature_0']['new'] = True
-            mon['ambience/box_temperature_0']['data'] = update_buffer(
-                mon['ambience/box_temperature_0']['data'],
-                new_data, 500)
-    # Propogate lap numbers -----------------------------------------
-        timer['monitor:control'] = new_control_lap
+# PDU -------------------------------------------------
+    device_db = 'comb_generator/device_PDU_12V'
+    settings_list = [{'outlet_state':None}]
+    sm.update_device_settings(device_db, settings_list, write_log=False)
 thread['get_PDU_data'] = ThreadFactory(target=get_PDU_data)
 
-
 # Monitor Outlet --------------------------------------------------------------
-def monitor(state_db):
-    new_control_lap = get_lap(control_interval)
-    if (new_control_lap > timer['monitor:control']):
-    # Pull data from SRS ----------------------------------
+def monitor_pdu(state_db):
+    new_control_lap = get_lap(pdu_control_interval)
+    if (new_control_lap > timer['monitor_pdu:control']):
+    # Pull data from PDU ----------------------------------
         thread_name = 'get_PDU_data'
         (alive, error) = thread[thread_name].check_thread()
         if error != None:
@@ -358,6 +366,81 @@ def monitor(state_db):
         if not(alive):
         # Start new thread
             thread[thread_name].start()
+    # Pull data from external databases -------------------
+        monitor_db = 'ambience/box_temperature_0'
+        new_data = []
+        for doc in mon[monitor_db]['cursor']:
+            new_data.append(doc['V'])
+         # Update buffers -----------------------
+        if len(new_data) > 0:
+            with mon[monitor_db]['lock']:
+                mon[monitor_db]['new'] = True
+                mon[monitor_db]['data'] = update_buffer(
+                    mon[monitor_db]['data'],
+                    new_data, 500)    
+    # Propogate lap numbers -----------------------------------------
+        timer['monitor_pdu:control'] = new_control_lap
+
+# Get IM Bias Data ------------------------------------------------------------
+IM_control_interval = 1 # s
+IM_record_interval = 10 # s
+timer['monitor_IM:control'] = get_lap(IM_control_interval)
+timer['monitor_IM:record'] = get_lap(IM_record_interval)
+array['IM_bias'] = np.array([])
+def get_IM_bias_data():
+# Get lap number
+    new_record_lap = get_lap(IM_record_interval)
+# Update control loop variables -------------------------------------
+# DC Supply -----------------------------------------------
+    device_db = 'comb_generator/device_IM_bias'
+# Queue
+    dev[device_db]['queue'].queue_and_wait()
+# Output State and Voltage Setpoint
+    settings_list = [{'output':None, 'voltage_setpoint':None}]
+    sm.update_device_settings(device_db, settings_list, write_log=False)
+# Measured Voltage
+    voltage = dev[device_db]['driver'].voltage()
+# De-queue
+    dev[device_db]['queue'].remove()
+# Update buffers and databases --------------------------------------
+    # Measured Bias ---------------------------------------
+    monitor_db = 'comb_generator/IM_bias'
+    array_id = 'IM_bias'
+    data = voltage
+    with mon[monitor_db]['lock']:
+        mon[monitor_db]['new'] = True
+        mon[monitor_db]['data'] = update_buffer(
+                mon[monitor_db]['data'],
+                data, 100)
+    db[monitor_db].write_buffer({'V':data})
+        # Append to the record array
+    array[array_id] = np.append(array[array_id], data)
+    if (new_record_lap > timer['monitor_IM:record']):
+        # Record statistics ---------------------
+        db[monitor_db].write_record({
+                'V':array[array_id].mean(),
+                'std':array[array_id].std(),
+                'n':array[array_id].size})
+        # Empty the array
+        array[array_id] = np.array([])
+    # Propogate lap numbers -----------------------------------------
+        timer['monitor_IM:record'] = new_record_lap
+thread['get_IM_bias_data'] = ThreadFactory(target=get_IM_bias_data)
+
+# Monitor IM Bias -------------------------------------------------------------
+def monitor_IM(state_db):
+    new_control_lap = get_lap(IM_control_interval)
+    if (new_control_lap > timer['monitor_IM:control']):
+    # Get IM Bias data
+        thread_name = 'get_IM_bias_data'
+        (alive, error) = thread[thread_name].check_thread()
+        if error != None:
+            raise error[1].with_traceback(error[2])
+        if not(alive):
+        # Start new thread
+            thread[thread_name].start()
+    # Propogate lap numbers -----------------------------------------
+        timer['monitor_IM:control'] = new_control_lap
 
 # %% Search Functions =========================================================
 '''This section is for defining the methods needed to bring the system into
@@ -370,7 +453,6 @@ def turn_outlet_off(state_db):
     device_db = 'comb_generator/device_PDU_12V'
     # Get outlet state
     outlet_state = local_settings[device_db]['outlet_state']
-    dev[device_db]['queue'].remove()
     if outlet_state != 1:
         # Outlet is on
         settings_list = [{'outlet_state':1}]
@@ -391,7 +473,6 @@ def turn_outlet_on(state_db):
     device_db = 'comb_generator/device_PDU_12V'
     # Get outlet state
     outlet_state = local_settings[device_db]['outlet_state']
-    dev[device_db]['queue'].remove()
     if outlet_state != 2:
         # Outlet is off
         settings_list = [{'outlet_state':2}]
@@ -405,12 +486,32 @@ def turn_outlet_on(state_db):
         log_str = ' Outlet on successful'
         log.log_info(mod_name, func_name, log_str)
 
+# Bias on -------------------------------------------------------------------
+def turn_bias_on(state_db):
+    mod_name = turn_bias_on.__module__
+    func_name = turn_bias_on.__name__
+    device_db = 'comb_generator/device_IM_bias'
+    # Get bias state
+    bias_state = local_settings[device_db]['output']
+    if bias_state != True:
+        # Bias is off
+        settings_list = [{'output':True}]
+        sm.update_device_settings(device_db, settings_list)
+    else:
+    # Bias is on
+        # Update the state variable
+        with sm.lock[state_db]:
+            current_state[state_db]['compliance'] = True
+            db[state_db].write_record_and_buffer(current_state[state_db])
+        log_str = ' IM bias on successful'
+        log.log_info(mod_name, func_name, log_str)
+
 
 # %% Maintain Functions =======================================================
 '''This section is for defining the methods needed to maintain the system in
     its defined states.'''
 
-# Keep Off --------------------------------------------------------------------
+# Keep Outlet Off -------------------------------------------------------------
 def keep_outlet_off(state_db):
     mod_name = keep_outlet_off.__module__
     func_name = keep_outlet_off.__name__
@@ -425,7 +526,7 @@ def keep_outlet_off(state_db):
         log_str = ' Outlet on detected, turning off 12V outlet'
         log.log_info(mod_name, func_name, log_str)
 
-# Keep On ---------------------------------------------------------------------
+# Keep Outlet On --------------------------------------------------------------
 def keep_outlet_on(state_db):
     mod_name = keep_outlet_on.__module__
     func_name = keep_outlet_on.__name__
@@ -438,6 +539,21 @@ def keep_outlet_on(state_db):
             current_state[state_db]['compliance'] = False
             db[state_db].write_record_and_buffer(current_state[state_db])
         log_str = ' Outlet off detected, turning on 12V outlet'
+        log.log_info(mod_name, func_name, log_str)
+
+# Keep Bias On ----------------------------------------------------------------
+def keep_bias_on(state_db):
+    mod_name = keep_bias_on.__module__
+    func_name = keep_bias_on.__name__
+    device_db = 'comb_generator/device_IM_bias'
+    # Get bias state
+    bias_state = local_settings[device_db]['output']
+    if bias_state != True:
+        # Bias is off
+        with sm.lock[state_db]:
+            current_state[state_db]['compliance'] = False
+            db[state_db].write_record_and_buffer(current_state[state_db])
+        log_str = ' IM bias off detected, turning on IM bias'
         log.log_info(mod_name, func_name, log_str)
 
 
@@ -587,35 +703,48 @@ STATES = {
                                      'key':'V',
                                      'test':(lambda t: (t<0.35) and (t>0.10)),
                                      'doc':"lambda t: (t<0.35) and (t>0.10)"}], # Below max temperature threshold 35 C
-                                'necessary':[],
-                                'optional':[]},
+                                        },
                         'routines':{
-                                'monitor':monitor, 'search':turn_outlet_on,
+                                'monitor':monitor_pdu, 'search':turn_outlet_on,
                                 'maintain':keep_outlet_on, 'operate':nothing}},
                 'safe':{
                         'settings':{},
                         'prerequisites':{
-                                'critical':[],
-                                'necessary':[],
-                                'optional':[],
                                 'exit':[
                                     {'db':'ambience/box_temperature_0',
                                      'key':'V',
                                      'test':(lambda t: (t<0.245) and (t>0.10)),
                                      'doc':"(lambda t: (t<0.245) and (t>0.10))"}]},
                         'routines':{
-                                'monitor':monitor, 'search':turn_outlet_off,
+                                'monitor':monitor_pdu, 'search':turn_outlet_off,
                                 'maintain':keep_outlet_off, 'operate':nothing}},
                 'engineering':{
                         'settings':{},
-                        'prerequisites':{
-                                'critical':[],
-                                'necessary':[],
-                                'optional':[]},
+                        'prerequisites':{},
                         'routines':{
                                 'monitor':nothing, 'search':nothing,
                                 'maintain':nothing, 'operate':nothing}}
-                        }                        
+                        },
+        'comb_generator/state_IM_bias':{
+                'on':{
+                        'settings':{},
+                        'prerequisites':{},
+                        'routines':{
+                                'monitor':monitor_IM, 'search':turn_bias_on,
+                                'maintain':keep_bias_on, 'operate':nothing}},
+                'safe':{
+                        'settings':{},
+                        'prerequisites':{},
+                        'routines':{
+                                'monitor':monitor_IM, 'search':nothing,
+                                'maintain':nothing, 'operate':nothing}},
+                'engineering':{
+                        'settings':{},
+                        'prerequisites':{},
+                        'routines':{
+                                'monitor':nothing, 'search':nothing,
+                                'maintain':nothing, 'operate':nothing}}
+                        }
         }
 sm.init_states(STATES)
 

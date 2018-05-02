@@ -12,6 +12,7 @@ import numpy as np
 import time
 import datetime
 import logging
+import threading
 
 import os
 import sys
@@ -343,35 +344,42 @@ mon = {}
 mon['mll_fR/TEC_temperature'] = {
         'data':np.array([]),
         'device':dev['mll_fR/device_TEC'],
-        'new':False}
+        'new':False,
+        'lock':threading.Lock()}
 mon['mll_fR/TEC_current'] = {
         'data':np.array([]),
         'device':dev['mll_fR/device_TEC'],
-        'new':False}
+        'new':False,
+        'lock':threading.Lock()}
 mon['mll_fR/TEC_event_status'] = {
         'data':np.array([]),
         'device':dev['mll_fR/device_TEC'],
-        'new':False}
+        'new':False,
+        'lock':threading.Lock()}
     # SRS -----------------------------
 mon['mll_fR/PID_output'] = {
         'data':np.array([]),
         'device':dev['mll_fR/device_PID'],
-        'new':False}
+        'new':False,
+        'lock':threading.Lock()}
 mon['mll_fR/PID_output_limits'] = {
         'data':{'max':local_settings['mll_fR/device_PID']['upper_output_limit'],
                 'min':local_settings['mll_fR/device_PID']['lower_output_limit']},
         'device':dev['mll_fR/device_PID'],
-        'new':False}
+        'new':False,
+        'lock':threading.Lock()}
     # HV Piezo ------------------------
 mon['mll_fR/HV_output'] = {
         'data':np.array([]),
         'device':dev['mll_fR/device_HV'],
-        'new':False}
+        'new':False,
+        'lock':threading.Lock()}
     # DAQ -----------------------------
 mon['mll_fR/DAQ_Vout_vs_freq'] = {
         'data':np.array([]),
         'device':dev['mll_fR/device_DAQ_Vout_vs_freq'],
-        'new':False}
+        'new':False,
+        'lock':threading.Lock()}
     # External ------------------------
 sm.init_monitors(mon=mon)
 
@@ -416,27 +424,33 @@ def get_srs_data():
     # Remove from queue
     dev[device_db]['queue'].remove()
     # Update buffers and databases ----------
-        # Output voltage ----------
-    mon['mll_fR/PID_output']['new'] = True
-    mon['mll_fR/PID_output']['data'] = update_buffer(
-            mon['mll_fR/PID_output']['data'],
-            v_out, 500)
-    db['mll_fR/PID_output'].write_buffer({'V':v_out})
+    # Output voltage ----------
+    monitor_db = 'mll_fR/PID_output'
+    array_id = 'srs:v_out'
+    data = v_out
+    with mon[monitor_db]['lock']:
+        mon[monitor_db]['new'] = True
+        mon[monitor_db]['data'] = update_buffer(
+                mon[monitor_db]['data'],
+                data, 500)
+    db[monitor_db].write_buffer({'V':data})
         # Append to the record array
-    array['srs:v_out'] = np.append(array['srs:v_out'], v_out)
+    array[array_id] = np.append(array[array_id], data)
     if new_record_lap > timer['srs:record']:
         # Record statistics
-        db['mll_fR/PID_output'].write_record({
-                'V':array['srs:v_out'].mean(),
-                'std':array['srs:v_out'].std(),
-                'n':array['srs:v_out'].size})
+        db[monitor_db].write_record({
+                'V':array[array_id].mean(),
+                'std':array[array_id].std(),
+                'n':array[array_id].size})
         # Empty the array
-        array['srs:v_out'] = np.array([])
-        # Voltage limits ----------
-    if (mon['mll_fR/PID_output_limits']['data'] != {'min':v_min, 'max':v_max}):
-        mon['mll_fR/PID_output_limits']['new'] = True
-        mon['mll_fR/PID_output_limits']['data'] = {'min':v_min, 'max':v_max}
-        db['mll_fR/PID_output_limits'].write_record_and_buffer({'min':v_min, 'max':v_max})
+        array[array_id] = np.array([])
+    # Voltage limits ----------
+    monitor_db = 'mll_fR/PID_output_limits'
+    with mon[monitor_db]['lock']:
+        if (mon[monitor_db]['data'] != {'min':v_min, 'max':v_max}):
+            mon[monitor_db]['new'] = True
+            mon[monitor_db]['data'] = {'min':v_min, 'max':v_max}
+            db[monitor_db].write_record_and_buffer({'min':v_min, 'max':v_max})
     # Propogate lap numbers ---------------------------------------------
     if new_record_lap > timer['srs:record']:
         timer['srs:record'] = new_record_lap
@@ -466,43 +480,54 @@ def get_ilx_data():
     # Remove from queue
     dev[device_db]['queue'].remove()
     # Update buffers and databases -----------
-        # TEC temp ----------------
-    mon['mll_fR/TEC_temperature']['new'] = True
-    mon['mll_fR/TEC_temperature']['data'] = update_buffer(
-            mon['mll_fR/TEC_temperature']['data'],
-            tec_temp, 100)
-    db['mll_fR/TEC_temperature'].write_buffer({'kOhm':tec_temp})
+    # TEC temp ----------------
+    monitor_db = 'mll_fR/TEC_temperature'
+    array_id = 'ilx:tec_temp'
+    data = tec_temp
+    with mon[monitor_db]['lock']:
+        mon[monitor_db]['new'] = True
+        mon[monitor_db]['data'] = update_buffer(
+                mon[monitor_db]['data'],
+                data, 100)
+    db[monitor_db].write_buffer({'kOhm':data})
             # Append to the record array
-    array['ilx:tec_temp'] = np.append(array['ilx:tec_temp'], tec_temp)
+    array[array_id] = np.append(array[array_id], data)
     if new_record_lap > timer['ilx:record']:
         # Record statistics
-        db['mll_fR/TEC_temperature'].write_record({
-                'kOhm':array['ilx:tec_temp'].mean(),
-                'std':array['ilx:tec_temp'].std(),
-                'n':array['ilx:tec_temp'].size})
+        db[monitor_db].write_record({
+                'kOhm':array[array_id].mean(),
+                'std':array[array_id].std(),
+                'n':array[array_id].size})
         # Empty the array
-        array['ilx:tec_temp'] = np.array([])
-        # TEC current -------------
-    mon['mll_fR/TEC_current']['new'] = True
-    mon['mll_fR/TEC_current']['data'] = update_buffer(
-            mon['mll_fR/TEC_current']['data'],
-            tec_curr, 100)
-    db['mll_fR/TEC_current'].write_buffer({'A':tec_curr})
+        array[array_id] = np.array([])
+    # TEC current -------------
+    monitor_db = 'mll_fR/TEC_current'
+    array_id = 'ilx:tec_curr'
+    data = tec_curr
+    with mon[monitor_db]['lock']:
+        mon[monitor_db]['new'] = True
+        mon[monitor_db]['data'] = update_buffer(
+                mon[monitor_db]['data'],
+                data, 100)
+    db[monitor_db].write_buffer({'A':data})
             # Append to the record array
-    array['ilx:tec_curr'] = np.append(array['ilx:tec_curr'], tec_curr)
+    array[array_id] = np.append(array[array_id], data)
     if new_record_lap > timer['ilx:record']:
         # Record statistics
-        db['mll_fR/TEC_current'].write_record({
-                'A':array['ilx:tec_curr'].mean(),
-                'std':array['ilx:tec_curr'].std(),
-                'n':array['ilx:tec_curr'].size})
+        db[monitor_db].write_record({
+                'A':array[array_id].mean(),
+                'std':array[array_id].std(),
+                'n':array[array_id].size})
         # Empty the array
-        array['ilx:tec_curr'] = np.array([])
-        # TEC Events --------------
-    if (mon['mll_fR/TEC_event_status']['data'] != tec_events):
-        mon['mll_fR/TEC_event_status']['new'] = True
-        mon['mll_fR/TEC_event_status']['data'] = tec_events
-        db['mll_fR/TEC_event_status'].write_record_and_buffer({'events':tec_events})
+        array[array_id] = np.array([])
+    # TEC Events --------------
+    monitor_db = 'mll_fR/TEC_event_status'
+    data = tec_events
+    with mon[monitor_db]['lock']:
+        if (mon[monitor_db]['data'] != data):
+            mon[monitor_db]['new'] = True
+            mon[monitor_db]['data'] = data
+            db[monitor_db].write_record_and_buffer({'events':data})
     # Propogate lap numbers ---------------------------------------------
     if new_record_lap > timer['ilx:record']:
         timer['ilx:record'] = new_record_lap
@@ -524,21 +549,25 @@ def get_HV_data():
     # Remove from queue
     dev[device_db]['queue'].remove()
     # Update buffers and databases ----------
-    mon['mll_fR/HV_output']['new'] = True
-    mon['mll_fR/HV_output']['data'] = update_buffer(
-            mon['mll_fR/HV_output']['data'],
-            hv_out, 100)
-    db['mll_fR/HV_output'].write_buffer({'V':hv_out})
+    monitor_db = 'mll_fR/HV_output'
+    array_id = 'hv:v_out'
+    data = hv_out
+    with mon[monitor_db]['lock']:
+        mon[monitor_db]['new'] = True
+        mon[monitor_db]['data'] = update_buffer(
+                mon[monitor_db]['data'],
+                data, 100)
+    db[monitor_db].write_buffer({'V':data})
     # Append to the record array
-    array['hv:v_out'] = np.append(array['hv:v_out'], hv_out)
+    array[array_id] = np.append(array[array_id], data)
     if new_record_lap > timer['hv:record']:
         # Record statistics
-        db['mll_fR/HV_output'].write_record({
-                'V':array['hv:v_out'].mean(),
-                'std':array['hv:v_out'].std(),
-                'n':array['hv:v_out'].size})
+        db[monitor_db].write_record({
+                'V':array[array_id].mean(),
+                'std':array[array_id].std(),
+                'n':array[array_id].size})
         # Empty the array
-        array['hv:v_out'] = np.array([])
+        array[array_id] = np.array([])
     # Propogate lap numbers ---------------------------------------------
     if new_record_lap > timer['hv:record']:
         timer['hv:record'] = new_record_lap
@@ -564,15 +593,17 @@ def monitor(state_db):
         # Start new thread
             thread[thread_name].start()
     # Pull data from external databases -------------------
+        monitor_db = 'mll_fR/DAQ_error_signal'
         new_data = []
-        for doc in mon['mll_fR/DAQ_error_signal']['cursor']:
+        for doc in mon[monitor_db]['cursor']:
             new_data.append(doc['std'])
          # Update buffers -----------------------
         if len(new_data) > 0:
-            mon['mll_fR/DAQ_error_signal']['new'] = True
-            mon['mll_fR/DAQ_error_signal']['data'] = update_buffer(
-                mon['mll_fR/DAQ_error_signal']['data'],
-                new_data, 500)
+            with mon[monitor_db]['lock']:
+                mon[monitor_db]['new'] = True
+                mon[monitor_db]['data'] = update_buffer(
+                    mon[monitor_db]['data'],
+                    new_data, 500)
     # Propogate lap numbers ---------------------------------------------
         timer['monitor:control'] = new_control_lap
 # Update passive monitoring variables -------------------------------
@@ -633,7 +664,8 @@ def find_lock(state_db, last_good_position=None):
         sm.update_device_settings(device_db, settings_list)
     # Update lock timer -----------------------------------
         timer['find_lock:locked'] = time.time()
-        mon['mll_fR/DAQ_error_signal']['new'] = False
+        with mon['mll_fR/DAQ_error_signal']['lock']:
+            mon['mll_fR/DAQ_error_signal']['new'] = False
         locked = True
 # Check if locked ---------------------------------------------------
     elif dev[device_db]['driver'].pid_action():
@@ -720,8 +752,9 @@ def find_lock(state_db, last_good_position=None):
         # Reset the piezo hysteresis ------------
         dev[device_db]['driver'].manual_output(x[0])
         # Update monitor DB ---------------------
-        mon['mll_fR/DAQ_Vout_vs_freq']['new'] = True
-        mon['mll_fR/DAQ_Vout_vs_freq']['data'] = np.array([x, y])
+        with mon['mll_fR/DAQ_Vout_vs_freq']['lock']:
+            mon['mll_fR/DAQ_Vout_vs_freq']['new'] = True
+            mon['mll_fR/DAQ_Vout_vs_freq']['data'] = np.array([x, y])
         db['mll_fR/DAQ_Vout_vs_freq'].write_record_and_buffer({'V':x.tolist(), 'Hz':y.tolist()})
     # Estimate the lock point -----------------------------
         #Coarse Estimate ------------------------
@@ -753,7 +786,8 @@ def find_lock(state_db, last_good_position=None):
             dev[device_db]['queue'].remove()
         # Update lock timer ---------------------
             timer['find_lock:locked'] = time.time()
-            mon['mll_fR/DAQ_error_signal']['new']
+            with mon['mll_fR/DAQ_error_signal']['lock']:
+                mon['mll_fR/DAQ_error_signal']['new'] = False
         else:
             '''If not, try to determine why. This could be that the temperature
             control is not on, the temperature has not settled at the setpoint,
@@ -828,18 +862,26 @@ def transfer_to_manual(state_db):
 v_std_threshold = 5 # standard deviations
 lock_age_threshold = 30.0 #s
 def keep_lock(state_db):
-    mod_name = __name__
+    mod_name = keep_lock.__module__
     func_name = keep_lock.__name__
     locked = True
-# Evaluate conditions -----------------------------------------------
-    new_output_condition = mon['mll_fR/PID_output']['new']
-    new_daq_err_signal_condition = mon['mll_fR/DAQ_error_signal']['new']
-    lock_age_condition = ((time.time() - timer['find_lock:locked']) > lock_age_threshold)
-    no_new_limits_condition = not(mon['mll_fR/PID_output_limits']['new'])
 # Get most recent values --------------------------------------------
-    if new_output_condition:
-        current_output = mon['mll_fR/PID_output']['data'][-1]
-    current_limits = mon['mll_fR/PID_output_limits']['data']
+    with mon['mll_fR/PID_output']['lock']:
+        new_output_condition = mon['mll_fR/PID_output']['new']
+        mon['mll_fR/PID_output']['new'] = False
+        output_data = mon['mll_fR/PID_output']['data'][:-1]
+        if new_output_condition:
+            current_output = mon['mll_fR/PID_output']['data'][-1]
+    with mon['mll_fR/DAQ_error_signal']['lock']:
+        new_daq_err_signal_condition = mon['mll_fR/DAQ_error_signal']['new']
+        mon['mll_fR/DAQ_error_signal']['new'] = False
+        if new_daq_err_signal_condition:
+            current_err_sig = mon['mll_fR/DAQ_error_signal']['data'][-1]
+    with mon['mll_fR/PID_output_limits']['lock']:
+        no_new_limits_condition = not(mon['mll_fR/PID_output_limits']['new'])
+        mon['mll_fR/PID_output_limits']['new'] = False
+        current_limits = mon['mll_fR/PID_output_limits']['data']
+    lock_age_condition = ((time.time() - timer['find_lock:locked']) > lock_age_threshold)
     # Lock threshold
     v_high = (1-v_range_threshold)*current_limits['max'] + v_range_threshold*current_limits['min']
     v_low = (1-v_range_threshold)*current_limits['min'] + v_range_threshold*current_limits['max']
@@ -861,7 +903,7 @@ def keep_lock(state_db):
             log.log_error(mod_name, func_name, log_str)
 # Check DAQ error signal --------------------------------------------
     if new_daq_err_signal_condition:
-        if (mon['mll_fR/DAQ_error_signal']['data'][-1] > 0.2):
+        if (current_err_sig > 0.2):
         # It is not locked
             locked = False
             log_str = " mll_fR lock lost, RMS error signal too high"
@@ -875,12 +917,12 @@ def keep_lock(state_db):
     # Check if quick relock is possible
         if (lock_age_condition and no_new_limits_condition):
         # Calculate the expected output voltage
-            data = mon['mll_fR/PID_output']['data'][:-1]
-            v_avg = np.mean(data)
-            v_avg_slope = np.mean(np.diff(data))/(len(data)-1)
-            v_expected = v_avg + v_avg_slope*len(data)/2
+            v_avg = np.mean(output_data)
+            v_avg_slope = np.mean(np.diff(output_data))/(len(output_data)-1)
+            v_expected = v_avg + v_avg_slope*len(output_data)/2
         # Remove the last point from the local monitor
-            mon['mll_fR/PID_output']['data'] = data
+            with mon['mll_fR/PID_output']['lock']:
+                mon['mll_fR/PID_output']['data'] = output_data
         # Attempt a quick relock
             log_str = " Attempting quick relock"
             log.log_info(mod_name, func_name, log_str)
@@ -890,8 +932,9 @@ def keep_lock(state_db):
     # If the system is at a new lock point, reinitialize the local monitors
         if (not(lock_age_condition) and not(no_new_limits_condition)):
         # Reinitialize the output voltage monitor
-            mon['mll_fR/PID_output']['data'] = np.array([])
-            mon['mll_fR/PID_output']['new'] = False
+            with mon['mll_fR/PID_output']['lock']:
+                mon['mll_fR/PID_output']['data'] = np.array([])
+                mon['mll_fR/PID_output']['new'] = False
     # If the system is at a stable lock point, adjust the temperature if necessary
         elif (lock_age_condition and new_output_condition):
             update = False
@@ -912,21 +955,16 @@ def keep_lock(state_db):
                 # Adjust the setpoint
                     if lower_limit_condition:
                         log_str = ' Voltage = {:.3f}, raising the resistance setpoint'.format(current_output)
-                        log.log_info(__name__, 'keep_lock', log_str)
+                        log.log_info(mod_name, func_name, log_str)
                     # Raise the resistance setpoint
                         settings_list = [{'tec_step':+1}, {'tec_resistance_setpoint':None}]
                         sm.update_device_settings(device_db, settings_list)
-                        dev[device_db]['driver'].tec_step(+1)
                     elif upper_limit_condition:
                         log_str = ' Voltage = {:.3f}, lowering the resistance setpoint'.format(current_output)
-                        log.log_info(__name__, 'keep_lock', log_str)
+                        log.log_info(mod_name, func_name, log_str)
                     # Lower the resistance setpoint
                         settings_list = [{'tec_step':-1}, {'tec_resistance_setpoint':None}]
                         sm.update_device_settings(device_db, settings_list)
-# Clear 'new' data flags --------------------------------------------
-    mon['mll_fR/PID_output']['new'] = False
-    mon['mll_fR/DAQ_error_signal']['new'] = False
-    mon['mll_fR/PID_output_limits']['new'] = False
 
 # Lock Disabled ---------------------------------------------------------------
 def lock_disabled(state_db):

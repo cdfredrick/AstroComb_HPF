@@ -20,11 +20,13 @@ def _auto_connect(func):
     @wraps(func)
     def wrapper(self, *args, **kwargs):
         """Wrapped function"""
-        if self.auto_connect:
-            self.open_port()
-            result = func(self, *args, **kwargs)
-            self.close_port()
-            return result
+        if (self.auto_connect and not(self.port_opened)):
+            try:
+                self.open_port()
+                result = func(self, *args, **kwargs)
+                return result
+            finally:
+                self.close_port()
         else:
             result = func(self, *args, **kwargs)
             return result
@@ -42,18 +44,21 @@ class SIM900(vo.VISA):
         self.port = port
         self.open_command = 'CONN '+str(self.port)+',"xyz"'
         self.close_command = 'xyz'
+        self.port_opened = False
     
     @vo._handle_visa_error
     @log.log_this()
     def open_port(self):
         self.open_resource()
         self.resource.write(self.open_command)
+        self.port_opened = True
     
     @vo._handle_visa_error
     @log.log_this()
     def close_port(self):
         self.resource.write(self.close_command)
         self.close_resource()
+        self.port_opened = False
     
     @vo._handle_visa_error
     @_auto_connect

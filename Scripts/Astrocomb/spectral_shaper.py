@@ -24,6 +24,10 @@ from Drivers.Logging import EventLog as log
 
 from Drivers.StateMachine import ThreadFactory, Machine
 
+from Drivers.Kinesis.KCube import KDC101_PRM1Z8
+from Drivers.VISA.Yokogawa import OSA
+from Drivers.VISA.Keysight import E36103A
+
 #Import the tkinter module
 import tkinter
 #Import the Pillow module
@@ -35,6 +39,12 @@ from PIL import Image, ImageTk
 '''The following are helper functionss that increase the readablity of code in
     this script. These functions are defined by the user and should not
     directly appear in the main loop of the state machine.'''
+
+# Tomorrow at Noon ------------------------------------------------------------
+def tomorrow_at_noon():
+    tomorrow = datetime.date.today()+datetime.timedelta(days=1)
+    noon = datetime.time(hour=12)
+    return datetime.datetime.combine(tomorrow,noon).timestamp()
 
 # Update a 1D circular buffer -------------------------------------------------
 @log.log_this()
@@ -191,9 +201,14 @@ The databases should be grouped by function:
         variables accessible to commands from the comms queue.
 '''
 STATE_DBs = [
-        'spectral_shaper/state_SLM']
-DEVICE_DBs =[]
-MONITOR_DBs = ['spectral_shaper/mask']
+        'spectral_shaper/state_SLM', 'spectral_shaper/state_optimizer']
+DEVICE_DBs =['spectral_shaper/device_OSA',
+             'spectral_shaper/device_rotation_mount',
+             'spectral_shaper/device_IM_bias']
+MONITOR_DBs = [
+        'spectral_shaper/mask', 'spectral_shaper/spectrum',
+        'spectral_shaper/DW', 'spectral_shaper/DW_vs_IM_bias',
+        'spectral_shaper/DW_vs_waveplate_angle']
 LOG_DB = 'spectral_shaper'
 CONTROL_DB = 'spectral_shaper/control'
 MASTER_DBs = STATE_DBs + DEVICE_DBs + MONITOR_DBs + [LOG_DB] + [CONTROL_DB]
@@ -204,7 +219,8 @@ sm.init_master_DB_names(STATE_DBs, DEVICE_DBs, MONITOR_DBs, LOG_DB, CONTROL_DB)
     needed to check prerequisites'''
 R_STATE_DBs = []
 R_DEVICE_DBs =[]
-R_MONITOR_DBs = []
+R_MONITOR_DBs = ['broadening_stage/device_rotation_mount',
+                 'comb_generator/device_IM_bias']
 READ_DBs = R_STATE_DBs + R_DEVICE_DBs + R_MONITOR_DBs
 sm.init_read_DB_names(R_STATE_DBs, R_DEVICE_DBs, R_MONITOR_DBs)
 
@@ -313,9 +329,31 @@ STATE_SETTINGS = {
                 'compliance':False,
                 'desired_state':'flat',
                 'initialized':False,
+                'heartbeat':datetime.datetime.utcnow()},
+        'spectral_shaper/state_optimizer':{
+                'state':'engineering',
+                'prerequisites':{
+                        'critical':False,
+                        'necessary':False,
+                        'optional':False},
+                'compliance':False,
+                'desired_state':'optimal',
+                'initialized':False,
                 'heartbeat':datetime.datetime.utcnow()}}
-DEVICE_SETTINGS = {}
-CONTROL_PARAMS = {CONTROL_DB:{}}
+DEVICE_SETTINGS = {
+        'spectral_shaper/device_rotation_mount':{
+                'driver':KDC101_PRM1Z8,
+                'queue':'27251608',
+                '__init__':[['27251608']]},
+        'spectral_shaper/device_OSA':{
+                'driver':OSA,
+                'queue':'GPIB0::27',
+                '__init__':[['GPIB0::27::INSTR']]},
+        'spectral_shaper/device_IM_bias':{
+                'driver':E36103A,
+                'queue':'192.168.0.8',
+                '__init__':[['TCPIP0::192.168.0.8::inst0::INSTR']]}}
+CONTROL_PARAMS = {CONTROL_DB:{'IM_optimization':{'value':tomorrow_at_noon(),'type':'float'}}}
 SETTINGS = dict(list(STATE_SETTINGS.items()) + list(DEVICE_SETTINGS.items()) + list(CONTROL_PARAMS.items()))
 sm.init_default_settings(STATE_SETTINGS, DEVICE_SETTINGS, CONTROL_PARAMS)
 
@@ -380,7 +418,28 @@ mon = {}
 mon['spectral_shaper/mask'] = {
         'data':{'path':''},
         'device':None,
-        'new':False}
+        'new':False,
+        'lock':threading.Lock()}
+mon['spectral_shaper/spectrum'] = {
+        'data':{},
+        'device':dev['spectral_shaper/device_OSA'],
+        'new':False,
+        'lock':threading.Lock()}
+mon['spectral_shaper/DW'] = {
+        'data':np.array([]),
+        'device':dev['spectral_shaper/device_OSA'],
+        'new':False,
+        'lock':threading.Lock()}
+mon['spectral_shaper/DW_vs_IM_bias'] = {
+        'data':np.array([]),
+        'device':None,
+        'new':False,
+        'lock':threading.Lock()}
+mon['spectral_shaper/DW_vs_waveplate_angle'] = {
+        'data':np.array([]),
+        'device':None,
+        'new':False,
+        'lock':threading.Lock()}
     # External ------------------------
 sm.init_monitors(mon=mon)
 
@@ -390,6 +449,9 @@ sm.init_monitors(mon=mon)
 # Global Timing Variable ------------------------------------------------------
 timer = {}
 thread = {}
+array = {}
+warning = {}
+warning_interval = 100 # seconds
 
 # Do nothing function ---------------------------------------------------------
 '''A functional placeholder for cases where nothing should happen.'''
@@ -400,6 +462,143 @@ def nothing(state_db):
 
 # %% Monitor Functions ========================================================
 '''This section is for defining the methods needed to monitor the system.'''
+
+# Get Spectrum from OSA -------------------------------------------------------
+array['spectrum'] = np.array([])
+array['DW'] = np.array([])
+spectrum_record_interval = 1000 # seconds
+timer['spectrum:record'] = get_lap(spectrum_record_interval)
+def get_spectrum():
+# Get lap number
+    new_record_lap = get_lap(spectrum_record_interval)
+# Device DB
+    device_db = 'spectral_shaper/device_OSA'
+# Wait for queue
+    dev[device_db]['queue'].queue_and_wait()
+# Setup OSA
+    settings_list = STATES['spectral_shaper/state_optimizer']['optimal']['settings']['full']
+    sm.update_device_settings(device_db, settings_list, write_log=False)
+# Get New Trace
+    thread_name = 'get_new_single'
+    (alive, error) = thread[thread_name].check_thread()
+    if error != None:
+        raise error[1].with_traceback(error[2])
+    if not(alive):
+    # Start new thread
+        thread[thread_name].start()
+# Check Progress
+    while thread[thread_name].is_alive():
+        time.sleep(0.1)
+        dev[device_db]['queue'].touch()
+# Remove from Queue
+    dev[device_db]['queue'].remove()
+# Get Result
+    (alive, error) = thread[thread_name].check_thread()
+    if error != None:
+        raise error[1].with_traceback(error[2])
+    else:
+        osa_trace = thread[thread_name].result
+# Update buffers and databases --------------------------------------
+    # Dispersive Wave -------------------------------------
+    monitor_db = 'spectral_shaper/DW'
+    array_id = 'DW'
+    data = np.max(osa_trace['data']['y'][(np.array(osa_trace['data']['x']) < 740) * (np.array(osa_trace['data']['x']) > 690)])
+    with mon[monitor_db]['lock']:
+        mon[monitor_db]['new'] = True
+        mon[monitor_db]['data'] = update_buffer(
+                mon[monitor_db]['data'],
+                data, 100)
+    db[monitor_db].write_buffer({'dBm':data})
+        # Append to the record array
+    array[array_id] = np.append(array[array_id], data)
+    if (new_record_lap > timer['spectrum:record']):
+        # Record statistics ---------------------
+        db[monitor_db].write_record({
+                'dBm':array[array_id].mean(),
+                'std':array[array_id].std(),
+                'n':array[array_id].size})
+        # Empty the array
+        array[array_id] = np.array([])
+    # Spectrum -----MUST BE LAST!!!------------------------
+    monitor_db = 'spectral_shaper/spectrum'
+    array_id = 'spectrum'
+    with mon[monitor_db]['lock']:
+        mon[monitor_db]['new'] = True
+        mon[monitor_db]['data'] = osa_trace
+    db[monitor_db].write_buffer(osa_trace)
+        # Append to the record array
+    if (array[array_id].size == 0):
+        array[array_id] = np.array(osa_trace['data']['y'])
+    else:
+        array[array_id] = np.vstack([array[array_id], osa_trace['data']['y']])    
+    if new_record_lap > timer['spectrum:record']:
+        # Record statistics ---------------------
+        y_mean = array[array_id].mean(axis=0)
+        y_std = array[array_id].std(axis=0)
+        y_n = array[array_id].shape[0]
+        osa_trace['data']['y'] = y_mean
+        osa_trace['data']['y_std'] = y_std
+        osa_trace['data']['y_n'] = y_n
+        db[monitor_db].write_record(osa_trace)
+        # Empty the array
+        array[array_id] = np.array([])
+# Propogate lap numbers ---------------------------------------------
+    if new_record_lap > timer['spectrum:record']:
+        timer['spectrum:record'] = new_record_lap
+thread['get_spectrum'] = ThreadFactory(target=get_spectrum)
+thread['get_new_single'] = ThreadFactory(target=dev['spectral_shaper/device_OSA']['driver'].get_new_single)
+thread['get_new_single_quick'] = ThreadFactory(target=dev['spectral_shaper/device_OSA']['driver'].get_new_single, kwargs={'get_parameters':False})
+
+# Record Spectrum -------------------------------------------------------------
+control_interval = 0.5 # s
+spectrum_interval = 100.0 # s
+timer['monitor_spectrum:control'] = get_lap(control_interval)
+timer['monitor_spectrum:spectrum'] = get_lap(spectrum_interval)
+def monitor_spectrum(state_db):
+# Get lap number
+    new_control_lap = get_lap(control_interval)
+    new_spectrum_lap = get_lap(spectrum_interval)
+# Update control loop variables -------------------------------------
+    if (new_control_lap > timer['monitor_spectrum:control']):
+# Pull data from external databases -----------------------
+    # Rotation Mount
+        new_data = []
+        monitor_db = 'broadening_stage/device_rotation_mount'
+        for doc in mon[monitor_db]['cursor']:
+            new_data.append(doc['position'])
+         # Update buffers -----------------------
+        if len(new_data) > 0:
+            with mon[monitor_db]['lock']:
+                mon[monitor_db]['new'] = True
+                mon[monitor_db]['data'] = update_buffer(
+                    mon[monitor_db]['data'],
+                    new_data, 500)
+    # Intensity Modulator Bias
+        new_data = []
+        monitor_db = 'comb_generator/device_IM_bias'
+        for doc in mon[monitor_db]['cursor']:
+            new_data.append(doc['voltage_setpoint'])
+         # Update buffers -----------------------
+        if len(new_data) > 0:
+            with mon[monitor_db]['lock']:
+                mon[monitor_db]['new'] = True
+                mon[monitor_db]['data'] = update_buffer(
+                    mon[monitor_db]['data'],
+                    new_data, 500)
+    # Propogate lap numbers -------------------------------
+        timer['monitor_spectrum:control'] = new_control_lap
+# Update spectrum ---------------------------------------------------
+    if (new_spectrum_lap > timer['monitor_spectrum:spectrum']):
+    # Get Spectrum ----------------------------------------
+        thread_name = 'get_spectrum'
+        (alive, error) = thread[thread_name].check_thread()
+        if error != None:
+            raise error[1].with_traceback(error[2])
+        if not(alive):
+        # Start new thread
+            thread[thread_name].start()
+    # Propogate lap numbers -------------------------------
+        timer['monitor_spectrum:spectrum'] = new_spectrum_lap    
 
 
 # %% Search Functions =========================================================
@@ -418,12 +617,111 @@ def apply_mask(state_db):
         current_state[state_db]['compliance'] = True
         db[state_db].write_record_and_buffer(current_state[state_db])
     # Update Monitor
-    mon['spectral_shaper/mask']['new'] = True
-    mon['spectral_shaper/mask']['data'] = {'path':mask_path}
-    db['spectral_shaper/mask'].write_record_and_buffer({'path':mask_path})
+    monitor_db = 'spectral_shaper/mask'
+    with mon[monitor_db]['lock']:
+        mon[monitor_db]['new'] = True
+        mon[monitor_db]['data'] = {'path':mask_path}
+    db[monitor_db].write_record_and_buffer({'path':mask_path})
     # Log
     log_str = ' Mask successfully changed to "{:}"'.format(mask_path)
     log.log_info(mod_name, func_name, log_str)
+
+# Adjust Chip Input Power (Fast) ----------------------------------------------
+DW_limits = {'max':-41, 'min':-50}
+DW_range_threshold = 1/3.6 # -43.5 and -47.5 soft limits
+minimum_angle = 28 # degrees
+def adjust_quick(state_db):
+    mod_name = adjust_quick.__module__
+    func_name = adjust_quick.__name__
+    osa_db = 'spectral_shaper/device_OSA'
+    rot_db = 'spectral_shaper/device_rotation_mount'
+# Wait for OSA queue
+    dev[osa_db]['queue'].queue_and_wait()
+# Setup OSA
+    settings_list = STATES['spectral_shaper/state_optimizer']['optimal']['settings']['DW']
+    sm.update_device_settings(osa_db, settings_list, write_log=False)
+# Adjust 2nd Stage Power
+    continue_adjusting_angle = True
+    DWs = []
+    angles = []
+    while continue_adjusting_angle:
+    # Ensure Queues
+        dev[osa_db]['queue'].queue_and_wait()
+        dev[rot_db]['queue'].queue_and_wait()
+    # Get New Trace
+        thread_name = 'get_new_single_quick'
+        (alive, error) = thread[thread_name].check_thread()
+        if error != None:
+            raise error[1].with_traceback(error[2])
+        if not(alive):
+        # Start new thread
+            thread[thread_name].start()
+    # Check Progress
+        while thread[thread_name].is_alive():
+            time.sleep(0.1)
+            dev[osa_db]['queue'].touch()
+            dev[rot_db]['queue'].touch()
+    # Get Result
+        (alive, error) = thread[thread_name].check_thread()
+        if error != None:
+            raise error[1].with_traceback(error[2])
+        else:
+            osa_trace = thread[thread_name].result
+    # Get DW
+        current_DW = np.max(osa_trace['data']['y'])
+        DWs.append(current_DW)
+    # Get Rotation Mount Position
+        current_angle = dev[rot_db]['driver'].position()
+        angles.append(current_angle)
+    # Minimum angle condition
+        lower_angle_condition = (current_angle < minimum_angle)
+    # Check compliance
+        upper_limit_condition = (current_DW > DW_limits['max'])
+        lower_limit_condition = (current_DW < DW_limits['min'])
+    # Adjust the setpoint
+        if lower_limit_condition:
+            if lower_angle_condition:
+                warning_id = 'low_angle_fast'
+                log_str = ' DW = {:.3f}dBm, but 2nd stage power is already at maximum'.format(current_DW)
+                if (warning_id in warning):
+                    if (time.time() - warning[warning_id]) > warning_interval:
+                        log.log_warning(mod_name, func_name, log_str)
+                else:
+                    warning[warning_id] = time.time()
+                    log.log_warning(mod_name, func_name, log_str)
+                continue_adjusting_angle = False
+            else:
+                log_str = ' DW = {:.3f}dBm, raising the 2nd stage power'.format(current_DW)
+                log.log_info(mod_name, func_name, log_str)
+            # Raise the 2nd stage power
+                settings_list = [{'position':current_angle-0.1}]
+                sm.update_device_settings(rot_db, settings_list, write_log=False)
+        elif upper_limit_condition:
+            log_str = ' DW = {:.3f}dBm, lowering the 2nd stage power'.format(current_DW)
+            log.log_info(mod_name, func_name, log_str)
+        # Lower the 2nd stage power
+            settings_list = [{'position':current_angle+0.1}]
+            sm.update_device_settings(rot_db, settings_list, write_log=False)
+        else:
+        # Good to go
+            continue_adjusting_angle = False
+# Remove from Queue
+    dev[osa_db]['queue'].remove()
+    dev[rot_db]['queue'].remove()
+# Record Movement
+    monitor_db = 'spectral_shaper/DW_vs_waveplate_angle'
+    with mon[monitor_db]['lock']:
+        mon[monitor_db]['new'] = True
+        mon[monitor_db]['data'] = np.array([angles, DWs])
+    db[monitor_db].write_record_and_buffer({'deg':angles, 'dBm':DWs})
+# Update State Variable
+    if not(upper_limit_condition or lower_limit_condition):
+        with sm.lock[state_db]:
+            current_state[state_db]['compliance'] = True
+            db[state_db].write_record_and_buffer(current_state[state_db])
+        # Log
+        log_str = ' Spectrum successfully optimized at {:}deg'.format(current_angle)
+        log.log_info(mod_name, func_name, log_str)
 
 
 # %% Maintain Functions =======================================================
@@ -444,11 +742,214 @@ def check_mask(state_db):
         # Log
         log_str = ' Current mask "{:}", switching to "{:}"'.format(current_mask, mask_path)
         log.log_info(mod_name, func_name, log_str)
+        # Call apply_mask
+        apply_mask(state_db)
+
+# Adjust Chip Input Power (Slow) ----------------------------------------------
+def adjust_slow(state_db):
+    mod_name = adjust_slow.__module__
+    func_name = adjust_slow.__name__
+    compliant = True
+# Get most recent values --------------------------------------------
+    with mon['spectral_shaper/DW']['lock']:
+        new_DW_condition = mon['spectral_shaper/DW']['new']
+        mon['spectral_shaper/DW']['new'] = False
+        if new_DW_condition:
+            current_DW = mon['spectral_shaper/DW']['data'][-1]
+    # DW threshold
+    DW_high = (1-DW_range_threshold)*DW_limits['max'] + DW_range_threshold*DW_limits['min']
+    DW_low = (1-DW_range_threshold)*DW_limits['min'] + DW_range_threshold*DW_limits['max']
+# Check if the output is outside the acceptable range ---------------
+    if new_DW_condition:
+        if (current_DW < DW_limits['min']) or (current_DW > DW_limits['max']):
+        # Spectrum is not optimized
+            compliant = False
+            log_str = " Spectrum not optimized, DW amplitude outside the acceptable range"
+            log.log_error(mod_name, func_name, log_str)
+# If not optimized --------------------------------------------------
+    if not(compliant):
+    # Update state variable
+        with sm.lock[state_db]:
+            current_state[state_db]['compliance'] = False
+            db[state_db].write_record_and_buffer(current_state[state_db])
+# If optimized ------------------------------------------------------
+    else:
+    # If the system is at a stable point, adjust the 2nd stage input power if necessary
+        if (new_DW_condition):
+            update = False
+            upper_limit_condition = (current_DW > DW_high)
+            lower_limit_condition = (current_DW < DW_low)
+            if upper_limit_condition or lower_limit_condition:
+                update = True
+        # Update the temperature setpoint
+            if not(update):
+                pass
+            else:
+            # If approaching the state limits, adjust the 2nd stage power setpoint
+                with mon['broadening_stage/device_rotation_mount']['lock']:
+                    mon['broadening_stage/device_rotation_mount']['new'] = False
+                    current_angle = mon['broadening_stage/device_rotation_mount']['data'][-1]
+                    lower_angle_condition = (current_angle < minimum_angle)
+            # Adjust the setpoint
+                device_db = 'spectral_shaper/device_rotation_mount'
+                if lower_limit_condition:
+                    if lower_angle_condition:
+                        warning_id = 'low_angle_slow'
+                        log_str = ' DW = {:.3f}dBm, but 2nd stage power is already at maximum'.format(current_DW)
+                        if (warning_id in warning):
+                            if (time.time() - warning[warning_id]) > warning_interval:
+                                log.log_warning(mod_name, func_name, log_str)
+                        else:
+                            warning[warning_id] = time.time()
+                            log.log_warning(mod_name, func_name, log_str)
+                    else:
+                        log_str = ' DW = {:.3f}dBm, raising the 2nd stage power'.format(current_DW)
+                        log.log_info(mod_name, func_name, log_str)
+                    # Raise the 2nd stage power
+                        settings_list = [{'position':current_angle-0.05}]
+                        sm.update_device_settings(device_db, settings_list)
+                elif upper_limit_condition:
+                    log_str = ' DW = {:.3f}dBm, lowering the 2nd stage power'.format(current_DW)
+                    log.log_info(mod_name, func_name, log_str)
+                # Lower the 2nd stage power
+                    settings_list = [{'position':current_angle+0.05}]
+                    sm.update_device_settings(device_db, settings_list)
 
 
 # %% Operate Functions ========================================================
 '''This section is for defining the methods called only when the system is in
     its defined states.'''
+
+# Optimize IM Bias ------------------------------------------------------------
+IM_bias_limits = {'max':2.5, 'min':1.5}
+IM_scan_range = 0.100 # 100mV range, +-50mV
+IM_scan_offsets = IM_scan_range*np.linspace(-0.5, +0.5, 20) # 5mV step size
+def optimize_IM_bias(state_db):
+    if (datetime.datetime.now().timestamp() > local_settings[CONTROL_DB]['IM_optimization']['value']):
+        mod_name = optimize_IM_bias.__module__
+        func_name = optimize_IM_bias.__name__
+        log_str = ' Beginning IM bias optimization'
+        log.log_info(mod_name, func_name, log_str)
+    # Device Databases
+        osa_db = 'spectral_shaper/device_OSA'
+        IM_db = 'spectral_shaper/device_IM_bias'
+    # Wait for OSA queue
+        dev[osa_db]['queue'].queue_and_wait()
+    # Setup OSA
+        settings_list = STATES['spectral_shaper/state_optimizer']['optimal']['settings']['DW']
+        sm.update_device_settings(osa_db, settings_list, write_log=False)
+    # Wait for IM Bias Queue
+        dev[IM_db]['queue'].queue_and_wait()
+    # Adjust IM Bias
+        continue_adjusting_IM = True
+        biases = []
+        DWs = []
+        while continue_adjusting_IM:
+        # Get Voltage Setpoint
+            current_bias = dev[IM_db]['driver'].voltage_setpoint()
+            v_setpoints = current_bias + IM_scan_offsets
+        # Dither IM Bias
+            for v_setpoint in v_setpoints:
+            # Ensure Queues
+                dev[osa_db]['queue'].queue_and_wait()
+                dev[IM_db]['queue'].queue_and_wait()
+            # Adjust the setpoint
+                biases.append(v_setpoint)
+                settings_list = [{'voltage_setpoint':v_setpoint}]
+                sm.update_device_settings(IM_db, settings_list, write_log=False)
+            # Get New Trace
+                thread_name = 'get_new_single_quick'
+                (alive, error) = thread[thread_name].check_thread()
+                if error != None:
+                    raise error[1].with_traceback(error[2])
+                if not(alive):
+                # Start new thread
+                    thread[thread_name].start()
+            # Check Progress
+                while thread[thread_name].is_alive():
+                    time.sleep(0.1)
+                    dev[osa_db]['queue'].touch()
+                    dev[IM_db]['queue'].touch()
+            # Get Result
+                (alive, error) = thread[thread_name].check_thread()
+                if error != None:
+                    raise error[1].with_traceback(error[2])
+                else:
+                    osa_trace = thread[thread_name].result
+            # Get DW
+                current_DW = np.max(osa_trace['data']['y'])
+                DWs.append(current_DW)
+        # Return to Original Setpoint
+            settings_list = [{'voltage_setpoint':current_bias}]
+            sm.update_device_settings(IM_db, settings_list, write_log=False)
+        # Find Maximum DW
+            # Quadratic Fit
+            poly_coef = np.polyfit(biases, DWs, 2)
+            poly_fit = np.poly1d(poly_coef)
+            stationary_point = poly_fit.deriv().roots
+            maximum_found = False
+            within_bounds = False
+            if stationary_point.size:
+            # is it a maximum?
+                maximum_found = (poly_fit.deriv(2)(stationary_point[0]) < 0)
+                within_bounds = (v_setpoints[0] <= stationary_point[0] <= v_setpoints[-1])
+            if (maximum_found and within_bounds):
+                new_setpoint = stationary_point[0]
+                continue_adjusting_IM = False
+                settings_list = [{'voltage_setpoint':new_setpoint}]
+                sm.update_device_settings(IM_db, settings_list, write_log=True)
+                log_str = ' IM bias optimized at {:}V'.format(new_setpoint)
+                log.log_info(mod_name, func_name, log_str)
+            else:
+            # Is the result sensible?
+                bounds_equal_condition = (poly_fit(v_setpoints[0]) == poly_fit(v_setpoints[-1]))
+                if bounds_equal_condition:
+                    continue_adjusting_IM = False
+                    warning_id = 'undetermined bias'
+                    log_str = ' Unable to determine IM bias adjustment'
+                    if (warning_id in warning):
+                        if (time.time() - warning[warning_id]) > warning_interval:
+                            log.log_warning(mod_name, func_name, log_str)
+                    else:
+                        warning[warning_id] = time.time()
+                        log.log_warning(mod_name, func_name, log_str)
+                else:
+                # Maximum at low or high V?
+                    high_max_condition = (poly_fit(v_setpoints[0]) < poly_fit(v_setpoints[-1]))
+                    if high_max_condition:
+                        new_setpoint = v_setpoints[-1]
+                    else:
+                        new_setpoint = v_setpoints[0]
+                    within_limits = (IM_bias_limits['min'] <= new_setpoint <= IM_bias_limits['max'])
+                if not(within_limits):
+                    continue_adjusting_IM = False
+                    warning_id = 'bias limited'
+                    log_str = ' Unable to optimize IM bias, new value of {:}V is outside the acceptable limits'.format(new_setpoint)
+                    if (warning_id in warning):
+                        if (time.time() - warning[warning_id]) > warning_interval:
+                            log.log_warning(mod_name, func_name, log_str)
+                    else:
+                        warning[warning_id] = time.time()
+                        log.log_warning(mod_name, func_name, log_str)
+                else:
+                # Adjust and repeat
+                    settings_list = [{'voltage_setpoint':new_setpoint}]
+                    sm.update_device_settings(IM_db, settings_list, write_log=False)
+                    log_str = ' Moving IM bias to {:}V'.format(new_setpoint)
+                    log.log_info(mod_name, func_name, log_str)
+    # Remove from Queue
+        dev[osa_db]['queue'].remove()
+        dev[IM_db]['queue'].remove()
+    # Record Data
+        monitor_db = 'spectral_shaper/DW_vs_IM_bias'
+        with mon[monitor_db]['lock']:
+            mon[monitor_db]['new'] = True
+            mon[monitor_db]['data'] = np.array([biases, DWs])
+        db[monitor_db].write_record_and_buffer({'V':biases, 'dBm':DWs})
+    # Schedule next optimization
+        with sm.lock[CONTROL_DB]:
+            local_settings[CONTROL_DB]['IM_optimization']['value'] = tomorrow_at_noon()
+            db[monitor_db].write_record_and_buffer(local_settings[CONTROL_DB])
 
 
 # %% States ===================================================================
@@ -592,26 +1093,87 @@ STATES = {
                         'prerequisites':{},
                         'routines':{
                                 'monitor':nothing, 'search':apply_mask,
-                                'maintain':check_mask, 'operate':nothing}},
+                                'maintain':check_mask, 'operate':nothing}
+                        },
                 'top':{
                         'settings':{'mask':"top_18-04-26_07-15.bmp"},
                         'prerequisites':{},
                         'routines':{
                                 'monitor':nothing, 'search':apply_mask,
-                                'maintain':check_mask, 'operate':nothing}},
+                                'maintain':check_mask, 'operate':nothing}
+                        },
                 'safe':{
                         'settings':{},
                         'prerequisites':{},
                         'routines':{
                                 'monitor':nothing, 'search':nothing,
-                                'maintain':nothing, 'operate':nothing}},
+                                'maintain':nothing, 'operate':nothing}
+                        },
                 'engineering':{
                         'settings':{},
                         'prerequisites':{},
                         'routines':{
                                 'monitor':nothing, 'search':nothing,
-                                'maintain':nothing, 'operate':nothing}}
-                        }                        
+                                'maintain':nothing, 'operate':nothing}
+                                }
+                        },
+        'spectral_shaper/state_optimizer':{
+                'optimal':{
+                        'settings':{
+                                'spectral_shaper/device_OSA':{},
+                                'DW':[
+                                        {'fix_all':True},
+                                        {'active_trace':'TRA'},
+                                        {'trace_type':[{'mode':'RAVG', 'avg':10}],
+                                         'sensitivity':[{'sense':'NORM', 'chop':'OFF'}],
+                                         'wvl_range':[{'start':690, 'stop':740}],
+                                         'resolution':2, 'level_scale':'LOG'}
+                                        ],
+                                'full':[
+                                        {'fix_all':True},
+                                        {'active_trace':'TRA'},
+                                        {'trace_type':[{'mode':'RAVG', 'avg':10}],
+                                         'sensitivity':[{'sense':'MID', 'chop':'OFF'}],
+                                         'wvl_range':[{'start':690, 'stop':1320}],
+                                         'resolution':2, 'level_scale':'LOG'}
+                                        ]
+                                },
+                        'prerequisites':{
+                                'necessary':[
+                                        {'db':'spectral_shaper/state_SLM',
+                                         'key':'state',
+                                         'test':(lambda state: ((state=='flat') or (state=='top'))),
+                                         'doc':"lambda state: ((state=='flat') or (state=='top'))"},
+                                        {'db':'spectral_shaper/state_SLM',
+                                         'key':'compliance',
+                                         'test':(lambda comp: (comp==True)),
+                                         'doc':"lambda comp: (comp==True)"}
+                                        ],
+                                'critical':[
+                                        {'db':'spectral_shaper/state_SLM',
+                                         'key':'initialized',
+                                         'test':(lambda init: (init==True)),
+                                         'doc':"lambda init: (init==True)"}],
+                        'routines':{
+                                'monitor':monitor_spectrum, 'search':adjust_quick,
+                                'maintain':adjust_slow, 'operate':optimize_IM_bias}
+                                }
+                },
+                'safe':{
+                        'settings':{},
+                        'prerequisites':{},
+                        'routines':{
+                                'monitor':nothing, 'search':nothing,
+                                'maintain':nothing, 'operate':nothing}
+                        },
+                'engineering':{
+                        'settings':{},
+                        'prerequisites':{},
+                        'routines':{
+                                'monitor':nothing, 'search':nothing,
+                                'maintain':nothing, 'operate':nothing}
+                        }
+                },
         }
 sm.init_states(STATES)
 

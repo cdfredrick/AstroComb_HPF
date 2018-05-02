@@ -357,59 +357,73 @@ mon = {}
 mon['mll_fR/DAQ_error_signal'] = {
         'data':np.array([]),
         'device':dev['monitor_DAQ/device_DAQ_analog_in'],
-        'new':False}
+        'new':False,
+        'lock':threading.Lock()}
 mon['filter_cavity/DAQ_error_signal'] = {
         'data':np.array([]),
         'device':dev['monitor_DAQ/device_DAQ_analog_in'],
-        'new':False}
+        'new':False,
+        'lock':threading.Lock()}
 mon['filter_cavity/heater_temperature'] = {
         'data':np.array([]),
         'device':dev['monitor_DAQ/device_DAQ_analog_in'],
-        'new':False}
+        'new':False,
+        'lock':threading.Lock()}
 mon['ambience/box_temperature_0'] = {
         'data':np.array([]),
         'device':dev['monitor_DAQ/device_DAQ_analog_in'],
-        'new':False}
+        'new':False,
+        'lock':threading.Lock()}
 mon['ambience/box_temperature_1'] = {
         'data':np.array([]),
         'device':dev['monitor_DAQ/device_DAQ_analog_in'],
-        'new':False}
+        'new':False,
+        'lock':threading.Lock()}
 mon['ambience/rack_temperature_0'] = {
         'data':np.array([]),
         'device':dev['monitor_DAQ/device_DAQ_analog_in'],
-        'new':False}
+        'new':False,
+        'lock':threading.Lock()}
 #mon['dc_power/12V_0'] = {
 #        'data':np.array([]),
 #        'device':dev['monitor_DAQ/device_DAQ_analog_in'],
-#        'new':False}
+#        'new':False,
+#        'lock':threading.Lock()}
 #mon['dc_power/12V_1'] = {
 #        'data':np.array([]),
 #        'device':dev['monitor_DAQ/device_DAQ_analog_in'],
-#        'new':False}
+#        'new':False,
+#        'lock':threading.Lock()}
 #mon['dc_power/12V_2'] = {
 #        'data':np.array([]),
 #        'device':dev['monitor_DAQ/device_DAQ_analog_in'],
-#        'new':False}
+#        'new':False,
+#        'lock':threading.Lock()}
 #mon['dc_power/12V_3'] = {
 #        'data':np.array([]),
 #        'device':dev['monitor_DAQ/device_DAQ_analog_in'],
-#        'new':False}
+#        'new':False,
+#        'lock':threading.Lock()}
 #mon['dc_power/8V_0'] = {
 #        'data':np.array([]),
 #        'device':dev['monitor_DAQ/device_DAQ_analog_in'],
-#        'new':False}
+#        'new':False,
+#        'lock':threading.Lock()}
 #mon['dc_power/15V_0'] = {
 #        'data':np.array([]),
 #        'device':dev['monitor_DAQ/device_DAQ_analog_in'],
-#        'new':False}
+#        'new':False,
+#        'lock':threading.Lock()}
 #mon['dc_power/24V_0'] = {
 #        'data':np.array([]),
 #        'device':dev['monitor_DAQ/device_DAQ_analog_in'],
-#        'new':False}
+#        'new':False,
+#        'lock':threading.Lock()}
 #mon['dc_power/24V_1'] = {
 #        'data':np.array([]),
 #        'device':dev['monitor_DAQ/device_DAQ_analog_in'],
-#        'new':False}
+#        'new':False,
+#        'lock':threading.Lock()}
     # External ------------------------
 sm.init_monitors(mon=mon)
 
@@ -534,17 +548,19 @@ thread['daq:ai_record'] = ThreadFactory(target=queue_worker, args=['daq:ai_recor
 # Buffer Ai -------------------------------------------------------------------
 def buffer_ai(monitor_db, data_mean, data_std, data_n, timestamp, channel_identifiers=None):
     if (channel_identifiers == None):
-        mon[monitor_db]['new'] = True
-        mon[monitor_db]['data'] = update_buffer(
-                mon[monitor_db]['data'],
-                data_mean, 500)
+        with mon[monitor_db]['lock']:
+            mon[monitor_db]['new'] = True
+            mon[monitor_db]['data'] = update_buffer(
+                    mon[monitor_db]['data'],
+                    data_mean, 500)
         db[monitor_db].write_buffer({'V':data_mean, 'std':data_std, 'n':data_n}, timestamp=timestamp)
     elif (type(channel_identifiers) == list):
         data_buffer = {}
-        mon[monitor_db]['new'] = True
-        mon[monitor_db]['data'] = update_buffer(
-                mon[monitor_db]['data'],
-                data_mean, 500*len(channel_identifiers))
+        with mon[monitor_db]['lock']:
+            mon[monitor_db]['new'] = True
+            mon[monitor_db]['data'] = update_buffer(
+                    mon[monitor_db]['data'],
+                    data_mean, 500*len(channel_identifiers))
         for ind, name in enumerate(channel_identifiers):
             data_buffer[name+'_V'] = data_mean[ind]
             data_buffer[name+'_std'] = data_std[ind]

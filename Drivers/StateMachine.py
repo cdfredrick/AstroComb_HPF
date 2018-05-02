@@ -64,43 +64,53 @@ class ThreadFactory():
         self.args = args
         self.kwargs = kwargs
         self.daemon = daemon
-        self.thread_errors = {}
-        self.error_lock = threading.Lock()
+        self.result = None
+        self.error = None
+        self.lock = threading.Lock()
         self.new_thread()
     
     @log.log_this()
     def handle_thread(self, func):
         """A function decorator that handles exceptions that occur during thread
         execution. Only errors from the most recent thread are held in memory
-        and are accessible through "check_thread".
+        and are accessible through "check_thread" or the "error" attribute.
         """
         @wraps(func)
         def wrapper(*args, **kwargs):
             """Wrapped function"""
             try:
                 ident = threading.get_ident()
-                self.thread_errors[ident] = None
+                # Execute the function
                 result = func(*args, **kwargs)
             except:
                 error = sys.exc_info()
-                with self.error_lock:
-                    if (self.thread.ident in self.thread_errors):
-                        self.thread_errors[ident] = error
+                with self.lock:
+                # Record the error
+                    if (self.thread.ident == ident):
+                        self.result = None
+                        self.error = error
                 raise error[1].with_traceback(error[2])
             else:
-                return result
+                with self.lock:
+                # Record the result
+                    if (self.thread.ident == ident):
+                        self.result = result
+                        self.error = None
         return wrapper
     
     @log.log_this()
     def new_thread(self):
         '''Initialzes a new threading.Thread() object
         '''
-        self.thread = threading.Thread(group=self.group,
-                                       target=self.handle_thread(self.target),
-                                       name=self.name,
-                                       args=self.args,
-                                       kwargs=self.kwargs,
-                                       daemon=self.daemon)
+        with self.lock:
+            self.thread = threading.Thread(group=self.group,
+                                           target=self.handle_thread(self.target),
+                                           name=self.name,
+                                           args=self.args,
+                                           kwargs=self.kwargs,
+                                           daemon=self.daemon)
+            self.result = None
+            self.error = None
     
     @log.log_this()
     def start(self):
@@ -108,10 +118,6 @@ class ThreadFactory():
         '''
     # Check for old thread
         if (self.thread.ident != None):
-        # Forget old errors
-            with self.error_lock:
-                if (self.thread.ident in self.thread_errors):
-                   self.thread_errors.pop(self.thread.ident)
         # Initialize new thread
             self.new_thread()
     # Start thread
@@ -119,26 +125,24 @@ class ThreadFactory():
     
     @log.log_this()
     def join(self):
-        '''Blocks until the thread has completed execution.
-        '''
+        '''Blocks until the most recent thread has completed execution.'''
         self.thread.join()
     
     @log.log_this()
     def is_alive(self):
+        '''Returns if the most recent thread is alive'''
         return self.thread.is_alive()
     
     @log.log_this()
     def check_thread(self):
-        '''Checks whether the thread is alive and whether any erros have
-        occured during its execution.
+        '''Checks whether the most recent thread is alive and whether any
+        errors have occured during its execution.
         '''
-        alive = self.thread.is_alive()
-        error = None
-        if not(alive):
-            with self.error_lock:
-                if (self.thread.ident in self.thread_errors):
-                    error = self.thread_errors.pop(self.thread.ident)
+        alive = self.is_alive()
+        error = self.error
         return (alive, error)
+    
+        
 
 
 # %% State Machine ============================================================
@@ -349,14 +353,22 @@ class Machine():
     def init_DBs(self, db={}):
         '''Creates a client and connects to all defined databases
         '''
+        
+        # Initialize "current_state" locks ----------------------------------------
+        '''These are used so that changes to the current state in one thread do
+        not overwrite changes made in another.
+        '''
         self.mongo_client = MongoDB.MongoClient()
         self.db = db
+        self.lock = {}
         for database in self.MASTER_DBs:
+            self.lock[database] = threading.Lock()
             if database in self.LOG_DB:
                 self.db[database] = MongoDB.LogMaster(self.mongo_client, database)
             else:
                 self.db[database] = MongoDB.DatabaseMaster(self.mongo_client, database)
         for database in self.READ_DBs:
+            self.lock[database] = threading.Lock()
             self.db[database] = MongoDB.DatabaseRead(self.mongo_client, database)
 
 # Start Logging ---------------------------------------------------------------
@@ -472,12 +484,14 @@ class Machine():
         that they pull data from:
             {<database path>:{'data':<placeholder for local data copy>},
                               'device':<device object>,
-                              'new':<bool>}
+                              'new':<bool>,
+                              'lock':threading.Lock()}
         -Monitors from the read database should have their cursors exhausted so
         that only their most recent values are accessible:
             {<database path>:{'data':<placeholder for local data copy>},
                               'cursor':<tailable cursor object>,
-                              'new':<bool>}
+                              'new':<bool>,
+                              'lock':threading.Lock()}
         -Only the read databases are automatically populated. The monitors for the 
         internal databases must be entered manually into "mon".
         '''
@@ -488,7 +502,8 @@ class Machine():
             self.mon[database] = {
                     'data':np.array([]),
                     'cursor':self.exhaust_cursor(cursor),
-                    'new':False}
+                    'new':False,
+                    'lock':threading.Lock()}
 
 # Initialize States -----------------------------------------------------------
     @log.log_this()
@@ -661,14 +676,9 @@ class Machine():
         self.current_state = current_state
         for state_db in self.STATE_DBs:
             self.current_state[state_db] = self.db[state_db].read_buffer()
-        
-    # Initialize "current_state" locks ----------------------------------------
-        '''These are used so that changes to the current state in one thread do
-        not overwrite changes made in another.
-        '''
-        self.lock = {}
-        for state_db in self.STATE_DBs:
-            self.lock[state_db] = threading.Lock()
+            if self.current_state[state_db]['initialized'] != False:
+                self.current_state[state_db]['initialized'] = False
+                self.db[state_db].write_record_and_buffer(self.current_state[state_db])
         
     # Initialize failed prereq log timers -------------------------------------
         '''These are set so that the logs do not become cluttered with
@@ -695,15 +705,14 @@ class Machine():
         self.loop_timer['main'] = get_lap(self.loop_interval['main'])+1
         # State Machines
         for state_db in self.STATE_DBs:
-            if 'loop_interval' in self.STATE_DBs[state_db]:
-                self.loop_interval[state_db] = self.STATE_DBs[state_db]['loop_interval']
+            if 'loop_interval' in self.STATES[state_db]:
+                self.loop_interval[state_db] = self.STATES[state_db]['loop_interval']
             else:
                 self.loop_interval[state_db] = main_loop_interval
             self.loop_timer[state_db] = get_lap(self.loop_interval[state_db])+1
         # Communications
         self.loop_interval['check_for_messages'] = main_loop_interval
         self.loop_timer['check_for_messages'] = get_lap(self.loop_interval['check_for_messages'])+1
-        
     # Initialize thread events ------------------------------------------------
         for state_db in self.STATE_DBs:
             self.event[state_db] = threading.Event()
@@ -993,45 +1002,46 @@ class Machine():
     # Wait for queue
         queued = self.dev[device_db]['queue'].queue_and_wait()
     # Push device settings
-        for settings_group in settings_list:
-            for setting in settings_group:
-            # Try sending the command to the device
-                try:
-                    result = self.send_args(getattr(self.dev[device_db]['driver'], setting),settings_group[setting])
-                except:
-                    error = sys.exc_info()
-                    # Log the device, method, and arguments
-                    if write_log:
-                        prologue_str = ' device: {:}\n method: {:}\n   args: {:}'.format(device_db, setting, settings_group[setting])
-                        log.log_info(mod_name, func_name, prologue_str)
-                    raise error[1].with_traceback(error[2])
-            # Update the local copy if it exists in the device settings
-                if (setting in self.local_settings[device_db]):
-                    if settings_group[setting] == None:
-                    # A setting was read from the device
-                        new_setting = result
-                    else:
-                    # A new setting was applied to the device
-                        new_setting = settings_group[setting]
-                    if (self.local_settings[device_db][setting] != new_setting):
-                        updated = True
-                        self.local_settings[device_db][setting] = new_setting
-            # Log the returned result if stringable
-                if write_log:
+        with self.lock[device_db]:
+            for settings_group in settings_list:
+                for setting in settings_group:
+                # Try sending the command to the device
                     try:
-                        epilogue_str = ' device: {:}\n method: {:}\n   args: {:}\n result: {:}'.format(device_db, setting, settings_group[setting], str(result))
+                        result = self.send_args(getattr(self.dev[device_db]['driver'], setting),settings_group[setting])
                     except:
-                        epilogue_str = ' device: {:}\n method: {:}\n   args: {:}\n result: {:}'.format(device_db, setting, settings_group[setting], '<result was not string-able>')
-                    log.log_info(mod_name, func_name, epilogue_str)
-            # Touch queue (prevent timeout)
-                self.dev[device_db]['queue'].touch()
-    # Remove from queue
-        if not(queued):
-        # Remove from queue if it wasn't there to begin with.
-            self.dev[device_db]['queue'].remove()
-    # Update the database if the local copy changed
-        if updated:
-            self.db[device_db].write_record_and_buffer(self.local_settings[device_db])
+                        error = sys.exc_info()
+                        # Log the device, method, and arguments
+                        if write_log:
+                            prologue_str = ' device: {:}\n method: {:}\n   args: {:}'.format(device_db, setting, settings_group[setting])
+                            log.log_info(mod_name, func_name, prologue_str)
+                        raise error[1].with_traceback(error[2])
+                # Update the local copy if it exists in the device settings
+                    if (setting in self.local_settings[device_db]):
+                        if settings_group[setting] == None:
+                        # A setting was read from the device
+                            new_setting = result
+                        else:
+                        # A new setting was applied to the device
+                            new_setting = settings_group[setting]
+                        if (self.local_settings[device_db][setting] != new_setting):
+                            updated = True
+                            self.local_settings[device_db][setting] = new_setting
+                # Log the returned result if stringable
+                    if write_log:
+                        try:
+                            epilogue_str = ' device: {:}\n method: {:}\n   args: {:}\n result: {:}'.format(device_db, setting, settings_group[setting], str(result))
+                        except:
+                            epilogue_str = ' device: {:}\n method: {:}\n   args: {:}\n result: {:}'.format(device_db, setting, settings_group[setting], '<result was not string-able>')
+                        log.log_info(mod_name, func_name, epilogue_str)
+                # Touch queue (prevent timeout)
+                    self.dev[device_db]['queue'].touch()
+        # Remove from queue
+            if not(queued):
+            # Remove from queue if it wasn't there to begin with.
+                self.dev[device_db]['queue'].remove()
+        # Update the database if the local copy changed
+            if updated:
+                self.db[device_db].write_record_and_buffer(self.local_settings[device_db])
 
 # Check the Communications Queue ----------------------------------------------
     @log.log_this()
@@ -1109,24 +1119,25 @@ class Machine():
         # If requesting to change control parameters,
             if ('control_parameter' in message):
                 updated = False
-                for parameter in message['control_parameter']:
-                # Update the control parameter
-                    if (parameter in self.local_settings[self.CONTROL_DB]):
-                    # Convert new parameter to the correct type
-                        parameter_type = self.local_settings[self.CONTROL_DB][parameter]['type']
-                        try:
-                            result = self.convert_type(message['control_parameter'][parameter], parameter_type)
-                        except:
-                            result_str = ' Could not convert {:} to {:} for control parameter {:}'.format(message['control_parameter'][parameter], parameter_type, parameter)
-                            log.log_info(mod_name, func_name, result_str)
-                        else:
-                            if (self.local_settings[self.CONTROL_DB][parameter]['value'] != result):
-                        # Update the local copy
-                                updated = True
-                                self.local_settings[self.CONTROL_DB][parameter]['value'] = result
-            # Update the database if the local copy changed
-                if updated:
-                    self.db[self.CONTROL_DB].write_record_and_buffer(self.local_settings[self.CONTROL_DB])
+                with self.lock[self.CONTROL_DB]:
+                    for parameter in message['control_parameter']:
+                    # Update the control parameter
+                        if (parameter in self.local_settings[self.CONTROL_DB]):
+                        # Convert new parameter to the correct type
+                            parameter_type = self.local_settings[self.CONTROL_DB][parameter]['type']
+                            try:
+                                result = self.convert_type(message['control_parameter'][parameter], parameter_type)
+                            except:
+                                result_str = ' Could not convert {:} to {:} for control parameter {:}'.format(message['control_parameter'][parameter], parameter_type, parameter)
+                                log.log_info(mod_name, func_name, result_str)
+                            else:
+                                if (self.local_settings[self.CONTROL_DB][parameter]['value'] != result):
+                            # Update the local copy
+                                    updated = True
+                                    self.local_settings[self.CONTROL_DB][parameter]['value'] = result
+                # Update the database if the local copy changed
+                    if updated:
+                        self.db[self.CONTROL_DB].write_record_and_buffer(self.local_settings[self.CONTROL_DB])
     
 # Convert Type from a "type string" -------------------------------------------
     @log.log_this()

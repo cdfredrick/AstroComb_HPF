@@ -329,22 +329,26 @@ mon = {}
 mon['filter_cavity/PID_output'] = {
         'data':np.array([]),
         'device':dev['filter_cavity/device_PID'],
-        'new':False}
+        'new':False,
+        'lock':threading.Lock()}
 mon['filter_cavity/PID_output_limits'] = {
         'data':{'max':local_settings['filter_cavity/device_PID']['upper_output_limit'],
                 'min':local_settings['filter_cavity/device_PID']['lower_output_limit']},
         'device':dev['filter_cavity/device_PID'],
-        'new':False}
+        'new':False,
+        'lock':threading.Lock()}
     # HV Piezo ------------------------
 mon['filter_cavity/HV_output'] = {
         'data':np.array([]),
         'device':dev['filter_cavity/device_HV'],
-        'new':False}
+        'new':False,
+        'lock':threading.Lock()}
     # DAQ -----------------------------
 mon['filter_cavity/DAQ_Vout_vs_reflect'] = {
         'data':np.array([]),
         'device':dev['filter_cavity/device_DAQ_Vout_vs_reflect'],
-        'new':False}
+        'new':False,
+        'lock':threading.Lock()}
     # External ------------------------
 sm.init_monitors(mon=mon)
 
@@ -355,7 +359,6 @@ sm.init_monitors(mon=mon)
 timer = {}
 array = {}
 thread = {}
-lock = {}
 
 # Do nothing function ---------------------------------------------------------
 '''A functional placeholder for cases where nothing should happen.'''
@@ -371,7 +374,6 @@ def nothing(state_db):
 array['srs:v_out'] = np.array([])
 srs_record_interval = 10 # seconds
 timer['srs:record'] = get_lap(srs_record_interval)
-lock['filter_cavity/PID_output'] = threading.Lock()
 def get_srs_data():
 # Get lap number
     new_record_lap = get_lap(srs_record_interval)
@@ -391,29 +393,34 @@ def get_srs_data():
     # Remove from queue
     dev[device_db]['queue'].remove()
     # Update buffers and databases ----------
-        # Output voltage --------------
-    mon['filter_cavity/PID_output']['new'] = True
-    with lock['filter_cavity/PID_output']:
-        mon['filter_cavity/PID_output']['data'] = update_buffer(
-                mon['filter_cavity/PID_output']['data'],
-                v_out, 500)
+    # Output voltage --------------
+    monitor_db = 'filter_cavity/PID_output'
+    array_id = 'srs:v_out'
+    data = v_out
+    with mon[monitor_db]['lock']:
+        mon[monitor_db]['new'] = True
+        mon[monitor_db]['data'] = update_buffer(
+                mon[monitor_db]['data'],
+                data, 500)
         # Write to the buffer
-    db['filter_cavity/PID_output'].write_buffer({'V':v_out})
+    db[monitor_db].write_buffer({'V':data})
         # Append to the record array
-    array['srs:v_out'] = np.append(array['srs:v_out'], v_out)
+    array[array_id] = np.append(array[array_id], data)
     if new_record_lap > timer['srs:record']:
         # Record statistics
-        db['filter_cavity/PID_output'].write_record({
-                'V':array['srs:v_out'].mean(),
-                'std':array['srs:v_out'].std(),
-                'n':array['srs:v_out'].size})
+        db[monitor_db].write_record({
+                'V':array[array_id].mean(),
+                'std':array[array_id].std(),
+                'n':array[array_id].size})
         # Empty the array
-        array['srs:v_out'] = np.array([])
-        # Voltage limits ----------
-    if (mon['filter_cavity/PID_output_limits']['data'] != {'min':v_min, 'max':v_max}):
-        mon['filter_cavity/PID_output_limits']['new'] = True
-        mon['filter_cavity/PID_output_limits']['data'] = {'min':v_min, 'max':v_max}
-        db['filter_cavity/PID_output_limits'].write_record_and_buffer({'min':v_min, 'max':v_max})
+        array[array_id] = np.array([])
+    # Voltage limits ----------
+    monitor_db = 'filter_cavity/PID_output_limits'
+    with mon[monitor_db]['lock']:
+        if (mon[monitor_db]['data'] != {'min':v_min, 'max':v_max}):
+            mon[monitor_db]['new'] = True
+            mon[monitor_db]['data'] = {'min':v_min, 'max':v_max}
+            db[monitor_db].write_record_and_buffer({'min':v_min, 'max':v_max})
     # Propogate lap numbers ---------------------------------------------
     if new_record_lap > timer['srs:record']:
         timer['srs:record'] = new_record_lap
@@ -435,21 +442,25 @@ def get_HV_data():
     # Remove from queue
     dev[device_db]['queue'].remove()
     # Update buffers and databases ----------
-    mon['filter_cavity/HV_output']['new'] = True
-    mon['filter_cavity/HV_output']['data'] = update_buffer(
-            mon['filter_cavity/HV_output']['data'],
-            hv_out, 100)
-    db['filter_cavity/HV_output'].write_buffer({'V':hv_out})
+    monitor_db = 'filter_cavity/HV_output'
+    array_id = 'hv:v_out'
+    data = hv_out
+    with mon[monitor_db]['lock']:
+        mon[monitor_db]['new'] = True
+        mon[monitor_db]['data'] = update_buffer(
+                mon[monitor_db]['data'],
+                data, 100)
+    db[monitor_db].write_buffer({'V':data})
     # Append to the record array
-    array['hv:v_out'] = np.append(array['hv:v_out'], hv_out)
+    array[array_id] = np.append(array[array_id], data)
     if new_record_lap > timer['hv:record']:
         # Record statistics
-        db['filter_cavity/HV_output'].write_record({
-                'V':array['hv:v_out'].mean(),
-                'std':array['hv:v_out'].std(),
-                'n':array['hv:v_out'].size})
+        db[monitor_db].write_record({
+                'V':array[array_id].mean(),
+                'std':array[array_id].std(),
+                'n':array[array_id].size})
         # Empty the array
-        array['hv:v_out'] = np.array([])
+        array[array_id] = np.array([])
     # Propogate lap numbers ---------------------------------------------
     if new_record_lap > timer['hv:record']:
         timer['hv:record'] = new_record_lap
@@ -474,15 +485,17 @@ def monitor(state_db):
         # Start new thread
             thread[thread_name].start()
     # Pull data from external databases -------------------
+        monitor_db = 'filter_cavity/DAQ_error_signal'
         new_data = []
-        for doc in mon['filter_cavity/DAQ_error_signal']['cursor']:
+        for doc in mon[monitor_db]['cursor']:
             new_data.append(doc['V'])
          # Update buffers -----------------------
         if len(new_data) > 0:
-            mon['filter_cavity/DAQ_error_signal']['new'] = True
-            mon['filter_cavity/DAQ_error_signal']['data'] = update_buffer(
-                mon['filter_cavity/DAQ_error_signal']['data'],
-                new_data, 500)
+            with mon[monitor_db]['lock']:
+                mon[monitor_db]['new'] = True
+                mon[monitor_db]['data'] = update_buffer(
+                    mon[monitor_db]['data'],
+                    new_data, 500)
     # Propogate lap numbers ---------------------------------------------
         timer['monitor:control'] = new_control_lap
 # Update passive monitoring variables -------------------------------
@@ -495,15 +508,17 @@ def monitor(state_db):
         # Start new thread
             thread[thread_name].start()
     # Pull data from external databases -------------------
+        monitor_db = 'filter_cavity/TEC_temperature'
         new_data = []
-        for doc in mon['filter_cavity/TEC_temperature']['cursor']:
+        for doc in mon[monitor_db]['cursor']:
             new_data.append(doc['V'])
          # Update buffers -----------------------
         if len(new_data) > 0:
-            mon['filter_cavity/TEC_temperature']['new'] = True
-            mon['filter_cavity/TEC_temperature']['data'] = update_buffer(
-                mon['filter_cavity/TEC_temperature']['data'],
-                new_data, 500)
+            with mon[monitor_db]['lock']:
+                mon[monitor_db]['new'] = True
+                mon[monitor_db]['data'] = update_buffer(
+                    mon[monitor_db]['data'],
+                    new_data, 500)
     # Propogate lap numbers ---------------------------------------------
         timer['monitor:passive'] = new_passive_lap
 
@@ -544,7 +559,8 @@ def find_lock(state_db, last_good_position=None):
         sm.update_device_settings(device_db, settings_list)
     # Update lock timer -----------------------------------
         timer['find_lock:locked'] = time.time()
-        mon['filter_cavity/DAQ_error_signal']['new'] = False
+        with mon['filter_cavity/DAQ_error_signal']['lock']:
+            mon['filter_cavity/DAQ_error_signal']['new'] = False
         locked = True
 # Check if locked ---------------------------------------------------
     elif dev[device_db]['driver'].pid_action():
@@ -633,8 +649,9 @@ def find_lock(state_db, last_good_position=None):
         # Reset the piezo hysteresis ------------
         dev[device_db]['driver'].manual_output(x[0])
         # Update monitor DB ---------------------
-        mon['filter_cavity/DAQ_Vout_vs_reflect']['new'] = True
-        mon['filter_cavity/DAQ_Vout_vs_reflect']['data'] = np.array([x, y])
+        with mon['filter_cavity/DAQ_Vout_vs_reflect']['lock']:
+            mon['filter_cavity/DAQ_Vout_vs_reflect']['new'] = True
+            mon['filter_cavity/DAQ_Vout_vs_reflect']['data'] = np.array([x, y])
         db['filter_cavity/DAQ_Vout_vs_reflect'].write_record_and_buffer({'V_out':x.tolist(), 'V_ref':y.tolist()})
     # Estimate the lock point -----------------------------
         #Coarse Estimate ------------------------
@@ -664,7 +681,8 @@ def find_lock(state_db, last_good_position=None):
             dev[device_db]['queue'].remove()
         # Update lock timer ---------------------
             timer['find_lock:locked'] = time.time()
-            mon['filter_cavity/DAQ_error_signal']['new'] = False
+            with mon['filter_cavity/DAQ_error_signal']['lock']:
+                mon['filter_cavity/DAQ_error_signal']['new'] = False
         else:
             '''If not, something is wrong. This could be that the temperature
             control is not on, the temperature has not settled at the setpoint,
@@ -714,15 +732,23 @@ def keep_lock(state_db):
     mod_name = __name__
     func_name = keep_lock.__name__
     locked = True
-# Evaluate conditions
-    new_output_condition = mon['filter_cavity/PID_output']['new']
-    new_daq_err_signal_condition = mon['filter_cavity/DAQ_error_signal']['new']
-    lock_age_condition = ((time.time() - timer['find_lock:locked']) > lock_age_threshold)
-    no_new_limits_condition = not(mon['filter_cavity/PID_output_limits']['new'])
 # Get most recent values --------------------------------------------
-    if new_output_condition:
-        current_output = mon['filter_cavity/PID_output']['data'][-1]
-    current_limits = mon['filter_cavity/PID_output_limits']['data']
+    with mon['filter_cavity/PID_output']['lock']:
+        new_output_condition = mon['filter_cavity/PID_output']['new']
+        mon['filter_cavity/PID_output']['new'] = False
+        output_data = mon['filter_cavity/PID_output']['data'][:-1]
+        if new_output_condition:
+            current_output = mon['filter_cavity/PID_output']['data'][-1]
+    with mon['filter_cavity/DAQ_error_signal']['lock']:
+        new_daq_err_signal_condition = mon['filter_cavity/DAQ_error_signal']['new']
+        mon['filter_cavity/DAQ_error_signal']['new'] = False
+        if new_daq_err_signal_condition:
+            current_err_sig = mon['filter_cavity/DAQ_error_signal']['data'][-1]
+    with mon['filter_cavity/PID_output_limits']['lock']:
+        no_new_limits_condition = not(mon['filter_cavity/PID_output_limits']['new'])
+        mon['filter_cavity/PID_output_limits']['new'] = False
+        current_limits = mon['filter_cavity/PID_output_limits']['data']
+    lock_age_condition = ((time.time() - timer['find_lock:locked']) > lock_age_threshold)
     # Lock threshold
     v_high = (1-v_range_threshold)*current_limits['max'] + v_range_threshold*current_limits['min']
     v_low = (1-v_range_threshold)*current_limits['min'] + v_range_threshold*current_limits['max']
@@ -741,7 +767,7 @@ def keep_lock(state_db):
             log.log_error(mod_name, func_name, log_str)
 # Check DAQ error signal --------------------------------------------
     if new_daq_err_signal_condition:
-        if (mon['filter_cavity/DAQ_error_signal']['data'][-1] > 0.5):
+        if (current_err_sig > 0.5):
         # It is not locked
             locked = False
             log_str = " filter_cavity lock lost, reflection signal too high"
@@ -755,13 +781,12 @@ def keep_lock(state_db):
     # Check if quick relock is possible
         if (lock_age_condition and no_new_limits_condition):
         # Calculate the expected output voltage
-            data = mon['filter_cavity/PID_output']['data'][:-1]
-            v_avg = np.mean(data)
-            v_avg_slope = np.mean(np.diff(data))/(len(data)-1)
-            v_expected = v_avg + v_avg_slope*len(data)/2
+            v_avg = np.mean(output_data)
+            v_avg_slope = np.mean(np.diff(output_data))/(len(output_data)-1)
+            v_expected = v_avg + v_avg_slope*len(output_data)/2
         # Remove the last point from the local monitor
-            with lock['filter_cavity/PID_output']:
-                mon['filter_cavity/PID_output']['data'] = data
+            with mon['filter_cavity/PID_output']['lock']:
+                mon['filter_cavity/PID_output']['data'] = output_data
         # Attempt a quick relock
             log_str = " Attempting quick relock"
             log.log_info(mod_name, func_name, log_str)
@@ -771,17 +796,16 @@ def keep_lock(state_db):
     # If the system is at a new lock point, reinitialize the local monitors
         if (not(lock_age_condition) and not(no_new_limits_condition)):
         # Reinitialize the output voltage monitor
-            with lock['filter_cavity/PID_output']:
+            with mon['filter_cavity/PID_output']['lock']:
                 mon['filter_cavity/PID_output']['data'] = np.array([])
-            mon['filter_cavity/PID_output']['new'] = False
+                mon['filter_cavity/PID_output']['new'] = False
     # If the system is at a stable lock point, adjust the hardware voltage limits
         elif (lock_age_condition and new_output_condition):
         # Calculate the new limit thresholds
-            data = mon['filter_cavity/PID_output']['data']
-            v_avg = np.mean(data)
-            v_avg_slope = np.mean(np.diff(data))/(len(data)-1)
-            v_expected = v_avg + v_avg_slope*len(data)/2
-            v_std = np.std(data - v_avg_slope*np.arange(len(data)))
+            v_avg = np.mean(output_data)
+            v_avg_slope = np.mean(np.diff(output_data))/(len(output_data)-1)
+            v_expected = v_avg + v_avg_slope*len(output_data)/2
+            v_std = np.std(output_data - v_avg_slope*np.arange(len(output_data)))
             new_upper_limit = round(v_expected + (v_std_threshold*v_std)/(1-2*v_range_threshold),2)
             new_lower_limit = round(v_expected - (v_std_threshold*v_std)/(1-2*v_range_threshold),2)
             if (new_upper_limit - new_lower_limit) < 0.5: #TODO: determine optimal thresholds
@@ -829,15 +853,12 @@ def keep_lock(state_db):
                             'lower_output_limit':new_lower_limit}
                 sm.update_device_settings(device_db, settings_list, write_log=False)
             # Update the voltage limit monitor
-                mon['filter_cavity/PID_output_limits']['new'] = True
-                mon['filter_cavity/PID_output_limits']['data'] = {'min':new_lower_limit, 'max':new_upper_limit}
+                with mon['filter_cavity/PID_output_limits']['lock']:
+                    mon['filter_cavity/PID_output_limits']['new'] = True
+                    mon['filter_cavity/PID_output_limits']['data'] = {'min':new_lower_limit, 'max':new_upper_limit}
                 db['filter_cavity/PID_output_limits'].write_record_and_buffer({'min':new_lower_limit, 'max':new_upper_limit})
                 log_str = " New output limits = {:}".format(mon['filter_cavity/PID_output_limits']['data'])
                 log.log_info(mod_name, func_name, log_str)
-# Clear 'new' data flags
-    mon['filter_cavity/PID_output']['new'] = False
-    mon['filter_cavity/DAQ_error_signal']['new'] = False
-    mon['filter_cavity/PID_output_limits']['new'] = False
 
 # Lock Disabled ---------------------------------------------------------------
 def lock_disabled(state_db):

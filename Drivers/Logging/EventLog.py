@@ -75,7 +75,7 @@ def log_this(prologue_str='', epilogue_str='', prologue_level=logging.DEBUG, epi
     def function_decorator(func):
         """Actual function decorator"""
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def log_func(*args, **kwargs):
             """The new function wtih logging"""
             logger = logging.getLogger('{:}.{:}.{:}'.format(LOGGER_NAME,func.__module__,func.__name__))
             message = 'Prologue:\t'+ prologue_str + '\nInput:\t' + str(args) +','+ str(kwargs)
@@ -90,7 +90,7 @@ def log_this(prologue_str='', epilogue_str='', prologue_level=logging.DEBUG, epi
             logger.log(epilogue_level, message)
             # Return the result
             return result
-        return wrapper
+        return log_func
     return function_decorator
 
 def log(mod_name, func_name, log_str, level):

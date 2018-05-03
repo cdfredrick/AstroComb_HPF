@@ -18,9 +18,9 @@ from functools import wraps
 def _auto_connect(func):
     """A function decorator that handles automatic connections."""
     @wraps(func)
-    def wrapper(self, *args, **kwargs):
+    def auto_connect(self, *args, **kwargs):
         """Wrapped function"""
-        if (self.auto_connect and not(self.port_opened)):
+        if (self.auto_connect and not(self.opened)):
             try:
                 self.open_port()
                 result = func(self, *args, **kwargs)
@@ -30,7 +30,7 @@ def _auto_connect(func):
         else:
             result = func(self, *args, **kwargs)
             return result
-    return wrapper
+    return auto_connect
 
 
 # %% SIM900 Mainframe
@@ -44,21 +44,21 @@ class SIM900(vo.VISA):
         self.port = port
         self.open_command = 'CONN '+str(self.port)+',"xyz"'
         self.close_command = 'xyz'
-        self.port_opened = False
+        self.opened = False
     
     @vo._handle_visa_error
     @log.log_this()
     def open_port(self):
         self.open_resource()
         self.resource.write(self.open_command)
-        self.port_opened = True
+        self.opened = True
     
     @vo._handle_visa_error
     @log.log_this()
     def close_port(self):
         self.resource.write(self.close_command)
         self.close_resource()
-        self.port_opened = False
+        self.opened = False
     
     @vo._handle_visa_error
     @_auto_connect
@@ -545,10 +545,8 @@ class SIM940(SIM900):
     @log.log_this()
     def __init__(self, visa_address, port, res_manager=None):
         super(SIM940, self).__init__(visa_address, port, res_manager=res_manager)
-        self.open_resource()
         self.write_termination = '\r' # different termination than mainframe
         self.read_termination = '\r'
-        self.close_resource()
 
     @vo._handle_visa_error
     @_auto_connect

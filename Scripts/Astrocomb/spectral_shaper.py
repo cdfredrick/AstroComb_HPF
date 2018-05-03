@@ -24,7 +24,7 @@ from Drivers.Logging import EventLog as log
 
 from Drivers.StateMachine import ThreadFactory, Machine
 
-from Drivers.Kinesis.KCube import KDC101_PRM1Z8
+from Drivers.Kinesis.KCube_mp import KDC101_PRM1Z8
 from Drivers.VISA.Yokogawa import OSA
 from Drivers.VISA.Keysight import E36103A
 
@@ -32,6 +32,10 @@ from Drivers.VISA.Keysight import E36103A
 import tkinter
 #Import the Pillow module
 from PIL import Image, ImageTk
+
+if __name__ == '__main__':
+    from multiprocessing import freeze_support
+    freeze_support()
 
 
 # %% Helper Functions =========================================================
@@ -351,8 +355,8 @@ DEVICE_SETTINGS = {
                 '__init__':[['GPIB0::27::INSTR']]},
         'spectral_shaper/device_IM_bias':{
                 'driver':E36103A,
-                'queue':'192.168.0.8',
-                '__init__':[['TCPIP0::192.168.0.8::inst0::INSTR']]}}
+                'queue':'IM_bias',
+                '__init__':[['USB0::0x2A8D::0x0702::MY57427460::INSTR']]}}
 CONTROL_PARAMS = {CONTROL_DB:{'IM_optimization':{'value':tomorrow_at_noon(),'type':'float'}}}
 SETTINGS = dict(list(STATE_SETTINGS.items()) + list(DEVICE_SETTINGS.items()) + list(CONTROL_PARAMS.items()))
 sm.init_default_settings(STATE_SETTINGS, DEVICE_SETTINGS, CONTROL_PARAMS)
@@ -463,6 +467,15 @@ def nothing(state_db):
 # %% Monitor Functions ========================================================
 '''This section is for defining the methods needed to monitor the system.'''
 
+# Initialize monitor
+monitor_db = 'broadening_stage/device_rotation_mount'
+ # Update buffers -----------------------
+with mon[monitor_db]['lock']:
+    mon[monitor_db]['new'] = True
+    mon[monitor_db]['data'] = update_buffer(
+        mon[monitor_db]['data'],
+        db[monitor_db].read_buffer()['position'], 500)
+
 # Get Spectrum from OSA -------------------------------------------------------
 array['spectrum'] = np.array([])
 array['DW'] = np.array([])
@@ -502,7 +515,8 @@ def get_spectrum():
     # Dispersive Wave -------------------------------------
     monitor_db = 'spectral_shaper/DW'
     array_id = 'DW'
-    data = np.max(osa_trace['data']['y'][(np.array(osa_trace['data']['x']) < 740) * (np.array(osa_trace['data']['x']) > 690)])
+    dw_ind = ((np.array(osa_trace['data']['x']) < 740) * (np.array(osa_trace['data']['x']) > 690)).astype(np.bool)
+    data = np.max(np.array(osa_trace['data']['y'])[dw_ind])
     with mon[monitor_db]['lock']:
         mon[monitor_db]['new'] = True
         mon[monitor_db]['data'] = update_buffer(
@@ -536,9 +550,9 @@ def get_spectrum():
         y_mean = array[array_id].mean(axis=0)
         y_std = array[array_id].std(axis=0)
         y_n = array[array_id].shape[0]
-        osa_trace['data']['y'] = y_mean
-        osa_trace['data']['y_std'] = y_std
-        osa_trace['data']['y_n'] = y_n
+        osa_trace['data']['y'] = y_mean.tolist()
+        osa_trace['data']['y_std'] = y_std.tolist()
+        osa_trace['data']['y_n'] = y_n.tolist()
         db[monitor_db].write_record(osa_trace)
         # Empty the array
         array[array_id] = np.array([])
@@ -641,6 +655,8 @@ def adjust_quick(state_db):
     settings_list = STATES['spectral_shaper/state_optimizer']['optimal']['settings']['DW']
     sm.update_device_settings(osa_db, settings_list, write_log=False)
 # Adjust 2nd Stage Power
+    dev[rot_db]['queue'].queue_and_wait()
+    dev[rot_db]['driver'].open_comms()
     continue_adjusting_angle = True
     DWs = []
     angles = []
@@ -707,6 +723,7 @@ def adjust_quick(state_db):
             continue_adjusting_angle = False
 # Remove from Queue
     dev[osa_db]['queue'].remove()
+    dev[rot_db]['driver'].close_comms()
     dev[rot_db]['queue'].remove()
 # Record Movement
     monitor_db = 'spectral_shaper/DW_vs_waveplate_angle'
@@ -1124,17 +1141,17 @@ STATES = {
                                 'DW':[
                                         {'fix_all':True},
                                         {'active_trace':'TRA'},
-                                        {'trace_type':[{'mode':'WRIT', 'avg':1}],
-                                         'sensitivity':[{'sense':'HIGH1', 'chop':'OFF'}],
-                                         'wvl_range':[{'start':690, 'stop':740}],
+                                        {'trace_type':[[{'mode':'WRIT', 'avg':1}]],
+                                         'sensitivity':[[{'sense':'HIGH1', 'chop':'OFF'}]],
+                                         'wvl_range':[[{'start':690, 'stop':740}]],
                                          'resolution':2, 'level_scale':'LOG'}
                                         ],
                                 'full':[
                                         {'fix_all':True},
                                         {'active_trace':'TRA'},
-                                        {'trace_type':[{'mode':'WRIT', 'avg':1}],
-                                         'sensitivity':[{'sense':'HIGH1', 'chop':'OFF'}],
-                                         'wvl_range':[{'start':690, 'stop':1320}],
+                                        {'trace_type':[[{'mode':'WRIT', 'avg':1}]],
+                                         'sensitivity':[[{'sense':'HIGH1', 'chop':'OFF'}]],
+                                         'wvl_range':[[{'start':690, 'stop':1320}]],
                                          'resolution':2, 'level_scale':'LOG'}
                                         ]
                                 },
@@ -1153,11 +1170,11 @@ STATES = {
                                         {'db':'spectral_shaper/state_SLM',
                                          'key':'initialized',
                                          'test':(lambda init: (init==True)),
-                                         'doc':"lambda init: (init==True)"}],
+                                         'doc':"lambda init: (init==True)"}]
+                                },
                         'routines':{
                                 'monitor':monitor_spectrum, 'search':adjust_quick,
                                 'maintain':adjust_slow, 'operate':optimize_IM_bias}
-                                }
                 },
                 'safe':{
                         'settings':{},

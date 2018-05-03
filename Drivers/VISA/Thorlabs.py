@@ -11,27 +11,6 @@ import Drivers.VISA.VISAObjects as vo
 from Drivers.Logging import ACExceptions
 from Drivers.Logging import EventLog as log
 
-from functools import wraps
-
-
-# %% Local Functions
-
-@log.log_this()
-def _auto_connect(func):
-    """A function decorator that handles automatic connections."""
-    @wraps(func)
-    def wrapper(self, *args, **kwargs):
-        """Wrapped function"""
-        if self.auto_connect:
-            self.open_resource()
-            result = func(self, *args, **kwargs)
-            self.close_resource()
-            return result
-        else:
-            result = func(self, *args, **kwargs)
-            return result
-    return wrapper
-
 
 # %% Thorlabs MDT693B
 class MDT639B(vo.VISA):
@@ -53,7 +32,7 @@ class MDT639B(vo.VISA):
         self.z_max_limit()
     
     @vo._handle_visa_error
-    @_auto_connect
+    @vo._auto_connect
     @log.log_this()
     def query(self, message, delay=None):
         self.resource.write(message, termination=self.write_termination)

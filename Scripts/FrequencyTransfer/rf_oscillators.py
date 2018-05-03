@@ -395,8 +395,6 @@ array['rf_oscillators/Rb_OCXO_control'+'low'] = np.array([])
 array['rf_oscillators/Rb_detected_signals'+'mod'] = np.array([])
 array['rf_oscillators/Rb_detected_signals'+'2mod'] = np.array([])
 array['rf_oscillators/Rb_time_tag'] = np.array([])
-    # Locks
-lock['rf_oscillators/Rb_status'] = threading.Lock()
     # Timers
 control_interval = 0.5 # seconds
 record_interval = 10 # seconds

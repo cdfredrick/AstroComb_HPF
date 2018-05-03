@@ -18,7 +18,7 @@ class E36103A(vo.VISA):
 #General Methods
     @log.log_this()
     def __init__(self, res_address):
-        res_manager = vo.ResourceManager('@py')
+        res_manager = vo.ResourceManager()
         super(E36103A, self).__init__(res_address, res_manager=res_manager)
         if self.resource is None:
             raise ac_excepts.VirtualDeviceError(

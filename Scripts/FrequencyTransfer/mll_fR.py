@@ -459,7 +459,7 @@ thread['get_srs_data'] = ThreadFactory(target=get_srs_data)
 # ILX Data --------------------------------------------------------------------
 array['ilx:tec_temp'] = np.array([])
 array['ilx:tec_curr'] = np.array([])
-ilx_record_interval = 10 # seconds
+ilx_record_interval = 100 # seconds
 timer['ilx:record'] = get_lap(ilx_record_interval)
 def get_ilx_data():
 # Get lap number
@@ -469,14 +469,14 @@ def get_ilx_data():
     # Wait for queue
     dev[device_db]['queue'].queue_and_wait()
     # Get values
-    dev[device_db]['driver'].open_resource()
+    dev[device_db]['driver'].open_tec()
     tec_temp = dev[device_db]['driver'].tec_resistance()
     dev[device_db]['queue'].touch()
     tec_curr = dev[device_db]['driver'].tec_current()
     dev[device_db]['queue'].touch()
     tec_events = dev[device_db]['driver'].tec_events()
     dev[device_db]['queue'].touch()
-    dev[device_db]['driver'].close_resource()
+    dev[device_db]['driver'].close_tec()
     # Remove from queue
     dev[device_db]['queue'].remove()
     # Update buffers and databases -----------
@@ -796,7 +796,10 @@ def find_lock(state_db, last_good_position=None):
             dev[device_db]['queue'].remove()
         # Queue the ILX TEC controller ----------
             device_db = 'mll_fR/device_TEC'
+            thread_name = 'get_ilx_data'
+            thread[thread_name].join() # needed because releasing is too slow for the queue
             dev[device_db]['queue'].queue_and_wait(priority=True)
+            dev[device_db]['driver'].open_tec()
         # Check TEC settings --------------------
             if dev[device_db]['driver'].tec_output():
             # If TEC is on ------------
@@ -826,6 +829,7 @@ def find_lock(state_db, last_good_position=None):
             # TEC output is off, renable
                 sm.update_device_settings(device_db, [{'tec_mode':'R'}, {'tec_output':True}])
         # Remove the ILX TEC controller from queue ------------
+            dev[device_db]['driver'].close_tec()
             dev[device_db]['queue'].remove()
 
 # Transfer to Manual ----------------------------------------------------------
@@ -949,7 +953,12 @@ def keep_lock(state_db):
             # If approaching the state limits, adjust the temperature setpoint
                 adjustment_interval_condition = ((time.time()-timer['find_lock:tec_adjust']) > tec_adjust_interval)
                 if (adjustment_interval_condition and (upper_limit_condition or lower_limit_condition)):
+                # Queue the ILX TEC controller ----------
                     device_db = 'mll_fR/device_TEC'
+                    thread_name = 'get_ilx_data'
+                    thread[thread_name].join() # needed because releasing is too slow for the queue
+                    dev[device_db]['queue'].queue_and_wait(priority=True)
+                    dev[device_db]['driver'].open_tec()
                 # Adjust timer
                     timer['find_lock:tec_adjust'] = time.time()
                 # Adjust the setpoint
@@ -965,6 +974,9 @@ def keep_lock(state_db):
                     # Lower the resistance setpoint
                         settings_list = [{'tec_step':-1}, {'tec_resistance_setpoint':None}]
                         sm.update_device_settings(device_db, settings_list)
+                # Remove the ILX TEC controller from queue ------------
+                    dev[device_db]['driver'].close_tec()
+                    dev[device_db]['queue'].remove()
 
 # Lock Disabled ---------------------------------------------------------------
 def lock_disabled(state_db):

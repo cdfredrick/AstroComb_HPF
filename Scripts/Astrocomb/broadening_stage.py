@@ -22,8 +22,7 @@ from Drivers.Logging import EventLog as log
 
 from Drivers.StateMachine import ThreadFactory, Machine
 
-from Drivers.Kinesis.KCube import KDC101_PRM1Z8
-
+from Drivers.Kinesis.KCube_mp import KDC101_PRM1Z8
 
 # %% Helper Functions =========================================================
 

@@ -59,33 +59,35 @@ def tf_to_10(var):
 def _handle_visa_error(func):
     """A function decorator that closes the visa resource upon untamed errors."""
     @wraps(func)
-    def wrapper(self, *args, **kwargs):
+    def handle_visa_error(self, *args, **kwargs):
         """Wrapped function"""
         try:
             result = func(self, *args, **kwargs)
             return result
         except:
+            pass # try again
+        try:
+            result = func(self, *args, **kwargs)
+            return result
+        except:
             error = sys.exc_info()
-            try:
-                self.clear_resource()
-            except:
-                pass
-            try:
-                self.close_resource()
-            except:
-                pass
-            try:
-                self.resource.unlock()
-            except:
-                pass
+#            try:
+#                self.resource.open()
+#                self.resource.clear()
+#            except:
+#                pass
+#            try:
+#                self.close_resource()
+#            except:
+#                pass
             raise error[1].with_traceback(error[2])
-    return wrapper
+    return handle_visa_error
 
 @log.log_this()
 def _auto_connect(func):
     """A function decorator that handles automatic connections."""
     @wraps(func)
-    def wrapper(self, *args, **kwargs):
+    def auto_connect(self, *args, **kwargs):
         """Wrapped function"""
         if (self.auto_connect and not(self.opened)):
             try:
@@ -97,7 +99,7 @@ def _auto_connect(func):
         else:
             result = func(self, *args, **kwargs)
             return result
-    return wrapper
+    return auto_connect
 
 
 # %% Resource Manager
@@ -124,7 +126,7 @@ class ResourceManager(visa.ResourceManager):
                 resource_pyclass = self._resource_classes[(visa.constants.InterfaceType.unknown, '')]
                 visa.logger.warning('There is no class defined for %r. Using Resource', (info.interface_type, info.resource_class))
         res = resource_pyclass(self, resource_name)
-        res.close()
+#        res.close()
         return res
 
 
@@ -134,7 +136,6 @@ class VISA(object):
     Defines the basic visa operations for all visa controlled devices. A resource
     manager is automatically generated if one is not provided.
     """
-    @_handle_visa_error
     @log.log_this()
     def __init__(self, res_address, res_manager=None, timeout=5.0):
         self.timeout = timeout
@@ -147,7 +148,6 @@ class VISA(object):
         self.opened = False
         self.auto_connect = True
     
-    @_handle_visa_error
     @log.log_this()
     def initialize_resource(self):
         '''
@@ -159,7 +159,6 @@ class VISA(object):
             self.resource = None
             log.log_error('VisaObjects', 'initialize_resource', err)
     
-    @_handle_visa_error
     @log.log_this()
     def open_resource(self):
         """
@@ -178,9 +177,9 @@ class VISA(object):
             else:
                 self.opened = True
     
-    @_handle_visa_error
     @_auto_connect
     @log.log_this()
+    @_handle_visa_error
     def query(self, message, delay=None):
         '''
         Send a query command to the instrument and returns the result
@@ -188,9 +187,9 @@ class VISA(object):
         result = self.resource.query(message, delay=delay)
         return result
     
-    @_handle_visa_error
     @_auto_connect
     @log.log_this()
+    @_handle_visa_error
     def query_list(self, message, converter='f', separator=',', delay=None):
         '''
         Send a query command to the instrument and returns the result
@@ -198,9 +197,9 @@ class VISA(object):
         result = self.resource.query_ascii_values(message, converter=converter, separator=separator, container=list, delay=delay)
         return result
 
-    @_handle_visa_error
     @_auto_connect
     @log.log_this()
+    @_handle_visa_error
     def read(self, termination=None, encoding=None):
         '''
         Send a read command to the instrument and returns the result
@@ -208,9 +207,9 @@ class VISA(object):
         result = self.resource.read(termination=termination, encoding=encoding)
         return result
     
-    @_handle_visa_error
     @_auto_connect
     @log.log_this()
+    @_handle_visa_error
     def write(self, message, termination=None, encoding=None):
         '''
         Send a write command to the instrument

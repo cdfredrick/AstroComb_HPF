@@ -70,13 +70,13 @@ class ThreadFactory():
         self.new_thread()
     
     @log.log_this()
-    def handle_thread(self, func):
+    def _handle_thread(self, func):
         """A function decorator that handles exceptions that occur during thread
         execution. Only errors from the most recent thread are held in memory
         and are accessible through "check_thread" or the "error" attribute.
         """
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        def handle_thread(*args, **kwargs):
             """Wrapped function"""
             try:
                 ident = threading.get_ident()
@@ -96,7 +96,7 @@ class ThreadFactory():
                     if (self.thread.ident == ident):
                         self.result = result
                         self.error = None
-        return wrapper
+        return handle_thread
     
     @log.log_this()
     def new_thread(self):
@@ -104,7 +104,7 @@ class ThreadFactory():
         '''
         with self.lock:
             self.thread = threading.Thread(group=self.group,
-                                           target=self.handle_thread(self.target),
+                                           target=self._handle_thread(self.target),
                                            name=self.name,
                                            args=self.args,
                                            kwargs=self.kwargs,
@@ -136,10 +136,15 @@ class ThreadFactory():
     @log.log_this()
     def check_thread(self):
         '''Checks whether the most recent thread is alive and whether any
-        errors have occured during its execution.
+        errors have occured during its execution. The error is cleared after
+        using this method.
         '''
         alive = self.is_alive()
         error = self.error
+        if (error != None):
+        # Remove Error
+            with self.lock:
+                self.error = None
         return (alive, error)
     
         
@@ -400,9 +405,14 @@ class Machine():
                     'driver':<driver object>,
                     'queue':<queue objecct>}
         '''
+    # Logging
+        mod_name = self.init_device_drivers_and_settings.__module__
+        func_name = self.init_device_drivers_and_settings.__name__
     # Device Drivers
         self.dev = dev
         for device_db in self.DEVICE_DBs:
+            log_str = " Initializing device {:}".format(device_db)
+            log.log_info(mod_name, func_name, log_str)
             self.dev[device_db] = {
                     'driver':self.send_args(self.DEVICE_SETTINGS[device_db]['driver'],
                                        self.DEVICE_SETTINGS[device_db]['__init__']),
@@ -411,6 +421,8 @@ class Machine():
     # Settings
         self.local_settings = local_settings
         for database in self.SETTINGS:
+            log_str = " Initializing database {:}".format(database)
+            log.log_info(mod_name, func_name, log_str)
             device_db_condition = (database in self.DEVICE_DBs)
             control_db_condition = (database in self.CONTROL_DB)
             self.local_settings[database] = self.db[database].read_buffer()
@@ -788,6 +800,8 @@ class Machine():
         '''
         mod_name = self.state_machine.__module__
         func_name = '.'.join([self.state_machine.__name__, state_db])
+        log_str = " Operating {:}".format(state_db)
+        log.log_info(mod_name, func_name, log_str)
         while not(self.event[state_db].is_set()):
         # Check the Critical Prerequisites ------------------------------------
             critical_pass = self.check_prereqs(
@@ -959,7 +973,7 @@ class Machine():
                             log.log_warning(mod_name,func_name,log_str)
                 # Propogate prereq status
                 prereqs_pass *= prereq_status
-        return prereqs_pass
+        return bool(prereqs_pass)
     
 # Setup the Transition to a New State -----------------------------------------
     @log.log_this()
@@ -1242,9 +1256,12 @@ class Machine():
                 if (err_str in self.error):
                     if (time.time() - self.error[err_str]) > self.error_interval:
                         log.log_exception_info(mod_name, func_name, error)
+                    else:
+                        log.log_info(mod_name, func_name, ' Iteration {:}'.format(loop_count))
                 else:
                     self.error[err_str] = time.time()
                     log.log_exception_info(mod_name, func_name, error)
+                time.sleep(0.5)
             else:
                 completed = True
                 if loop_count > 1:
@@ -1268,8 +1285,6 @@ class Machine():
             else:
                 self.error[err_str] = time.time()
                 log.log_exception_info(mod_name, func_name, error)
-            # Remove Error
-            self.thread[thread_name].error = None
         elif (alive == False):
             self.thread[thread_name].start()
         return error

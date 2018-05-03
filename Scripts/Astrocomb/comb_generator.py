@@ -252,9 +252,10 @@ DEVICE_SETTINGS = {
         # DC IM Bias settings
         'comb_generator/device_IM_bias':{
                 'driver':E36103A,
-                'queue':'192.168.0.8',
-                '__init__':[['TCPIP0::192.168.0.8::inst0::INSTR']],
-                'output':True, 'voltage_setpoint':None}}
+                'queue':'IM_bias',
+                '__init__':[['USB0::0x2A8D::0x0702::MY57427460::INSTR']],
+                'output':True, 'voltage_setpoint':None}
+        }
 CONTROL_PARAMS = {CONTROL_DB:{}}
 SETTINGS = dict(list(STATE_SETTINGS.items()) + list(DEVICE_SETTINGS.items()) + list(CONTROL_PARAMS.items()))
 sm.init_default_settings(STATE_SETTINGS, DEVICE_SETTINGS, CONTROL_PARAMS)
@@ -319,7 +320,7 @@ internal databases must be entered manually into "mon".
 mon = {}
 mon['comb_generator/IM_bias'] = {
         'data':np.array([]),
-        'device':dev['comb_generator/device_IM_bias'],
+        'device':None,
         'new':False,
         'lock':threading.Lock()}
     # External ------------------------

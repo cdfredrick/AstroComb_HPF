@@ -69,9 +69,9 @@ ILX_ADDRESS = '' #ADD ME!!!
 def _auto_connect_las(func):
     """A function decorator that handles automatic laser channel connections."""
     @wraps(func)
-    def wrapper(self, *args, **kwargs):
+    def auto_connect_las(self, *args, **kwargs):
         """Wrapped function"""
-        if (self.auto_connect and not(self.las_opened)):
+        if (self.auto_connect and not(self.opened)):
             try:
                 self.open_las()
                 result = func(self, *args, **kwargs)
@@ -81,14 +81,14 @@ def _auto_connect_las(func):
         else:
             result = func(self, *args, **kwargs)
             return result
-    return wrapper
+    return auto_connect_las
 
 def _auto_connect_tec(func):
     """A function decorator that handles automatic TEC channel connections."""
     @wraps(func)
-    def wrapper(self, *args, **kwargs):
+    def auto_connect_tec(self, *args, **kwargs):
         """Wrapped function"""
-        if (self.auto_connect and not(self.tec_opened)):
+        if (self.auto_connect and not(self.opened)):
             try:
                 self.open_tec()
                 result = func(self, *args, **kwargs)
@@ -98,7 +98,7 @@ def _auto_connect_tec(func):
         else:
             result = func(self, *args, **kwargs)
             return result
-    return wrapper
+    return auto_connect_tec
 
 
 # %% ILX LDC-3900 Mainframe
@@ -218,29 +218,31 @@ class LaserModule(LDC3900):
         self.las_open_command = 'LAS:CHAN {:}'.format(self.las_channel)
         self.las_opened = False
     
-    @vo._handle_visa_error
+    
     @log.log_this()
+    @vo._handle_visa_error
     def open_las(self):
         self.open_resource()
         self.resource.write(self.las_open_command)
-        self.las_opened = True
+        self.opened = True
     
-    @vo._handle_visa_error
     @log.log_this()
+    @vo._handle_visa_error
     def close_las(self):
         self.close_resource()
-        self.las_opened = False
+        self.opened = False
     
-    @vo._handle_visa_error
-    @_auto_connect_las
     @log.log_this()
+    @_auto_connect_las
+    @vo._handle_visa_error
     def query_las(self, message, delay=None):
         result = self.resource.query('LAS:'+message, delay=delay).strip()
         return result
     
-    @vo._handle_visa_error
-    @_auto_connect_las
+    
     @log.log_this()
+    @_auto_connect_las
+    @vo._handle_visa_error
     def write_las(self, message, termination=None, encoding=None):
         self.resource.write('LAS:'+message, termination=termination, encoding=encoding)
     
@@ -647,32 +649,33 @@ class TECModule(LDC3900):
         super(TECModule, self).__init__(visa_address, res_manager=res_manager)
         self.tec_channel = tec_channel
         self.tec_opened = False
-        self.tec_open_command = 'LAS:CHAN {:}'.format(self.tec_channel)
+        self.tec_open_command = 'TEC:CHAN {:}'.format(self.tec_channel)
         self.tec_step_size = self.tec_step()
     
-    @vo._handle_visa_error
     @log.log_this()
+    @vo._handle_visa_error
     def open_tec(self):
         self.open_resource()
         self.resource.write(self.tec_open_command)
-        self.tec_opened = True
+        self.opened = True
     
-    @vo._handle_visa_error
     @log.log_this()
+    @vo._handle_visa_error
     def close_tec(self):
         self.close_resource()
-        self.tec_opened = False
+        self.opened = False
     
-    @vo._handle_visa_error
-    @_auto_connect_tec
+    
     @log.log_this()
+    @_auto_connect_tec
+    @vo._handle_visa_error
     def query_tec(self, message, delay=None):
         result = self.resource.query('TEC:'+message, delay=delay).strip()
         return result
     
-    @vo._handle_visa_error
-    @_auto_connect_tec
     @log.log_this()
+    @_auto_connect_tec
+    @vo._handle_visa_error
     def write_tec(self, message, termination=None, encoding=None):
         self.resource.write('TEC:'+message, termination=termination, encoding=encoding)
     

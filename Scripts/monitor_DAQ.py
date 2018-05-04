@@ -284,7 +284,7 @@ DEVICE_SETTINGS = {
                 'queue':'DAQ_di',
                 '__init__':[
                     [[{'physical_channel':'Dev1/port0/line0'}, # 'rf_osc/1GHz_phase_lock'
-                      {'physical_channel':'Dev1/port1/line0'}]], # 'rf_osc/100MHz_phase_lock'
+                      {'physical_channel':'Dev1/port0/line1'}]], # 'rf_osc/100MHz_phase_lock'
 #                      {'physical_channel':'Dev1/port0/line2'}, # 'rf_osc/10GHz_phase_lock'
 #                      {'physical_channel':'Dev1/port0/line3'}, # 'chiller/system_alarm'
 #                      {'physical_channel':'Dev1/port0/line4'}]], # 'chiller/pump_alarm'
@@ -526,8 +526,6 @@ def read_di_DAQ_single():
     device_db = 'monitor_DAQ/device_DAQ_digital_in'
 # Double check queue
     dev[device_db]['queue'].queue_and_wait()
-# Reserve Point
-    dev[device_db]['driver'].reserve_point(True)
 # Get values
     multi_channel_reading = dev[device_db]['driver'].read_point()
 # Update buffers and databases -----------------------------
@@ -535,12 +533,10 @@ def read_di_DAQ_single():
     monitor_db = 'rf_oscillators/1GHz_phase_lock'
     channel_index = di_map[monitor_db] # 0
     last_value[monitor_db] = [multi_channel_reading[channel_index]]
-# port1/line0, 'rf_oscillators/100MHz_phase_lock' ----------------------
+# port0/line1, 'rf_oscillators/100MHz_phase_lock' ----------------------
     monitor_db = 'rf_oscillators/100MHz_phase_lock'
     channel_index = di_map[monitor_db] # 1
     last_value[monitor_db] = [multi_channel_reading[channel_index]]
-# Unreserve Point
-    dev[device_db]['driver'].reserve_point(False)
 
 
 # %% Maintain Functions =======================================================
@@ -872,7 +868,7 @@ def buffer_di(monitor_db, current_value, flips, timestamp, channel_identifiers=N
 
 # Record Di -------------------------------------------------------------------
 array['daq:port0/line0'] = np.array([])
-array['daq:port1/line0'] = np.array([])
+array['daq:port0/line1'] = np.array([])
 timer['daq:record_di'] = get_lap(daq_record_interval)
 def record_di(monitor_db, data, timestamp, write_record, array_identifier, channel_identifiers=None):
     if (channel_identifiers == None):
@@ -935,8 +931,8 @@ def read_di_DAQ(state_db):
         args = [monitor_db, data, timestamp, write_record, channel]
         item = threading.Thread(target=record_di, args=args, daemon=True)
         fifo_q['daq:di_record'].put(item, block=False)
-    # port1/line0, 'rf_oscillators/100MHz_phase_lock' ----------------------
-        channel = 'daq:port1/line0'
+    # port0/line1, 'rf_oscillators/100MHz_phase_lock' ----------------------
+        channel = 'daq:port0/line1'
         monitor_db = 'rf_oscillators/100MHz_phase_lock'
         channel_index = di_map[monitor_db] # 1
         data = np.append(last_value[monitor_db],multi_channel_reading[channel_index])

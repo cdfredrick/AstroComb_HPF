@@ -12,7 +12,8 @@ from functools import wraps
 
 from Drivers.Logging import EventLog as log
 
-
+#from Drivers.DAQ.Tasks import DiTask
+#test = DiTask([{'physical_channel':'Dev1/port0/line0'},{'physical_channel':'Dev1/port0/line1'}])
 # %% Constants
 TERMINAL_DIFFERENTIAL = nidaqmx.constants.TerminalConfiguration.DIFFERENTIAL
 TERMINAL_NRSE = nidaqmx.constants.TerminalConfiguration.NRSE
@@ -141,8 +142,7 @@ class InTask():
         '''
         Calling this function stops the continuous data acquisition
         '''
-        if not self.task_cont.is_task_done():
-            self.task_cont.stop()
+        self.task_cont.stop()
     
     @_handle_daq_error
     @log.log_this()
@@ -150,8 +150,7 @@ class InTask():
         '''
         Calling this function stops the point data acquisition
         '''
-        if not self.task_point.is_task_done():
-            self.task_cont.stop()
+        self.task_point.stop()
     
     @log.log_this()
     def _close_tasks(self):
@@ -220,8 +219,7 @@ class OutTask():
         '''
         Calling this function stops the continuous write
         '''
-        if not self.task_cont.is_task_done():
-            self.task_cont.stop()
+        self.task_cont.stop()
         
     @log.log_this()
     def _close_tasks(self):
@@ -360,10 +358,13 @@ class DiTask(InTask):
         # Configure timing
         all_channels = ', '.join([config['physical_channel'] for config in config_list])
         self.task_cont.timing.cfg_change_detection_timing(
-                rising_dege_chan=all_channels,
+                rising_edge_chan=all_channels,
                 falling_edge_chan=all_channels,
                 sample_mode=SAMP_CONTINUOUS)
-        self.task_point.timing.cfg_implicit_timing(samps_per_chan=1)
+        self.task_point.timing.cfg_samp_clk_timing(
+                1e3,
+                sample_mode=SAMP_FINITE,
+                samps_per_chan=2)
     
     @_handle_daq_error
     @log.log_this()
@@ -389,8 +390,9 @@ class DiTask(InTask):
         initialization. If necessary, this method will stop the continuous
         acquisition.
         '''
-        self.stop_cont()
+        self.start_point()
         result = self.task_point.read()
+        self.stop_point()
         return result
 
 

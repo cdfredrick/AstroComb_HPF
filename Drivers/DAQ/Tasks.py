@@ -385,7 +385,7 @@ class DiTask(InTask):
         '''
         This method retrieves the most recent single point measurement from the
         DAQ. The result contains a list of one point measurements of each
-        channel. The order of the channels is the same as that giben during
+        channel. The order of the channels is the same as that given during
         initialization. If necessary, this method will stop the continuous
         acquisition.
         '''

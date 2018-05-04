@@ -107,7 +107,7 @@ The databases should be grouped by function:
         variables accessible to commands from the comms queue.
 '''
 STATE_DBs = [
-        'rf_oscillators/state_Rb_clock']
+        'rf_oscillators/state_Rb_clock', 'rf_oscillators/state_PLOs']
 DEVICE_DBs =[
         'rf_oscillators/device_Rb_clock']
 MONITOR_DBs = [
@@ -139,7 +139,7 @@ sm.init_master_DB_names(STATE_DBs, DEVICE_DBs, MONITOR_DBs, LOG_DB, CONTROL_DB)
     needed to check prerequisites'''
 R_STATE_DBs = []
 R_DEVICE_DBs =[]
-R_MONITOR_DBs = []
+R_MONITOR_DBs = ['rf_oscillators/1GHz_phase_lock', 'rf_oscillators/100MHz_phase_lock']
 READ_DBs = R_STATE_DBs + R_DEVICE_DBs + R_MONITOR_DBs
 sm.init_read_DB_names(R_STATE_DBs, R_DEVICE_DBs, R_MONITOR_DBs)
 
@@ -240,6 +240,16 @@ initialized settings are read from the device at startup.
 '''
 STATE_SETTINGS = {
         'rf_oscillators/state_Rb_clock':{
+                'state':'engineering',
+                'prerequisites':{
+                        'critical':False,
+                        'necessary':False,
+                        'optional':False},
+                'compliance':False,
+                'desired_state':'lock',
+                'initialized':False,
+                'heartbeat':datetime.datetime.utcnow()},
+        'rf_oscillators/state_PLOs':{
                 'state':'engineering',
                 'prerequisites':{
                         'critical':False,
@@ -934,6 +944,31 @@ def status_warnings(status_bytes):
             log_str = '\n '.join([byte_str,'Unit has been reset'])
             log.log_warning(mod_name, func_name, log_str)
 
+# Monitor PLOs ----------------------------------------------------------------
+for monitor_db in ['rf_oscillators/1GHz_phase_lock','rf_oscillators/100MHz_phase_lock']:
+    with mon[monitor_db]['lock']:
+        mon[monitor_db]['new'] = False
+        mon[monitor_db]['data'] = {}
+        mon[monitor_db]['data']['bit'] = np.array([])
+        mon[monitor_db]['data']['flips'] = np.array([])
+plo_control_interval = 0.5 # seconds
+timer['PLO:control'] = get_lap(plo_control_interval)
+def monitor_PLOs(state_db):
+    new_control_lap = get_lap(plo_control_interval)
+    if (new_control_lap > timer['PLO:control']):
+# Pull data from external databases -------------------
+        for monitor_db in ['rf_oscillators/1GHz_phase_lock','rf_oscillators/100MHz_phase_lock']:
+            new_bits = []
+            new_flips = []
+            for doc in mon[monitor_db]['cursor']:
+                new_bits.append(doc['bit'])
+                new_flips.append(doc['flips'])
+             # Update buffers -----------------------
+            if len(new_bits) > 0:
+                with mon[monitor_db]['lock']:
+                    mon[monitor_db]['new'] = True
+                    mon[monitor_db]['data']['bit'] = np.append(mon[monitor_db]['data']['bit'], new_bits)
+                    mon[monitor_db]['data']['flips'] = np.append(mon[monitor_db]['data']['flips'], new_flips)
 
 
 # %% Search Functions =========================================================
@@ -958,6 +993,35 @@ def wait_for_locks(state_db):
                     db[state_db].write_record_and_buffer(current_state[state_db])
                 log_str = ' Rb and 1pps locks engaged'
                 log.log_info(mod_name, func_name, log_str)
+
+# wait_for_PLOs --------------------------------------------------------------
+def wait_for_PLOs(state_db):
+    mod_name = wait_for_PLOs.__module__
+    func_name = wait_for_PLOs.__name__
+    monitor_db = 'rf_oscillators/1GHz_phase_lock'
+    with mon[monitor_db]['lock']:
+        new_1GHz = mon[monitor_db]['new']
+        if new_1GHz:
+            locked_1GHz = mon[monitor_db]['data']['bit'][-1]
+    monitor_db = 'rf_oscillators/100MHz_phase_lock'
+    with mon[monitor_db]['lock']:
+        new_100MHz = mon[monitor_db]['new']
+        if new_100MHz:
+            locked_100MHz = mon[monitor_db]['data']['bit'][-1]
+    if (new_1GHz and new_100MHz):
+    # Locked?
+        if (locked_1GHz and locked_100MHz):
+        # Update state variable
+            with sm.lock[state_db]:
+                current_state[state_db]['compliance'] = True
+                db[state_db].write_record_and_buffer(current_state[state_db])
+                log_str = ' 1GHz and 100MHz phase locks engaged'
+                log.log_info(mod_name, func_name, log_str)
+        for monitor_db in ['rf_oscillators/1GHz_phase_lock','rf_oscillators/100MHz_phase_lock']:
+            with mon[monitor_db]['lock']:
+                mon[monitor_db]['new'] = False
+                mon[monitor_db]['data']['bit'] = np.array([])
+                mon[monitor_db]['data']['flips'] = np.array([])
 
 
 # %% Maintain Functions =======================================================
@@ -987,6 +1051,62 @@ def check_locks(state_db):
                 elif not(locked_1pps):
                     log_str = ' 1pps lock not engaged'
                 log.log_info(mod_name, func_name, log_str)
+
+
+# Check Locks -----------------------------------------------------------------
+def check_PLOs(state_db):
+    mod_name = check_PLOs.__module__
+    func_name = check_PLOs.__name__
+    monitor_db = 'rf_oscillators/Rb_status'
+    monitor_db = 'rf_oscillators/1GHz_phase_lock'
+    with mon[monitor_db]['lock']:
+        new_1GHz = mon[monitor_db]['new']
+        if new_1GHz:
+            locked_1GHz = mon[monitor_db]['data']['bit'][-1]
+            flipped_1GHz = np.sum(mon[monitor_db]['data']['flips'])
+    monitor_db = 'rf_oscillators/100MHz_phase_lock'
+    with mon[monitor_db]['lock']:
+        new_100MHz = mon[monitor_db]['new']
+        if new_100MHz:
+            locked_100MHz = mon[monitor_db]['data']['bit'][-1]
+            flipped_100MHz = np.sum(mon[monitor_db]['data']['flips'])
+    if (new_1GHz and new_100MHz):
+    # Locked?
+        if (not(locked_1GHz and locked_100MHz) or (flipped_1GHz or flipped_100MHz)):
+        # Something is unlocked
+            # Update the state variable
+            with sm.lock[state_db]:
+                current_state[state_db]['compliance'] = False
+                db[state_db].write_record_and_buffer(current_state[state_db])
+            if not(locked_1GHz) and not(locked_100MHz):
+                lock_log_str = ' 1GHz and 100MHz locks not engaged'
+            elif not(locked_1GHz):
+                lock_log_str = ' 1GHz lock not engaged'
+            elif not(locked_100MHz):
+                lock_log_str = ' 100MHz lock not engaged'
+            else:
+                lock_log_str = ''
+            if not(flipped_1GHz) and not(flipped_100MHz):
+                flip_log_str = ' 1GHz and 100MHz locks unstable'
+            elif not(flipped_1GHz):
+                flip_log_str = ' 1GHz lock unstable'
+            elif not(flipped_100MHz):
+                flip_log_str = ' 100MHz lock unstable'
+            else:
+                flip_log_str = ''
+            if (len(lock_log_str) and len(flip_log_str)):
+                log_str = '\n'.join([lock_log_str,flip_log_str])
+            elif len(lock_log_str):
+                log_str = lock_log_str
+            elif len(flip_log_str):
+                log_str = flip_log_str
+            log.log_info(mod_name, func_name, log_str)
+        # Clear monitors
+        for monitor_db in ['rf_oscillators/1GHz_phase_lock','rf_oscillators/100MHz_phase_lock']:
+            with mon[monitor_db]['lock']:
+                mon[monitor_db]['new'] = False
+                mon[monitor_db]['data']['bit'] = np.array([])
+                mon[monitor_db]['data']['flips'] = np.array([])
 
 
 # %% Operate Functions ========================================================
@@ -1154,7 +1274,36 @@ STATES = {
                         'routines':{
                                 'monitor':nothing, 'search':nothing,
                                 'maintain':nothing, 'operate':nothing}}
-                        }                        
+                        },
+        'rf_oscillators/state_PLOs':{
+                'lock':{
+                        'settings':{},
+                        'prerequisites':{
+                                'critical':[],
+                                'necessary':[],
+                                'optional':[]},
+                        'routines':{
+                                'monitor':monitor_PLOs, 'search':wait_for_PLOs,
+                                'maintain':check_PLOs, 'operate':nothing}},
+                'safe':{
+                        'settings':{},
+                        'prerequisites':{
+                                'critical':[],
+                                'necessary':[],
+                                'optional':[]},
+                        'routines':{
+                                'monitor':monitor_PLOs, 'search':nothing,
+                                'maintain':nothing, 'operate':nothing}},
+                'engineering':{
+                        'settings':{},
+                        'prerequisites':{
+                                'critical':[],
+                                'necessary':[],
+                                'optional':[]},
+                        'routines':{
+                                'monitor':nothing, 'search':nothing,
+                                'maintain':nothing, 'operate':nothing}}
+                        }
         }
 sm.init_states(STATES)
 

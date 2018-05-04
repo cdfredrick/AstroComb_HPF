@@ -110,19 +110,20 @@ The databases should be grouped by function:
         variables accessible to commands from the comms queue.
 '''
 STATE_DBs = [
-        'monitor_DAQ/state_analog']#, 'monitor_DAQ/state_digital']
+        'monitor_DAQ/state_analog', 'monitor_DAQ/state_digital']
 DEVICE_DBs =[
-        'monitor_DAQ/device_DAQ_analog_in']#, 'monitor_DAQ/device_DAQ_digital_in']
+        'monitor_DAQ/device_DAQ_analog_in', 'monitor_DAQ/device_DAQ_digital_in']
 MONITOR_DBs = [
-        # Analog In
+    # Analog In
         'mll_fR/DAQ_error_signal',
         'filter_cavity/DAQ_error_signal', 'filter_cavity/heater_temperature',
-        'ambience/box_temperature_0', 'ambience/box_temperature_1', 'ambience/rack_temperature_0']
+        'ambience/box_temperature_0', 'ambience/box_temperature_1', 'ambience/rack_temperature_0',
         #'dc_power/12V_0', 'dc_power/12V_1', 'dc_power/12V_2', 'dc_power/12V_3',
         #'dc_power/8V_0', 'dc_power/15V_0', 'dc_power/24V_0', 'dc_power/24V_1',
-        # Digital In
-        #'rf_osc/100MHz_alarm', 'rf_osc/1GHz_alarm', 'rf_osc/10GHz_alarm',
-        #'chiller/system_alarm', 'chiller/pump_alarm']
+    # Digital In
+        'rf_oscillators/1GHz_phase_lock','rf_oscillators/100MHz_phase_lock'#,'rf_oscillators/10GHz_phase_lock',
+        #'chiller/system_alarm', 'chiller/pump_alarm'
+        ]
 LOG_DB = 'monitor_DAQ'
 CONTROL_DB = 'monitor_DAQ/control'
 MASTER_DBs = STATE_DBs + DEVICE_DBs + MONITOR_DBs + [LOG_DB] + [CONTROL_DB]
@@ -243,17 +244,17 @@ STATE_SETTINGS = {
                 'compliance':False,
                 'desired_state':'read',
                 'initialized':False,
+                'heartbeat':datetime.datetime.utcnow()},
+        'monitor_DAQ/state_digital':{
+                'state':'engineering',
+                'prerequisites':{
+                        'critical':False,
+                        'necessary':False,
+                        'optional':False},
+                'compliance':False,
+                'desired_state':'read',
+                'initialized':False,
                 'heartbeat':datetime.datetime.utcnow()}}
-#        'monitor_DAQ/state_digital':{
-#                'state':'engineering',
-#                'prerequisites':{
-#                        'critical':False,
-#                        'necessary':False,
-#                        'optional':False},
-#                'compliance':False,
-#                'desired_state':'read',
-#                'initialized':False,
-#                'heartbeat':datetime.datetime.utcnow()}}
 DEVICE_SETTINGS = {
         # DAQ settings
         'monitor_DAQ/device_DAQ_analog_in':{
@@ -277,23 +278,30 @@ DEVICE_SETTINGS = {
 #                      {'physical_channel':'Dev1/ai14', 'terminal_config':'NRSE','min_val':-1.0, 'max_val':1.0}, # 'dc_power/24V_0'
 #                      {'physical_channel':'Dev1/ai15', 'terminal_config':'NRSE','min_val':-1.0, 'max_val':1.0}], # 'dc_power/24V_1'
                     250e3, int(250e3*0.2*3)],{'timeout':5.0}],
-                'reserve_cont':False, 'reserve_point':False}}
-#        'monitor_DAQ/device_DAQ_digital_in':{
-#                'driver':DiTask,
-#                'queue':'DAQ_di',
-#                '__init__':[
-#                    [[{'physical_channel':'Dev1/port0/line0'}, # 'rf_osc/100MHz_alarm'
-#                      {'physical_channel':'Dev1/port0/line1'}, # 'rf_osc/1GHz_alarm'
-#                      {'physical_channel':'Dev1/port0/line2'}, # 'rf_osc/10GHz_alarm'
+                'reserve_cont':False, 'reserve_point':False},
+        'monitor_DAQ/device_DAQ_digital_in':{
+                'driver':DiTask,
+                'queue':'DAQ_di',
+                '__init__':[
+                    [[{'physical_channel':'Dev1/port0/line0'}, # 'rf_osc/1GHz_phase_lock'
+                      {'physical_channel':'Dev1/port1/line0'}]], # 'rf_osc/100MHz_phase_lock'
+#                      {'physical_channel':'Dev1/port0/line2'}, # 'rf_osc/10GHz_phase_lock'
 #                      {'physical_channel':'Dev1/port0/line3'}, # 'chiller/system_alarm'
 #                      {'physical_channel':'Dev1/port0/line4'}]], # 'chiller/pump_alarm'
-#                      {'timeout':5.0}],
-#                'reserve_cont':False, 'reserve_point':False}}
+                      {'timeout':5.0}],
+                'reserve_cont':False, 'reserve_point':False}}
 CONTROL_PARAMS = {CONTROL_DB:{}}
 SETTINGS = dict(list(STATE_SETTINGS.items()) + list(DEVICE_SETTINGS.items()) + list(CONTROL_PARAMS.items()))
 sm.init_default_settings(STATE_SETTINGS, DEVICE_SETTINGS, CONTROL_PARAMS)
 
-
+ai_map = {'mll_fR/DAQ_error_signal':0,
+          'filter_cavity/DAQ_error_signal':1,
+          'filter_cavity/heater_temperature':[2,3],
+          'ambience/box_temperature_0':4,
+          'ambience/box_temperature_1':5,
+          'ambience/rack_temperature_0':6}
+di_map = {'rf_oscillators/1GHz_phase_lock':0,
+          'rf_oscillators/100MHz_phase_lock':1}
 # %% Initialize Databases, Devices, and Settings ==============================
 
 # Connect to MongoDB ----------------------------------------------------------
@@ -350,10 +358,6 @@ format is as follows:
             'queue':<queue objecct>}
 '''
 mon = {}
-#        # Digital In
-#        'rf_osc/100MHz_alarm', 'rf_osc/1GHz_alarm', 'rf_osc/10GHz_alarm',
-#        'chiller/system_alarm', 'chiller/pump_alarm'
-    # DAQ analog ----------------------
 mon['mll_fR/DAQ_error_signal'] = {
         'data':np.array([]),
         'device':dev['monitor_DAQ/device_DAQ_analog_in'],
@@ -424,6 +428,19 @@ mon['ambience/rack_temperature_0'] = {
 #        'device':dev['monitor_DAQ/device_DAQ_analog_in'],
 #        'new':False,
 #        'lock':threading.Lock()}
+    # DAQ digital ----------------------
+mon['rf_oscillators/1GHz_phase_lock'] = {
+        'data':np.array([]),
+        'device':dev['monitor_DAQ/device_DAQ_digital_in'],
+        'new':False,
+        'lock':threading.Lock()}
+mon['rf_oscillators/100MHz_phase_lock'] = {
+        'data':np.array([]),
+        'device':dev['monitor_DAQ/device_DAQ_digital_in'],
+        'new':False,
+        'lock':threading.Lock()}
+#'rf_osc/100MHz_phase_lock', 'rf_osc/1GHz_phase_lock', 'rf_osc/10GHz_phase_lock',
+#'chiller/system_alarm', 'chiller/pump_alarm'
     # External ------------------------
 sm.init_monitors(mon=mon)
 
@@ -456,7 +473,7 @@ def nothing(state_db):
     
 # Queue and Reserve -----------------------------------------------------------
 def queue_and_reserve(state_db):
-    mod_name = __name__
+    mod_name = queue_and_reserve.__module__
     func_name = queue_and_reserve.__name__
     if (state_db == 'monitor_DAQ/state_analog'):
         device_db ='monitor_DAQ/device_DAQ_analog_in'
@@ -474,11 +491,56 @@ def queue_and_reserve(state_db):
                 with sm.lock[state_db]:
                     current_state[state_db]['compliance'] = True
                     db[state_db].write_record_and_buffer(current_state[state_db])
-                log_str = " Reserving DAQ"
+                log_str = " Reserving ai DAQ"
                 log.log_info(mod_name, func_name, log_str)
             else:
             # Start over if something else is in the queue
                 dev[device_db]['queue'].remove()
+    elif (state_db == 'monitor_DAQ/state_digital'):
+        device_db ='monitor_DAQ/device_DAQ_digital_in'
+        queue_position = dev[device_db]['queue'].position()
+        if (queue_position < 0):
+            queue_size = len(dev[device_db]['queue'].get_queue())
+        # Add to queue
+            dev[device_db]['queue'].push()
+        elif (queue_position == 0):
+            queue_size = len(dev[device_db]['queue'].get_queue())
+            if (queue_size == 1):
+            # Read single
+                read_di_DAQ_single()
+            # Reserve and start the DAQ
+                dev[device_db]['driver'].reserve_cont(True)
+            # Update the state variable
+                with sm.lock[state_db]:
+                    current_state[state_db]['compliance'] = True
+                    db[state_db].write_record_and_buffer(current_state[state_db])
+                log_str = " Reserving di DAQ"
+                log.log_info(mod_name, func_name, log_str)
+            else:
+            # Start over if something else is in the queue
+                dev[device_db]['queue'].remove()
+
+# Read di single --------------------------------------------------------------
+last_value = {}
+def read_di_DAQ_single():
+    device_db = 'monitor_DAQ/device_DAQ_digital_in'
+# Double check queue
+    dev[device_db]['queue'].queue_and_wait()
+# Reserve Point
+    dev[device_db]['driver'].reserve_point(True)
+# Get values
+    multi_channel_reading = dev[device_db]['driver'].read_point()
+# Update buffers and databases -----------------------------
+# port0/line0, 'rf_oscillators/1GHz_phase_lock' ----------------------
+    monitor_db = 'rf_oscillators/1GHz_phase_lock'
+    channel_index = di_map[monitor_db] # 0
+    last_value[monitor_db] = [multi_channel_reading[channel_index]]
+# port1/line0, 'rf_oscillators/100MHz_phase_lock' ----------------------
+    monitor_db = 'rf_oscillators/100MHz_phase_lock'
+    channel_index = di_map[monitor_db] # 1
+    last_value[monitor_db] = [multi_channel_reading[channel_index]]
+# Unreserve Point
+    dev[device_db]['driver'].reserve_point(False)
 
 
 # %% Maintain Functions =======================================================
@@ -490,7 +552,7 @@ touch_interval = 1 # second
 for state_db in STATE_DBs:
     timer[state_db]['touch'] = get_lap(touch_interval)
 def touch(state_db):
-    mod_name = __name__
+    mod_name = touch.__module__
     func_name = touch.__name__
     if (state_db == 'monitor_DAQ/state_analog'):
         device_db ='monitor_DAQ/device_DAQ_analog_in'
@@ -504,7 +566,7 @@ def touch(state_db):
             with sm.lock[state_db]:
                 current_state[state_db]['compliance'] = False
                 db[state_db].write_record_and_buffer(current_state[state_db])
-            log_str = " Releasing DAQ, other processes waiting in the queue"
+            log_str = " Releasing ai DAQ, other processes waiting in the queue"
             log.log_info(mod_name, func_name, log_str)
         elif not(dev[device_db]['driver'].reserve_cont()):
         # Continuous aquisition has not been reserved
@@ -514,7 +576,37 @@ def touch(state_db):
             with sm.lock[state_db]:
                 current_state[state_db]['compliance'] = False
                 db[state_db].write_record_and_buffer(current_state[state_db])
-            log_str = " Releasing DAQ, continuous acquisition has not been reserved"
+            log_str = " Releasing ai DAQ, continuous acquisition has not been reserved"
+            log.log_info(mod_name, func_name, log_str)
+        else:
+        # Touch queue (prevent timeout)
+            touch_lap = get_lap(touch_interval)
+            if touch_lap > timer[state_db]['touch']:
+                timer[state_db]['touch'] = touch_lap
+                dev[device_db]['queue'].touch()
+    if (state_db == 'monitor_DAQ/state_digital'):
+        device_db ='monitor_DAQ/device_DAQ_digital_in'
+        queue_size = len(dev[device_db]['queue'].get_queue())
+        if (queue_size != 1):
+        # Other scripts want to use the DAQ
+        # Unreserve and dequeue DAQ
+            dev[device_db]['driver'].reserve_cont(False)
+            dev[device_db]['queue'].remove()
+        # Update state variable
+            with sm.lock[state_db]:
+                current_state[state_db]['compliance'] = False
+                db[state_db].write_record_and_buffer(current_state[state_db])
+            log_str = " Releasing di DAQ, other processes waiting in the queue"
+            log.log_info(mod_name, func_name, log_str)
+        elif not(dev[device_db]['driver'].reserve_cont()):
+        # Continuous aquisition has not been reserved
+        # Dequeue
+            dev[device_db]['queue'].remove()
+        # Update state variable
+            with sm.lock[state_db]:
+                current_state[state_db]['compliance'] = False
+                db[state_db].write_record_and_buffer(current_state[state_db])
+            log_str = " Releasing di DAQ, continuous acquisition has not been reserved"
             log.log_info(mod_name, func_name, log_str)
         else:
         # Touch queue (prevent timeout)
@@ -540,10 +632,16 @@ def queue_worker(queue_name):
             item.start()
             item.join()
             fifo_q[queue_name].task_done()
+# Analog In
 fifo_q['daq:ai_buffer'] = queue.Queue()
 thread['daq:ai_buffer'] = ThreadFactory(target=queue_worker, args=['daq:ai_buffer'])
 fifo_q['daq:ai_record'] = queue.Queue()
 thread['daq:ai_record'] = ThreadFactory(target=queue_worker, args=['daq:ai_record'])
+# Digital In
+fifo_q['daq:di_buffer'] = queue.Queue()
+thread['daq:di_buffer'] = ThreadFactory(target=queue_worker, args=['daq:di_buffer'])
+fifo_q['daq:di_record'] = queue.Queue()
+thread['daq:di_record'] = ThreadFactory(target=queue_worker, args=['daq:di_record'])
 
 # Buffer Ai -------------------------------------------------------------------
 def buffer_ai(monitor_db, data_mean, data_std, data_n, timestamp, channel_identifiers=None):
@@ -750,6 +848,130 @@ def read_ai_DAQ(state_db):
     # Propogate lap numbers -----------------------------------------
         timer[state_db]['data'] = new_control_lap
 
+# Buffer Di -------------------------------------------------------------------
+def buffer_di(monitor_db, current_value, flips, timestamp, channel_identifiers=None):
+    if (channel_identifiers == None):
+        with mon[monitor_db]['lock']:
+            mon[monitor_db]['new'] = True
+            mon[monitor_db]['data'] = update_buffer(
+                    mon[monitor_db]['data'],
+                    current_value, 500)
+        db[monitor_db].write_buffer({'bit':bool(current_value), 'flips':int(flips)},
+                                      timestamp=timestamp)
+    elif (type(channel_identifiers) == list):
+        data_buffer = {}
+        with mon[monitor_db]['lock']:
+            mon[monitor_db]['new'] = True
+            mon[monitor_db]['data'] = update_buffer(
+                    mon[monitor_db]['data'],
+                    current_value, 500*len(channel_identifiers))
+        for ind, name in enumerate(channel_identifiers):
+            data_buffer[name+'_bit'] = bool(current_value[ind])
+            data_buffer[name+'_flips'] = int(flips[ind])
+        db[monitor_db].write_buffer(data_buffer, timestamp=timestamp)
+
+# Record Di -------------------------------------------------------------------
+array['daq:port0/line0'] = np.array([])
+array['daq:port1/line0'] = np.array([])
+timer['daq:record_di'] = get_lap(daq_record_interval)
+def record_di(monitor_db, data, timestamp, write_record, array_identifier, channel_identifiers=None):
+    if (channel_identifiers == None):
+        # Append to record array ----------------
+        array[array_identifier] = np.append(array[array_identifier], data)
+        if write_record:
+            if (array[array_identifier].size > 0):
+        # Record statistics ---------------------
+                db[monitor_db].write_record({
+                        'bit':bool(array[array_identifier][-1]),
+                        'flips':int(np.sum(np.diff(array[array_identifier])))},
+                        timestamp=timestamp)
+        # Empty the array -----------------------
+                array[array_identifier] = np.array([array[array_identifier][-1]])
+    elif (type(channel_identifiers) == list):
+        # Append to record arrays ---------------
+        array_size = []
+        for ind, name in enumerate(channel_identifiers):
+            array[array_identifier[ind]] = np.append(array[array_identifier[ind]], data[ind])
+            array_size.append(array[array_identifier[ind]].size)
+        if write_record:
+            data_record = {}
+            if np.all(array_size):
+        # Record statistics ---------------------
+                for ind, name in enumerate(channel_identifiers):
+                    data_record[name+'_bit'] = bool(array[array_identifier[ind]][-1])
+                    data_record[name+'_flips'] = int(np.sum(np.diff(array[array_identifier[ind]])))
+                db[monitor_db].write_record(data_record, timestamp=timestamp)
+        # Empty the arrays ----------------------
+                for ind, name in enumerate(channel_identifiers):
+                    array[array_identifier[ind]] = np.array([array[array_identifier[ind]][-1]])
+
+# Read Di ---------------------------------------------------------------------
+def read_di_DAQ(state_db):
+# Get lap number
+    new_control_lap = get_lap(control_interval)
+    new_record_lap = get_lap(daq_record_interval)
+    write_record = (new_record_lap > timer['daq:record_di'])
+# Read DAQ ----------------------------------------------------------
+    if (new_control_lap > timer[state_db]['data']):
+        device_db = 'monitor_DAQ/device_DAQ_digital_in'
+    # Double check queue
+        dev[device_db]['queue'].queue_and_wait()
+    # Get values
+        multi_channel_reading = dev[device_db]['driver'].read_cont()
+        timestamp=datetime.datetime.utcnow()
+    # Update buffers and databases -----------------------------
+    # port0/line0, 'rf_oscillators/1GHz_phase_lock' ----------------------
+        channel = 'daq:port0/line0'
+        monitor_db = 'rf_oscillators/1GHz_phase_lock'
+        channel_index = di_map[monitor_db] # 0
+        data = np.append(last_value[monitor_db],multi_channel_reading[channel_index])
+        last_value[monitor_db] = [data[-1]]
+        flips = int(np.sum(np.diff(data)))
+        # Update buffer
+        args = [monitor_db, last_value[monitor_db], flips, timestamp]
+        item = threading.Thread(target=buffer_di, args=args, daemon=True)
+        fifo_q['daq:di_buffer'].put(item, block=False)
+        # Update record
+        args = [monitor_db, data, timestamp, write_record, channel]
+        item = threading.Thread(target=record_di, args=args, daemon=True)
+        fifo_q['daq:di_record'].put(item, block=False)
+    # port1/line0, 'rf_oscillators/100MHz_phase_lock' ----------------------
+        channel = 'daq:port1/line0'
+        monitor_db = 'rf_oscillators/100MHz_phase_lock'
+        channel_index = di_map[monitor_db] # 1
+        data = np.append(last_value[monitor_db],multi_channel_reading[channel_index])
+        last_value[monitor_db] = [data[-1]]
+        flips = int(np.sum(np.diff(data)))
+        # Update buffer
+        args = [monitor_db, last_value[monitor_db], flips, timestamp]
+        item = threading.Thread(target=buffer_di, args=args, daemon=True)
+        fifo_q['daq:di_buffer'].put(item, block=False)
+        # Update record
+        args = [monitor_db, data, timestamp, write_record, channel]
+        item = threading.Thread(target=record_di, args=args, daemon=True)
+        fifo_q['daq:di_record'].put(item, block=False)
+    # Check threads ---------------------------------------------
+        thread_name = 'daq:di_buffer'
+        (alive, error) = thread[thread_name].check_thread()
+        if error != None:
+            raise error[1].with_traceback(error[2])
+        if not(alive):
+        # Start new thread
+            thread[thread_name].start()
+        thread_name = 'daq:di_record'
+        (alive, error) = thread[thread_name].check_thread()
+        if error != None:
+            raise error[1].with_traceback(error[2])
+        if not(alive):
+        # Start new thread
+            thread[thread_name].start()
+    # Propogate lap numbers -------------------------------------
+        if write_record:
+            timer['daq:record_di'] = new_record_lap
+    # Propogate lap numbers -----------------------------------------
+        timer[state_db]['data'] = new_control_lap
+
+
 
 # %% States ===================================================================
 
@@ -911,10 +1133,38 @@ STATES = {
                         'routines':{
                                 'monitor':nothing, 'search':nothing,
                                 'maintain':nothing, 'operate':nothing}}
-                        }                        
+                        },
+        'monitor_DAQ/state_digital':{
+                'read':{
+                        'settings':{},
+                        'prerequisites':{
+                                'critical':[],
+                                'necessary':[],
+                                'optional':[]},
+                        'routines':{
+                                'monitor':nothing, 'search':queue_and_reserve,
+                                'maintain':touch, 'operate':read_di_DAQ}},
+                'safe':{
+                        'settings':{},
+                        'prerequisites':{
+                                'critical':[],
+                                'necessary':[],
+                                'optional':[]},
+                        'routines':{
+                                'monitor':nothing, 'search':nothing,
+                                'maintain':nothing, 'operate':nothing}},
+                'engineering':{
+                        'settings':{},
+                        'prerequisites':{
+                                'critical':[],
+                                'necessary':[],
+                                'optional':[]},
+                        'routines':{
+                                'monitor':nothing, 'search':nothing,
+                                'maintain':nothing, 'operate':nothing}}
+                        }
         }
 sm.init_states(STATES)
-
 
 # %% STATE MACHINE ============================================================
 

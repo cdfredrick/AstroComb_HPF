@@ -452,6 +452,15 @@ class Machine():
                     if self.local_settings[database][setting]['value'] !=True:
                         db_initialized = False
                         self.local_settings[database][setting]['value'] = True
+                if ((setting == 'driver') or (setting == 'queue') or (setting == '__init__')):
+                    if setting == 'driver':
+                        if self.local_settings[database][setting] != str(self.SETTINGS[database][setting]):
+                            db_initialized = False
+                            self.local_settings[database][setting] = str(self.SETTINGS[database][setting])
+                    else:
+                        if self.local_settings[database][setting] != self.SETTINGS[database][setting]:
+                            db_initialized = False
+                            self.local_settings[database][setting] = self.SETTINGS[database][setting]
             if device_db_condition:
             # Update the device values
                 self.update_device_settings(database, settings_list)

@@ -413,6 +413,12 @@ class Machine():
         for device_db in self.DEVICE_DBs:
             log_str = " Initializing device {:}".format(device_db)
             log.log_info(mod_name, func_name, log_str)
+        # Release Old References
+            if (device_db in self.dev):
+                if ('driver' in self.dev[device_db]):
+                    if hasattr(self.dev[device_db]['driver'],'_release'):
+                        getattr(self.dev[device_db]['driver'],'_release')()
+        # Create New Object
             self.dev[device_db] = {
                     'driver':self.send_args(self.DEVICE_SETTINGS[device_db]['driver'],
                                        self.DEVICE_SETTINGS[device_db]['__init__']),
@@ -1252,7 +1258,7 @@ class Machine():
             if (error != None):
                 mod_name = self.thread[thread_name].target.__module__
                 func_name = self.thread[thread_name].target.__name__
-                err_str = thread_name+''.join(traceback.format_exception(*error))
+                err_str = thread_name+''.join(traceback.format_exception_only(error[0], error[1]))
                 if (err_str in self.error):
                     if (time.time() - self.error[err_str]) > self.error_interval:
                         log.log_exception_info(mod_name, func_name, error)

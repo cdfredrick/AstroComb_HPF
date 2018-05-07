@@ -161,6 +161,9 @@ class InTask():
         '''
         self.task_cont.close()
         self.task_point.close()
+    
+    def _release(self):
+        self._close_tasks()
 
 
 # %% General Output Task

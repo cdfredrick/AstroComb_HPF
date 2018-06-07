@@ -22,7 +22,7 @@ from Drivers.Logging import EventLog as log
 
 class PriorityQueue():
     @log.log_this()
-    def __init__(self, queue_ID, bucket='queue', host='localhost', username='default', password='default', timeout=5):
+    def __init__(self, queue_ID, bucket='queue', host='localhost', username='default', password='default', timeout=50):
         '''The priority queue implements a FIFO queue with optional priority
         insertion. The "bucket", "host", "username", and "password" keywords
         must match those specified in the database configuration. The "timeout"
@@ -234,7 +234,7 @@ class PriorityQueue():
 
 class FIFOQueue():
     @log.log_this()
-    def __init__(self, queue_ID, bucket='queue', host='localhost', username='default', password='default', timeout=5):
+    def __init__(self, queue_ID, bucket='queue', host='localhost', username='default', password='default', timeout=50):
         '''The FIO queue implements a simple FIFO queue. The "bucket", "host", 
         "username", and "password" keywords must match those specified in the
         database configuration. The "timeout" keyword sets the amount of time

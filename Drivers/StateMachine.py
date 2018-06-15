@@ -1136,9 +1136,14 @@ class Machine():
                         if (desired_state in self.STATES[state_db]):
                             with self.lock[state_db]:
                                 if self.current_state[state_db]['desired_state'] != desired_state:
-                            # Update the state variable
+                                # Update the state variable
                                     self.current_state[state_db]['desired_state'] = desired_state
                                     self.db[state_db].write_record_and_buffer(self.current_state[state_db])
+                                elif self.current_state[state_db]['state'] == desired_state:
+                                # Force the state to check compliance
+                                    self.current_state[state_db]['compliance'] = False
+                                    self.db[state_db].write_record_and_buffer(self.current_state[state_db])
+                                    
         # If requesting to change device settings,
             if ('device_setting' in message):
                 for device_db in message['device_setting']:

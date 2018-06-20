@@ -36,37 +36,38 @@ ct_conv = lambda dt: utc_tz.localize(dt).astimezone(central_tz)
 #start_time = central_tz.localize(datetime.datetime(2018, 4, 21, 14, 40))
 start_time = central_tz.localize(datetime.datetime(2018, 4, 21, 20, 0))
 stop_time = central_tz.localize(datetime.datetime.now())
+#start_time = stop_time - datetime.timedelta(days=7)
 DBs = {
     # ambience ----------------------------------------------------------------
-#    'ambience/box_temperature_0':{
-#            'start':start_time,
-#            'stop':stop_time,
-#            'keys':{
-#                    'V':lambda v: v*100,
-#                    'std':lambda v: v*100}},
-#    'ambience/box_temperature_1':{
-#            'start':start_time,
-#            'stop':stop_time,
-#            'keys':{
-#                    'V':lambda v: v*100,
-#                    'std':lambda v: v*100}},
-#    'ambience/rack_temperature_0':{
-#            'start':start_time,
-#            'stop':stop_time,
-#            'keys':{
-#                    'V':lambda v: v*100,
-#                    'std':lambda v: v*100}},
+    'ambience/box_temperature_0':{
+            'start':start_time,
+            'stop':stop_time,
+            'keys':{
+                    'V':lambda v: v*100,
+                    'std':lambda v: v*100}},
+    'ambience/box_temperature_1':{
+            'start':start_time,
+            'stop':stop_time,
+            'keys':{
+                    'V':lambda v: v*100,
+                    'std':lambda v: v*100}},
+    'ambience/rack_temperature_0':{
+            'start':start_time,
+            'stop':stop_time,
+            'keys':{
+                    'V':lambda v: v*100,
+                    'std':lambda v: v*100}},
     # broadening_stage --------------------------------------------------------
-#    'broadening_stage/device_rotation_mount':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'position':lambda p: p}},
+    'broadening_stage/device_rotation_mount':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'position':lambda p: p}},
     # comb_generator ----------------------------------------------------------
-#    'comb_generator/IM_bias':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                   'V':lambda v: v,
-#                   'std':lambda v: v}},
+    'comb_generator/IM_bias':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                   'V':lambda v: v,
+                   'std':lambda v: v}},
     # cw_laser ----------------------------------------------------------------
 #    'cw_laser/dac_limits':{
 #            'start':start_time, 'stop':stop_time,
@@ -75,11 +76,11 @@ DBs = {
 #                    'max_V':lambda v: v,
 #                    'min_std':lambda v: v,
 #                    'max_std':lambda v: v}},
-#    'cw_laser/dac_output':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'V':lambda v: v,
-#                    'std':lambda v: v}},
+    'cw_laser/dac_output':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'V':lambda v: v,
+                    'std':lambda v: v}},
 #    'cw_laser/freq_err':{
 #            'start':start_time, 'stop':stop_time,
 #            'keys':{
@@ -216,16 +217,16 @@ DBs = {
             'keys':{
                     'dBm':lambda dw: dw,
                     'std':lambda dw: dw}},
-    'spectral_shaper/DW_vs_IM_bias':{
-            'start':start_time, 'stop':stop_time,
-            'keys':{
-                    'V':lambda v: v,
-                    'dBm':lambda dw: dw}},
-    'spectral_shaper/DW_vs_waveplate_angle':{
-            'start':start_time, 'stop':stop_time,
-            'keys':{
-                    'deg':lambda d: d,
-                    'dBm':lambda dw: dw}},
+#    'spectral_shaper/DW_vs_IM_bias':{
+#            'start':start_time, 'stop':stop_time,
+#            'keys':{
+#                    'V':lambda v: v,
+#                    'dBm':lambda dw: dw}},
+#    'spectral_shaper/DW_vs_waveplate_angle':{
+#            'start':start_time, 'stop':stop_time,
+#            'keys':{
+#                    'deg':lambda d: d,
+#                    'dBm':lambda dw: dw}},
     'spectral_shaper/mask':{
             'start':start_time, 'stop':stop_time,
             'keys':{
@@ -301,19 +302,48 @@ for ind, database in enumerate(DBs):
         for ind3, data_list in enumerate(data_temp):
             try:
                 len(data_list[0])==len(data_list[1])
-                axarr[0].plot(data_list[0], data_list[1], '.', markersize=1)#, label=data[database]['data'][0][ind3])
+                axarr[0].plot(data_list[0], data_list[1], markersize=1)#, label=data[database]['data'][0][ind3])
             except:
                 axarr[0].plot(data_list[0], np.array(data_list[0])*np.nan, '.', markersize=1)#, label=data[database]['data'][0][ind3])
             try:
                 len(data_list[0])==len(data_list[2])
-                axarr[1].plot(data_list[0], data_list[2], '.', markersize=1)#, label=data[database]['data'][0][ind3])
+                axarr[1].plot(data_list[0], data_list[2], markersize=1)#, label=data[database]['data'][0][ind3])
             except:
                 axarr[1].plot(data_list[0], np.array(data_list[0])*np.nan, '.', markersize=1)#, label=data[database]['data'][0][ind3])
         axarr[0].set_title(database+':y')
         axarr[0].grid(b=True)
         axarr[1].set_title(database+':y_std')
         axarr[1].grid(b=True)
-    else:
+            #2D plot
+        plt.figure()
+        
+        specs_2D = []
+        y_data = []
+        for ind3, data_list in enumerate(data_temp):
+            try:
+                len(data_list[0])==len(data_list[1])
+                specs_2D.append(np.array([data_list[0], data_list[1]]))
+                y_data.append(data_list[3])
+            except:
+                pass
+        plt_specs_2D = np.flipud(np.vstack(list(zip(*specs_2D))[1]))
+        wvl_samp = np.mean(list(zip(*specs_2D))[0],axis=0)
+#        names = np.flipud(zip(*file_data)[1])
+#        y_data = np.linspace(0,1,count+1)
+#        y_diff = np.mean(np.ediff1d(y_data))
+#        y_ticks = np.arange(y_diff/2., 1+y_diff/2, y_diff)
+        plt.pcolormesh(wvl_samp, y_data, plt_specs_2D, cmap='nipy_spectral')
+        c_map = plt.get_cmap('nipy_spectral')
+        c_map.set_bad(color='k', alpha = 1)
+        c_bar = plt.colorbar()
+        c_bar.set_label('Amplitude (dBm/nm)')
+        plt.axis("tight")
+#        plt.yticks(y_ticks[cmap_select], names[cmap_select])
+        plt.xlabel('Wavelength (nm)')
+#        plt.title(sub_name+': '+group_ident)
+        plt.tight_layout()
+        
+    else: # sAll other data
         f, axarr = plt.subplots(len(keys), sharex=True)
         f.autofmt_xdate()
         for ind2, key in enumerate(keys):
@@ -334,14 +364,20 @@ for ind, database in enumerate(DBs):
 #data_temp = np.array(data_temp)
 #np.save(r'C:\Users\National Institute\Pictures\Plots 18-06-06\rf-oscillators_Rb-time-tag', data_temp)
 
-#data_temp = copy.deepcopy([[spectrum['x'], spectrum['y'], spectrum['y_std'], data[database]['data'][0][idx].timestamp()] for idx,spectrum in enumerate(data[database]['data'][1])])
-#data_temp = np.array(data_temp)
-#np.save(r'C:\Users\National Institute\Pictures\Plots 18-06-06\spectral-shaper_spectrum', data_temp)
+data_temp = copy.deepcopy([[spectrum['x'], spectrum['y'], spectrum['y_std'], data['spectral_shaper/spectrum']['data'][0][idx].timestamp()] for idx,spectrum in enumerate(data['spectral_shaper/spectrum']['data'][1])])
+data_temp = np.array(data_temp)
+np.save(r'C:\Users\National Institute\Pictures\Plots 18-06-20\spectral-shaper_spectrum', data_temp)
 
-#data_temp = copy.deepcopy(data['spectral_shaper/mask']['path'])
-#data_temp[0] = [dt.timestamp() for dt in data_temp[0]]
-#data_temp = np.array(data_temp)
-#np.save(r'C:\Users\National Institute\Pictures\Plots 18-06-06\spectral-shapers_mask', data_temp)
+data_temp = copy.deepcopy(data['spectral_shaper/mask']['path'])
+data_temp[0] = [dt.timestamp() for dt in data_temp[0]]
+data_temp = np.array(data_temp)
+np.save(r'C:\Users\National Institute\Pictures\Plots 18-06-20\spectral-shaper_mask', data_temp)
+
+data_temp = copy.deepcopy(data['spectral_shaper/DW'])
+data_temp['dBm'][0] = [dt.timestamp() for dt in data_temp['dBm'][0]]
+data_temp['std'][0] = [dt.timestamp() for dt in data_temp['std'][0]]
+data_temp = np.array([data_temp['dBm'], data_temp['std']])
+np.save(r'C:\Users\National Institute\Pictures\Plots 18-06-20\spectral-shaper_DW', data_temp)
 
 # %% 
 #start = 0

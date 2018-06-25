@@ -68,6 +68,7 @@ if __name__ == '__main__':
         return int(time.time() // time_interval)
     
     # Full Screen -----------------------------------------------------------------
+    image_dir = ['']
     class FullScreen():
         def __init__(self, dimensions=None, position=None, auto_scale=False):
             self.auto_scale = auto_scale
@@ -99,6 +100,7 @@ if __name__ == '__main__':
             self.canvas.pack()
         
         def load_image(self, image_path):
+            image_dir[0] = image_path
             self.pilImage = Image.open(image_path)
             if self.auto_scale:
             # Scale the Image if Too Large
@@ -749,7 +751,8 @@ if __name__ == '__main__':
         mod_name = check_mask.__module__
         func_name = check_mask.__name__
         mask_path = STATES[state_db][current_state[state_db]['state']]['settings']['mask']
-        current_mask = mon['spectral_shaper/mask']['data']['path']
+        #current_mask = mon['spectral_shaper/mask']['data']['path']
+        current_mask = image_dir[0]
         if (current_mask != mask_path):
             # Update the state variable
             with sm.lock[state_db]:

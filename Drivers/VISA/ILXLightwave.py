@@ -217,6 +217,7 @@ class LaserModule(LDC3900):
         self.las_channel = laser_channel
         self.las_open_command = 'LAS:CHAN {:}'.format(self.las_channel)
         self.las_opened = False
+        self.las_step_size = self.las_step()
     
     
     @log.log_this()
@@ -641,6 +642,45 @@ class LaserModule(LDC3900):
             output = vo.tf_to_10(output)
         # Send command
             self.write_las('ONLY:OUT {:}'.format(output))
+
+    @log.log_this()
+    def las_step(self, step=None):
+        '''
+        The LAS:STEP command is used to increment or decrement the selected TEC
+        control mode set point by the given amount, when used with the TEC:INC
+        or TEC:DEC command. Accepts an integer value of the step amount, in the
+        range +-9999.
+            The TEC:DEC command decrements the selected control mode set point
+            by one step and the TEC:INC command increments the selected control
+            mode set point by one step for the selected TEC channel.
+        The incremental amount is one step. The step size for the selected 
+        channel can be edited via the STEP command, its default value is 
+        0.1×C, 1 mA (ITE), 1 W (THERM), 0.01 mA (AD590), 0.1 mV (LM335), or 
+        0.01 W (RTD), depending on the mode of operation.
+        
+        The TEC:STEP? query is used to read back the TEC STEP value for the 
+        selected TEC channel. This value is used to increment or decrement the 
+        selected TEC control mode set point by the given amount, when used with
+        the TEC:INC or TEC:DEC command.
+        '''
+        if step is None:
+        # Send query
+            result = self.query_las('STEP?')
+            return int(float(result))
+        else:
+        # Limit range
+            if step < -9999:
+                step = -9999
+            elif step > +9999:
+                step = +9999
+        # Check input step size
+            if abs(step) != self.las_step_size:
+                self.write_las('STEP {:}'.format(int(abs(step))))
+                self.las_step_size = int(abs(step))
+            if step > 0:
+                self.write_las('INC')
+            elif step < 0:
+                self.write_las('DEC')
 
 # %% ILX LDC-3900 Mainframe - TEC Module
 class TECModule(LDC3900):

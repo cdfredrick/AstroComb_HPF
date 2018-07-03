@@ -212,11 +212,11 @@ DBs = {
 #                    'ns':lambda s: s,
 #                    'std':lambda s: s}},
     # spectral_shaper ---------------------------------------------------------
-    'spectral_shaper/DW':{
-            'start':start_time, 'stop':stop_time,
-            'keys':{
-                    'dBm':lambda dw: dw,
-                    'std':lambda dw: dw}},
+#    'spectral_shaper/DW':{
+#            'start':start_time, 'stop':stop_time,
+#            'keys':{
+#                    'dBm':lambda dw: dw,
+#                    'std':lambda dw: dw}},
 #    'spectral_shaper/DW_vs_IM_bias':{
 #            'start':start_time, 'stop':stop_time,
 #            'keys':{
@@ -227,14 +227,14 @@ DBs = {
 #            'keys':{
 #                    'deg':lambda d: d,
 #                    'dBm':lambda dw: dw}},
-    'spectral_shaper/mask':{
-            'start':start_time, 'stop':stop_time,
-            'keys':{
-                    'path':lambda p: 'top' in p}},
-    'spectral_shaper/spectrum':{
-            'start':start_time, 'stop':stop_time,
-            'keys':{
-                    'data':lambda d: {'x':d['x'], 'y':d['y'], 'y_std':d['y_std']}}},
+#    'spectral_shaper/mask':{
+#            'start':start_time, 'stop':stop_time,
+#            'keys':{
+#                    'path':lambda p: 'top' in p}},
+#    'spectral_shaper/spectrum':{
+#            'start':start_time, 'stop':stop_time,
+#            'keys':{
+#                    'data':lambda d: {'x':d['x'], 'y':d['y'], 'y_std':d['y_std']}}},
 }
 
 
@@ -364,20 +364,20 @@ for ind, database in enumerate(DBs):
 #data_temp = np.array(data_temp)
 #np.save(r'C:\Users\National Institute\Pictures\Plots 18-06-06\rf-oscillators_Rb-time-tag', data_temp)
 
-data_temp = copy.deepcopy([[spectrum['x'], spectrum['y'], spectrum['y_std'], data['spectral_shaper/spectrum']['data'][0][idx].timestamp()] for idx,spectrum in enumerate(data['spectral_shaper/spectrum']['data'][1])])
-data_temp = np.array(data_temp)
-np.save(r'C:\Users\National Institute\Pictures\Plots 18-06-20\spectral-shaper_spectrum', data_temp)
+#data_temp = copy.deepcopy([[spectrum['x'], spectrum['y'], spectrum['y_std'], data['spectral_shaper/spectrum']['data'][0][idx].timestamp()] for idx,spectrum in enumerate(data['spectral_shaper/spectrum']['data'][1])])
+#data_temp = np.array(data_temp)
+#np.save(r'C:\Users\National Institute\Pictures\Plots 18-06-20\spectral-shaper_spectrum', data_temp)
 
-data_temp = copy.deepcopy(data['spectral_shaper/mask']['path'])
-data_temp[0] = [dt.timestamp() for dt in data_temp[0]]
-data_temp = np.array(data_temp)
-np.save(r'C:\Users\National Institute\Pictures\Plots 18-06-20\spectral-shaper_mask', data_temp)
+#data_temp = copy.deepcopy(data['spectral_shaper/mask']['path'])
+#data_temp[0] = [dt.timestamp() for dt in data_temp[0]]
+#data_temp = np.array(data_temp)
+#np.save(r'C:\Users\National Institute\Pictures\Plots 18-06-20\spectral-shaper_mask', data_temp)
 
-data_temp = copy.deepcopy(data['spectral_shaper/DW'])
-data_temp['dBm'][0] = [dt.timestamp() for dt in data_temp['dBm'][0]]
-data_temp['std'][0] = [dt.timestamp() for dt in data_temp['std'][0]]
-data_temp = np.array([data_temp['dBm'], data_temp['std']])
-np.save(r'C:\Users\National Institute\Pictures\Plots 18-06-20\spectral-shaper_DW', data_temp)
+#data_temp = copy.deepcopy(data['spectral_shaper/DW'])
+#data_temp['dBm'][0] = [dt.timestamp() for dt in data_temp['dBm'][0]]
+#data_temp['std'][0] = [dt.timestamp() for dt in data_temp['std'][0]]
+#data_temp = np.array([data_temp['dBm'], data_temp['std']])
+#np.save(r'C:\Users\National Institute\Pictures\Plots 18-06-20\spectral-shaper_DW', data_temp)
 
 # %% 
 #start = 0

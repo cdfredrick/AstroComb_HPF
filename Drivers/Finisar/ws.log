@@ -1,0 +1,35 @@
+=======START LOGGING=======
+20:48:03.352 00002280  <log> [factory]  RegisterModule cls=WaveShaperImage
+20:48:03.354 00002280  <log> [factory]  RegisterModule cls=WaveShaper
+20:48:03.354 00002280  <log> [factory]  RegisterModule cls=WaveShaper
+20:48:03.354 00002280  <log> [factory]  RegisterModule cls=MemBuffer
+20:48:03.354 00002280  <log> [factory]  RegisterModule cls=FTDI_Cheetah_PortManager
+20:48:03.354 00002280  <dbg> [factory]  CreateModule cid=FTDI_Cheetah_PortManager iid=IPortManager
+20:48:03.354 00002280  <log> [factory]  RegisterModule cls=WSSimPort
+20:48:03.354 00002280  <log> [factory]  RegisterModule cls=ComPort
+20:48:03.354 00002280  <log> [factory]  RegisterModule cls=FTDIComPort
+20:48:03.354 00002280  <log> [factory]  RegisterModule cls=FTDISPIPort
+20:48:03.354 00002280  <log> [factory]  RegisterModule cls=CheetahSPIPort
+20:48:03.354 00002280  <log> [_wsapi_]  Initialize WaveShaperAPI, version=2.7.3
+20:48:03.354 00002280  <log> [_wsapi_]  +ws_create_waveshaper ws=1
+20:48:03.354 00002280  <dbg> [factory]  CreateModule cid=WaveShaper iid=IWaveShaper
+20:48:03.354 00002280  <dbg> [factory]  CreateModule cid=WaveShaperImage iid=IWaveShaperImage
+20:48:03.354 00002280  <dbg> [factory]  CreateModule cid=MemBuffer iid=IMemBuffer
+20:48:03.354 00002280  <dbg> [factory]  CreateModule cid=MemBuffer iid=IMemBuffer
+20:48:03.354 00002280  <dbg> [factory]  CreateModule cid=MemBuffer iid=IMemBuffer
+20:48:03.354 00002280  <dbg> [factory]  CreateModule cid=MemBuffer iid=IMemBuffer
+<LOG>HIFILGOPJNBNCLHHLJBMLDFNMILFDKKCMDBEEMCIAJALEPGCNPBEACMIEPPLKFDCFMBGGOOMBOLLBNMPIDENKHHLDEPCHADCFNBOLMIGCHDGLNDMBEPOHGGPEGMOGPMHDHOODOFGPAIAHDBD</LOG>
+20:48:03.354 00002280  <log> [wsimage]  LoadCalibration rc=-1 profiling=0(ms)
+20:48:03.354 00002280  <log> [wvshaper] CloseWaveShaper
+20:48:03.354 00002280  <log> [wvshaper] WaveShaper Deleted id=
+20:48:03.354 00002280  <log> [wsimage]  WaveShaperImage Deleted
+20:48:03.354 00002280  <log> [_wsapi_]  -ws_create_waveshaper rc=-1
+22:12:27.106 00002280  <log> [_wsapi_]  +ws_create_waveshaper ws=
+22:12:27.106 00002280  <log> [_wsapi_]  Generate new WaveShaper name '_wsn0'
+22:12:27.106 00002280  <dbg> [factory]  CreateModule cid=WaveShaper iid=IWaveShaper
+22:12:27.106 00002280  <dbg> [factory]  CreateModule cid=WaveShaperImage iid=IWaveShaperImage
+22:12:27.106 00002280  <dbg> [factory]  CreateModule cid=MemBuffer iid=IMemBuffer
+22:12:27.106 00002280  <dbg> [factory]  CreateModule cid=MemBuffer iid=IMemBuffer
+22:12:27.106 00002280  <dbg> [factory]  CreateModule cid=MemBuffer iid=IMemBuffer
+22:12:27.106 00002280  <dbg> [factory]  CreateModule cid=MemBuffer iid=IMemBuffer
+22:12:27.107 00002280  <log> [_wsapi_]  -ws_create_waveshaper rc=0

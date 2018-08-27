@@ -241,10 +241,10 @@ class OSA(vo.VISA):
             mode = {1:'SING',2:'REP',3:'AUTO',4:'SEGM'}[int(mode)]
             return mode
         else:
-            if mode in ['SING','REP','AUTO','SEGM']:
-                self.write(":INITiate:SMODe {:}".format(mode))
+            if set_mode in ['SING','REP','AUTO','SEGM']:
+                self.write(":INITiate:SMODe {:}".format(set_mode))
             else:
-                raise Exception('Unrecognized sweep mode {:}'.format(mode))
+                raise Exception('Unrecognized sweep mode {:}'.format(set_mode))
     
     def active_trace(self, set_trace=None):
         if (set_trace == None):

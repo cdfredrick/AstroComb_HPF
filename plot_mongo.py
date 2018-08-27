@@ -34,9 +34,9 @@ ct_conv = lambda dt: utc_tz.localize(dt).astimezone(central_tz)
 #start_time = central_tz.localize(datetime.datetime(2018, 3, 19, 14))
 #stop_time = central_tz.localize(datetime.datetime(2018, 3, 22, 6))
 #start_time = central_tz.localize(datetime.datetime(2018, 4, 21, 14, 40))
-start_time = central_tz.localize(datetime.datetime(2018, 4, 21, 20, 0))
+start_time = central_tz.localize(datetime.datetime(2018, 5, 1, 0, 0))
 stop_time = central_tz.localize(datetime.datetime.now())
-#start_time = stop_time - datetime.timedelta(days=7)
+#start_time = stop_time - datetime.timedelta(days=2*7)
 DBs = {
     # ambience ----------------------------------------------------------------
     'ambience/box_temperature_0':{
@@ -57,12 +57,12 @@ DBs = {
             'keys':{
                     'V':lambda v: v*100,
                     'std':lambda v: v*100}},
-    # broadening_stage --------------------------------------------------------
+#    # broadening_stage --------------------------------------------------------
     'broadening_stage/device_rotation_mount':{
             'start':start_time, 'stop':stop_time,
             'keys':{
                     'position':lambda p: p}},
-    # comb_generator ----------------------------------------------------------
+#    # comb_generator ----------------------------------------------------------
     'comb_generator/IM_bias':{
             'start':start_time, 'stop':stop_time,
             'keys':{
@@ -212,11 +212,11 @@ DBs = {
 #                    'ns':lambda s: s,
 #                    'std':lambda s: s}},
     # spectral_shaper ---------------------------------------------------------
-#    'spectral_shaper/DW':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'dBm':lambda dw: dw,
-#                    'std':lambda dw: dw}},
+    'spectral_shaper/DW':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'dBm':lambda dw: dw,
+                    'std':lambda dw: dw}},
 #    'spectral_shaper/DW_vs_IM_bias':{
 #            'start':start_time, 'stop':stop_time,
 #            'keys':{
@@ -279,19 +279,33 @@ for ind, database in enumerate(DBs):
         plt.title(database)
         #plt.legend()
     elif database == 'spectral_shaper/DW_vs_IM_bias':
-        data_temp = list(zip(data[database]['V'][1],data[database]['dBm'][1]))
-        plot_setup(len(data_temp))
-        for ind2, data_list in enumerate(data_temp):
-            plt.plot(data_list[0], data_list[1], '.', markersize=1)#, label=data[database]['V'][0][ind2])
+        data_temp = list(zip(data[database]['V'][1],data[database]['dBm'][1], data[database]['dBm'][0]))
+        plt.figure()
         plt.title(database)
-        #plt.legend()
+        ax1 = plt.subplot2grid((4,1),(0,0), rowspan=3)
+        ax2 = plt.subplot2grid((4,1),(3,0))
+        colormap = plt.cm.spectral
+        ax1.set_prop_cycle(cycler('color',[colormap(i) for i in np.linspace(0, 0.95, len(data_temp))]))
+        ax2.set_prop_cycle(cycler('color',[colormap(i) for i in np.linspace(0, 0.95, len(data_temp))]))
+        for ind2, data_list in enumerate(data_temp):
+            ax1.plot(data_list[0], data_list[1], '.', markersize=10)#, label=data[database]['deg'][0][ind2])
+            ax2.plot(data_list[2], 0, '.', markersize=10)
+        plt.gcf().autofmt_xdate()
+        plt.tight_layout()
     elif database == 'spectral_shaper/DW_vs_waveplate_angle':
-        data_temp = list(zip(data[database]['deg'][1],data[database]['dBm'][1]))
-        plot_setup(len(data_temp))
-        for ind2, data_list in enumerate(data_temp):
-            plt.plot(data_list[0], data_list[1], '.', markersize=1)#, label=data[database]['deg'][0][ind2])
+        data_temp = list(zip(data[database]['deg'][1],data[database]['dBm'][1],data[database]['dBm'][0]))
+        plt.figure()
         plt.title(database)
-        #plt.legend()
+        ax1 = plt.subplot2grid((4,1),(0,0), rowspan=3)
+        ax2 = plt.subplot2grid((4,1),(3,0))
+        colormap = plt.cm.spectral
+        ax1.set_prop_cycle(cycler('color',[colormap(i) for i in np.linspace(0, 0.95, len(data_temp))]))
+        ax2.set_prop_cycle(cycler('color',[colormap(i) for i in np.linspace(0, 0.95, len(data_temp))]))
+        for ind2, data_list in enumerate(data_temp):
+            ax1.plot(data_list[0], data_list[1], '.', markersize=10)#, label=data[database]['deg'][0][ind2])
+            ax2.plot(data_list[2], 0, '.', markersize=10)
+        plt.gcf().autofmt_xdate()
+        plt.tight_layout()
     elif database == 'spectral_shaper/spectrum':
         data_temp = [[spectrum['x'], spectrum['y'], spectrum['y_std'], data[database]['data'][0][idx]] for idx,spectrum in enumerate(data[database]['data'][1])]
         [next( (data_temp.pop(idx) for idx, value in enumerate(data_temp) if value[3] >= switch_time), None) for switch_time in data['spectral_shaper/mask']['path'][0]]
@@ -342,7 +356,20 @@ for ind, database in enumerate(DBs):
         plt.xlabel('Wavelength (nm)')
 #        plt.title(sub_name+': '+group_ident)
         plt.tight_layout()
-        
+    elif database == 'broadening_stage/device_rotation_mount':
+        f, axarr = plt.subplots(2, sharex=True)
+        f.autofmt_xdate()
+        axe = axarr[0]
+        key = 'position'
+        axe.plot(data[database][key][0], data[database][key][1],
+             '.',  markersize=1, label=database+':'+key)
+        axe.legend()
+        axe.grid(b=True)
+        axe = axarr[1]
+        axe.plot(data[database][key][0], 1-np.cos(np.pi/180*2*(52-np.array(data[database][key][1])))**2,
+             '.',  markersize=1, label='transmission')
+        axe.legend()
+        axe.grid(b=True)
     else: # sAll other data
         f, axarr = plt.subplots(len(keys), sharex=True)
         f.autofmt_xdate()
@@ -366,25 +393,16 @@ for ind, database in enumerate(DBs):
 
 #data_temp = copy.deepcopy([[spectrum['x'], spectrum['y'], spectrum['y_std'], data['spectral_shaper/spectrum']['data'][0][idx].timestamp()] for idx,spectrum in enumerate(data['spectral_shaper/spectrum']['data'][1])])
 #data_temp = np.array(data_temp)
-#np.save(r'C:\Users\National Institute\Pictures\Plots 18-06-20\spectral-shaper_spectrum', data_temp)
-
+#np.save(r'C:\Users\National Institute\Pictures\Plots 18-07-02\spectral-shaper_spectrum', data_temp)
+#
 #data_temp = copy.deepcopy(data['spectral_shaper/mask']['path'])
 #data_temp[0] = [dt.timestamp() for dt in data_temp[0]]
 #data_temp = np.array(data_temp)
-#np.save(r'C:\Users\National Institute\Pictures\Plots 18-06-20\spectral-shaper_mask', data_temp)
-
+#np.save(r'C:\Users\National Institute\Pictures\Plots 18-07-02\spectral-shaper_mask', data_temp)
+#
 #data_temp = copy.deepcopy(data['spectral_shaper/DW'])
 #data_temp['dBm'][0] = [dt.timestamp() for dt in data_temp['dBm'][0]]
 #data_temp['std'][0] = [dt.timestamp() for dt in data_temp['std'][0]]
 #data_temp = np.array([data_temp['dBm'], data_temp['std']])
-#np.save(r'C:\Users\National Institute\Pictures\Plots 18-06-20\spectral-shaper_DW', data_temp)
+#np.save(r'C:\Users\National Institute\Pictures\Plots 18-07-02\spectral-shaper_DW', data_temp)
 
-# %% 
-#start = 0
-#stop = -1
-#db = 'ambience/rack_temperature_0'
-#freqs = np.fft.rfftfreq(len(data[db]['_timestamp'][start:stop]), d=np.mean(np.diff(data[db]['_timestamp'][start:stop])).total_seconds())
-#amps = np.fft.rfft((data[db]['V'][start:stop]-np.mean(data[db]['V'][start:stop]))*np.hanning(len(data[db]['V'][start:stop])))
-#
-#plt.clf()
-#plt.plot(freqs*60*60, np.abs(amps)**2)

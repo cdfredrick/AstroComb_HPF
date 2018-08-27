@@ -1,1 +1,0 @@
-This is where MongoDB log files are stored

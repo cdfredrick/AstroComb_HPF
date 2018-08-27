@@ -1,0 +1,5 @@
+These files control the core operations of the astrocomb
+They contain the objects that control the devices and operate multiple devices togther
+
+Some device drivers are still missing so their operations are written in commented out pseudocode
+In particular stages 3 and 4 need attention

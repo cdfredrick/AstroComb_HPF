@@ -154,15 +154,15 @@ start_time = datetime.datetime.utcnow()
 print('Starting sync', datetime.datetime.now())
 try:
     for database in records:
-        print('Syncing {:}'.format(database), 'Elapsed Time =',(datetime.datetime.utcnow()-start_time))
+        print('Syncing {:},'.format(database), 'Elapsed Time =',(datetime.datetime.utcnow()-start_time))
         MongoDB.sync_to_local_record(local_client, remote_client, database, sync_stop_time=start_time)
     for database in logs:
-        print('Syncing {:}'.format(database), 'Elapsed Time =',(datetime.datetime.utcnow()-start_time))
+        print('Syncing {:},'.format(database), 'Elapsed Time =',(datetime.datetime.utcnow()-start_time))
         MongoDB.sync_to_local_log(local_client, remote_client, database, sync_stop_time=start_time)
 finally:
     try:
         remote_client.close()
     finally:
         local_client.close()
-print('Sync complete!')
+print('Sync complete!', 'Elapsed Time =',(datetime.datetime.utcnow()-start_time))
     

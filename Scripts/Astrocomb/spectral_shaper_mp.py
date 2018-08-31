@@ -852,14 +852,16 @@ if __name__ == '__main__':
         its defined states.'''
     
     # Optimize IM Bias ------------------------------------------------------------
-    IM_bias_limits = {'max':5.5, 'min':0.5}
-    IM_scan_range = 0.100 # 100mV range, +-50mV
-    IM_scan_offsets = IM_scan_range*np.linspace(-0.5, +0.5, 20) # 5mV step size
     def optimize_IM_bias(state_db):
+    # Info
         mod_name = optimize_IM_bias.__module__
         func_name = optimize_IM_bias.__name__
         log_str = ' Beginning IM bias optimization'
         log.log_info(mod_name, func_name, log_str)
+    # Parameters
+        IM_bias_limits = {'max':5.5, 'min':0.5}
+        IM_scan_range = 0.100 # 100mV range, +-50mV
+        IM_scan_offsets = IM_scan_range*np.linspace(-0.5, +0.5, 20) # 5mV step size
     # Device Databases
         osa_db = 'spectral_shaper/device_OSA'
         IM_db = 'spectral_shaper/device_IM_bias'
@@ -914,25 +916,28 @@ if __name__ == '__main__':
             sm.update_device_settings(IM_db, settings_list, write_log=False)
         # Find Maximum DW
             # Quadratic Fit
-            poly_coef = np.polyfit(biases, DWs, 2)
+            poly_coef = np.polyfit(np.array(biases)-current_bias, DWs, 2)
             poly_fit = np.poly1d(poly_coef)
             stationary_point = poly_fit.deriv().roots
             maximum_found = False
-            within_bounds = False
+            within_range = False
             if stationary_point.size:
             # is it a maximum?
-                maximum_found = (poly_fit.deriv(2)(stationary_point[0]) < 0)
-                within_bounds = (v_setpoints[0] <= stationary_point[0] <= v_setpoints[-1])
-            if (maximum_found and within_bounds):
-                new_setpoint = stationary_point[0]
+                max_stationary_point = stationary_point[poly_fit(stationary_point).argmax()]
+                maximum_found = (poly_fit(max_stationary_point) > poly_fit(np.min(biases)-current_bias)) and (poly_fit(max_stationary_point) > poly_fit(np.max(biases)-current_bias))
+                within_range = (np.min(biases) <= max_stationary_point+current_bias <= np.max(biases))
+                within_limits = (IM_bias_limits['min'] <= max_stationary_point+current_bias <= IM_bias_limits['max'])
+            if (maximum_found and within_range and within_limits):
+                new_setpoint = max_stationary_point+current_bias
                 continue_adjusting_IM = False
+                # Update IM bias
                 settings_list = [{'voltage_setpoint':new_setpoint}]
                 sm.update_device_settings(IM_db, settings_list, write_log=True)
                 log_str = ' IM bias optimized at {:}V'.format(new_setpoint)
                 log.log_info(mod_name, func_name, log_str)
             else:
             # Is the result sensible?
-                bounds_equal_condition = (poly_fit(v_setpoints[0]) == poly_fit(v_setpoints[-1]))
+                bounds_equal_condition = np.isclose(poly_fit(IM_scan_offsets[0]), poly_fit(IM_scan_offsets[-1]))
                 if bounds_equal_condition:
                     continue_adjusting_IM = False
                     warning_id = 'undetermined bias'
@@ -945,28 +950,31 @@ if __name__ == '__main__':
                         log.log_warning(mod_name, func_name, log_str)
                 else:
                 # Maximum at low or high V?
-                    high_max_condition = (poly_fit(v_setpoints[0]) < poly_fit(v_setpoints[-1]))
-                    if high_max_condition:
-                        new_setpoint = v_setpoints[-1]
+                    if maximum_found:
+                        high_max_condition = (max_stationary_point+current_bias > np.max(biases))
                     else:
-                        new_setpoint = v_setpoints[0]
-                within_limits = (IM_bias_limits['min'] <= new_setpoint <= IM_bias_limits['max'])
-                if not(within_limits):
-                    continue_adjusting_IM = False
-                    warning_id = 'bias limited'
-                    log_str = ' Unable to optimize IM bias, new value of {:}V is outside the acceptable limits'.format(new_setpoint)
-                    if (warning_id in warning):
-                        if (time.time() - warning[warning_id]) > warning_interval:
+                        high_max_condition = (poly_fit(np.min(biases)-current_bias) < poly_fit(np.max(biases)-current_bias))
+                    if high_max_condition:
+                        new_setpoint = np.max(biases)
+                    else:
+                        new_setpoint = np.min(biases)
+                    within_limits = (IM_bias_limits['min'] <= new_setpoint <= IM_bias_limits['max'])
+                    if not(within_limits):
+                        continue_adjusting_IM = False
+                        warning_id = 'bias limited'
+                        log_str = ' Unable to optimize IM bias, new value of {:}V is outside the acceptable limits'.format(new_setpoint)
+                        if (warning_id in warning):
+                            if (time.time() - warning[warning_id]) > warning_interval:
+                                log.log_warning(mod_name, func_name, log_str)
+                        else:
+                            warning[warning_id] = time.time()
                             log.log_warning(mod_name, func_name, log_str)
                     else:
-                        warning[warning_id] = time.time()
-                        log.log_warning(mod_name, func_name, log_str)
-                else:
-                # Adjust and repeat
-                    settings_list = [{'voltage_setpoint':new_setpoint}]
-                    sm.update_device_settings(IM_db, settings_list, write_log=False)
-                    log_str = ' Moving IM bias to {:.5f}V'.format(new_setpoint)
-                    log.log_info(mod_name, func_name, log_str)
+                    # Adjust and repeat
+                        settings_list = [{'voltage_setpoint':new_setpoint}]
+                        sm.update_device_settings(IM_db, settings_list, write_log=False)
+                        log_str = ' Moving IM bias to {:.5f}V'.format(new_setpoint)
+                        log.log_info(mod_name, func_name, log_str)
     # Remove from Queue
         dev[osa_db]['queue'].remove()
         dev[IM_db]['queue'].remove()
@@ -979,12 +987,14 @@ if __name__ == '__main__':
         
     # Optimize DW Setpoint --------------------------------------------------------
     def optimize_DW_setpoint(state_db):
-        angle_scan_range = 4 # 4 degree range, +-2 degree
-        angle_scan_offsets = angle_scan_range*np.linspace(-0.5, +0.5, 20) # 0.2 deg step size
+    # Info
         mod_name = optimize_DW_setpoint.__module__
         func_name = optimize_DW_setpoint.__name__
         log_str = ' Beginning DW setpoint optimization'
         log.log_info(mod_name, func_name, log_str)
+    # Parameters
+        angle_scan_range = 4 # 4 degree range, +-2 degree
+        angle_scan_offsets = angle_scan_range*np.linspace(-0.5, +0.5, 20) # 0.2 deg step size
     # Device Databases
         osa_db = 'spectral_shaper/device_OSA'
         rot_db = 'spectral_shaper/device_rotation_mount'
@@ -1054,6 +1064,7 @@ if __name__ == '__main__':
             # is it a maximum?
                 max_stationary_point = stationary_points[bulk_poly_fit(stationary_points).argmax()]
                 maximum_found = (bulk_poly_fit.deriv(2)(max_stationary_point) < 0)
+                maximum_found = (bulk_poly_fit(max_stationary_point) > bulk_poly_fit(np.min(angles)-current_angle)) and (bulk_poly_fit(max_stationary_point) > bulk_poly_fit(np.max(angles)-current_angle))
                 within_range = (np.min(angles) <= max_stationary_point+current_angle <= np.max(angles))
                 within_limits = (minimum_angle <= max_stationary_point+current_angle <= maximum_angle)
             if (maximum_found and within_range and within_limits):
@@ -1071,7 +1082,7 @@ if __name__ == '__main__':
                     db[CONTROL_DB].write_record_and_buffer(local_settings[CONTROL_DB])
             else:
             # Is the result sensible?
-                bounds_equal_condition = (bulk_poly_fit(np.min(angles)-current_angle) == bulk_poly_fit(np.max(angles)-current_angle))
+                bounds_equal_condition = np.isclose(bulk_poly_fit(np.min(angle_scan_offsets)), bulk_poly_fit(np.max(angle_scan_offsets)))
                 if bounds_equal_condition:
                     continue_adjusting_angle = False
                     warning_id = 'undetermined DW setpoint'

@@ -212,7 +212,8 @@ if __name__ == '__main__':
     MONITOR_DBs = [
             'spectral_shaper/mask', 'spectral_shaper/spectrum',
             'spectral_shaper/DW', 'spectral_shaper/DW_vs_IM_bias',
-            'spectral_shaper/DW_vs_waveplate_angle']
+            'spectral_shaper/DW_vs_waveplate_angle',
+            'spectral_shaper/DW_bulk_vs_waveplate_angle']
     LOG_DB = 'spectral_shaper'
     CONTROL_DB = 'spectral_shaper/control'
     MASTER_DBs = STATE_DBs + DEVICE_DBs + MONITOR_DBs + [LOG_DB] + [CONTROL_DB]
@@ -357,7 +358,10 @@ if __name__ == '__main__':
                     'driver':E36103A,
                     'queue':'IM_bias',
                     '__init__':[['USB0::0x2A8D::0x0702::MY57427460::INSTR']]}}
-    CONTROL_PARAMS = {CONTROL_DB:{'IM_optimization':{'value':tomorrow_at_noon(),'type':'float'}}}
+    CONTROL_PARAMS = {
+            CONTROL_DB:{
+                    'setpoint_optimization':{'value':tomorrow_at_noon(),'type':'float'},
+                    'DW_setpoint':{'value':-45.5,'type':'float'}}}
     SETTINGS = dict(list(STATE_SETTINGS.items()) + list(DEVICE_SETTINGS.items()) + list(CONTROL_PARAMS.items()))
     sm.init_default_settings(STATE_SETTINGS, DEVICE_SETTINGS, CONTROL_PARAMS)
     
@@ -440,6 +444,11 @@ if __name__ == '__main__':
             'new':False,
             'lock':threading.Lock()}
     mon['spectral_shaper/DW_vs_waveplate_angle'] = {
+            'data':np.array([]),
+            'device':None,
+            'new':False,
+            'lock':threading.Lock()}
+    mon['spectral_shaper/DW_bulk_vs_waveplate_angle'] = {
             'data':np.array([]),
             'device':None,
             'new':False,
@@ -641,17 +650,18 @@ if __name__ == '__main__':
         log.log_info(mod_name, func_name, log_str)
     
     # Adjust Chip Input Power (Fast) ----------------------------------------------
-    DW_limits = {'max':-41, 'min':-50}
-    DW_range_threshold = 3.5/9 #  3.5/9 for -44.5 and -46.5 soft limits :: 1/3.6 for -43.5 and -47.5 soft limits
+    DW_limits = 4.5 #{'max':-41, 'min':-50}
+    DW_range_threshold = 1. # 3.5/9 #  3.5/9 for -44.5 and -46.5 soft limits :: 1/3.6 for -43.5 and -47.5 soft limits
     minimum_angle = 20 # degrees
+    maximum_angle = 52 # degrees
     def adjust_quick(state_db):
         mod_name = adjust_quick.__module__
         func_name = adjust_quick.__name__
         osa_db = 'spectral_shaper/device_OSA'
         rot_db = 'spectral_shaper/device_rotation_mount'
     # DW threshold
-        DW_high = (1-DW_range_threshold)*DW_limits['max'] + DW_range_threshold*DW_limits['min']
-        DW_low = (1-DW_range_threshold)*DW_limits['min'] + DW_range_threshold*DW_limits['max']
+        DW_high = local_settings[CONTROL_DB]['DW_setpoint']['value']+DW_range_threshold # (1-DW_range_threshold)*DW_limits['max'] + DW_range_threshold*DW_limits['min']
+        DW_low = local_settings[CONTROL_DB]['DW_setpoint']['value']-DW_range_threshold # (1-DW_range_threshold)*DW_limits['min'] + DW_range_threshold*DW_limits['max']
     # Wait for OSA queue
         dev[osa_db]['queue'].queue_and_wait()
     # Setup OSA
@@ -694,13 +704,14 @@ if __name__ == '__main__':
         # Minimum angle condition
             lower_angle_condition = (current_angle < minimum_angle)
         # Check compliance
+            DW_diff = current_DW - local_settings[CONTROL_DB]['DW_setpoint']['value']
             upper_limit_condition = (current_DW > DW_high)
             lower_limit_condition = (current_DW < DW_low)
         # Adjust the setpoint
             if lower_limit_condition:
                 if lower_angle_condition:
                     warning_id = 'low_angle_fast'
-                    log_str = ' DW = {:.3f}dBm, but 2nd stage power is already at maximum'.format(current_DW)
+                    log_str = ' DW is {:.3f}dB from setpoint {:.3f}dBm, but 2nd stage power is already at maximum'.format(DW_diff, local_settings[CONTROL_DB]['DW_setpoint']['value'])
                     if (warning_id in warning):
                         if (time.time() - warning[warning_id]) > warning_interval:
                             log.log_warning(mod_name, func_name, log_str)
@@ -709,13 +720,13 @@ if __name__ == '__main__':
                         log.log_warning(mod_name, func_name, log_str)
                     continue_adjusting_angle = False
                 else:
-                    log_str = ' DW = {:.3f}dBm, raising the 2nd stage power'.format(current_DW)
+                    log_str = ' DW is {:.3f}dB from setpoint {:.3f}dBm, raising the 2nd stage power'.format(DW_diff, local_settings[CONTROL_DB]['DW_setpoint']['value'])
                     log.log_info(mod_name, func_name, log_str)
                 # Raise the 2nd stage power
                     settings_list = [{'position':current_angle-0.1}]
                     sm.update_device_settings(rot_db, settings_list, write_log=False)
             elif upper_limit_condition:
-                log_str = ' DW = {:.3f}dBm, lowering the 2nd stage power'.format(current_DW)
+                log_str = ' DW is {:.3f}dB from setpoint {:.3f}dBm, lowering the 2nd stage power'.format(DW_diff, local_settings[CONTROL_DB]['DW_setpoint']['value'])
                 log.log_info(mod_name, func_name, log_str)
             # Lower the 2nd stage power
                 settings_list = [{'position':current_angle+0.1}]
@@ -776,11 +787,11 @@ if __name__ == '__main__':
             if new_DW_condition:
                 current_DW = mon['spectral_shaper/DW']['data'][-1]
         # DW threshold
-        DW_high = (1-DW_range_threshold)*DW_limits['max'] + DW_range_threshold*DW_limits['min']
-        DW_low = (1-DW_range_threshold)*DW_limits['min'] + DW_range_threshold*DW_limits['max']
+        DW_high = local_settings[CONTROL_DB]['DW_setpoint']['value']+DW_range_threshold # (1-DW_range_threshold)*DW_limits['max'] + DW_range_threshold*DW_limits['min']
+        DW_low = local_settings[CONTROL_DB]['DW_setpoint']['value']-DW_range_threshold # (1-DW_range_threshold)*DW_limits['min'] + DW_range_threshold*DW_limits['max']
     # Check if the output is outside the acceptable range ---------------
         if new_DW_condition:
-            if (current_DW < DW_limits['min']) or (current_DW > DW_limits['max']):
+            if (current_DW < local_settings[CONTROL_DB]['DW_setpoint']['value']-DW_limits) or (current_DW > local_settings[CONTROL_DB]['DW_setpoint']['value']+DW_limits):
             # Spectrum is not optimized
                 compliant = False
                 log_str = " Spectrum not optimized, DW amplitude outside the acceptable range"
@@ -796,6 +807,7 @@ if __name__ == '__main__':
         # If the system is at a stable point, adjust the 2nd stage input power if necessary
             if (new_DW_condition):
                 update = False
+                DW_diff = current_DW - local_settings[CONTROL_DB]['DW_setpoint']['value']
                 upper_limit_condition = (current_DW > DW_high)
                 lower_limit_condition = (current_DW < DW_low)
                 if upper_limit_condition or lower_limit_condition:
@@ -814,7 +826,7 @@ if __name__ == '__main__':
                     if lower_limit_condition:
                         if lower_angle_condition:
                             warning_id = 'low_angle_slow'
-                            log_str = ' DW = {:.3f}dBm, but 2nd stage power is already at maximum'.format(current_DW)
+                            log_str = ' DW is {:.3f}dB from setpoint {:.3f}dBm, but 2nd stage power is already at maximum'.format(DW_diff, local_settings[CONTROL_DB]['DW_setpoint']['value'])
                             if (warning_id in warning):
                                 if (time.time() - warning[warning_id]) > warning_interval:
                                     log.log_warning(mod_name, func_name, log_str)
@@ -822,13 +834,13 @@ if __name__ == '__main__':
                                 warning[warning_id] = time.time()
                                 log.log_warning(mod_name, func_name, log_str)
                         else:
-                            log_str = ' DW = {:.3f}dBm, raising the 2nd stage power'.format(current_DW)
+                            log_str = ' DW is {:.3f}dB from setpoint {:.3f}dBm, raising the 2nd stage power'.format(DW_diff, local_settings[CONTROL_DB]['DW_setpoint']['value'])
                             log.log_info(mod_name, func_name, log_str)
                         # Raise the 2nd stage power
                             settings_list = [{'position':current_angle-0.05}]
                             sm.update_device_settings(device_db, settings_list)
                     elif upper_limit_condition:
-                        log_str = ' DW = {:.3f}dBm, lowering the 2nd stage power'.format(current_DW)
+                        log_str = ' DW is {:.3f}dB from setpoint {:.3f}dBm, lowering the 2nd stage power'.format(DW_diff, local_settings[CONTROL_DB]['DW_setpoint']['value'])
                         log.log_info(mod_name, func_name, log_str)
                     # Lower the 2nd stage power
                         settings_list = [{'position':current_angle+0.05}]
@@ -840,110 +852,251 @@ if __name__ == '__main__':
         its defined states.'''
     
     # Optimize IM Bias ------------------------------------------------------------
-    IM_bias_limits = {'max':2.5, 'min':1.5}
+    IM_bias_limits = {'max':5.5, 'min':0.5}
     IM_scan_range = 0.100 # 100mV range, +-50mV
     IM_scan_offsets = IM_scan_range*np.linspace(-0.5, +0.5, 20) # 5mV step size
     def optimize_IM_bias(state_db):
-        if (datetime.datetime.now().timestamp() > local_settings[CONTROL_DB]['IM_optimization']['value']):
-            mod_name = optimize_IM_bias.__module__
-            func_name = optimize_IM_bias.__name__
-            log_str = ' Beginning IM bias optimization'
-            log.log_info(mod_name, func_name, log_str)
-        # Device Databases
-            osa_db = 'spectral_shaper/device_OSA'
-            IM_db = 'spectral_shaper/device_IM_bias'
-        # Wait for OSA queue
-            dev[osa_db]['queue'].queue_and_wait()
-        # Setup OSA
-            settings_list = STATES['spectral_shaper/state_optimizer']['optimal']['settings']['DW']
-            sm.update_device_settings(osa_db, settings_list, write_log=False)
-        # Wait for IM Bias Queue
-            dev[IM_db]['queue'].queue_and_wait()
-        # Adjust IM Bias
-            continue_adjusting_IM = True
-            biases = []
-            DWs = []
-            while continue_adjusting_IM:
-            # Get Voltage Setpoint
-                current_bias = dev[IM_db]['driver'].voltage_setpoint()
-                v_setpoints = current_bias + IM_scan_offsets
-            # Dither IM Bias
-                for v_setpoint in v_setpoints:
-                # Ensure Queues
-                    dev[osa_db]['queue'].queue_and_wait()
-                    dev[IM_db]['queue'].queue_and_wait()
-                # Adjust the setpoint
-                    biases.append(v_setpoint)
-                    settings_list = [{'voltage_setpoint':v_setpoint}]
-                    sm.update_device_settings(IM_db, settings_list, write_log=False)
-                # Get New Trace
-                    thread_name = 'get_new_single_quick'
-                    (alive, error) = thread[thread_name].check_thread()
-                    if error != None:
-                        raise error[1].with_traceback(error[2])
-                    if not(alive):
-                    # Start new thread
-                        thread[thread_name].start()
-                # Check Progress
-                    while thread[thread_name].is_alive():
-                        time.sleep(0.1)
-                        dev[osa_db]['queue'].touch()
-                        dev[IM_db]['queue'].touch()
-                # Get Result
-                    (alive, error) = thread[thread_name].check_thread()
-                    if error != None:
-                        raise error[1].with_traceback(error[2])
-                    else:
-                        osa_trace = thread[thread_name].result
-                # Get DW
-                    current_DW = np.max(osa_trace['data']['y'])
-                    DWs.append(current_DW)
-            # Return to Original Setpoint
-                settings_list = [{'voltage_setpoint':current_bias}]
+        mod_name = optimize_IM_bias.__module__
+        func_name = optimize_IM_bias.__name__
+        log_str = ' Beginning IM bias optimization'
+        log.log_info(mod_name, func_name, log_str)
+    # Device Databases
+        osa_db = 'spectral_shaper/device_OSA'
+        IM_db = 'spectral_shaper/device_IM_bias'
+    # Wait for OSA queue
+        dev[osa_db]['queue'].queue_and_wait()
+    # Setup OSA
+        settings_list = STATES['spectral_shaper/state_optimizer']['optimal']['settings']['DW']
+        sm.update_device_settings(osa_db, settings_list, write_log=False)
+    # Wait for IM Bias Queue
+        dev[IM_db]['queue'].queue_and_wait()
+    # Adjust IM Bias
+        continue_adjusting_IM = True
+        biases = []
+        DWs = []
+        while continue_adjusting_IM:
+        # Get Voltage Setpoint
+            current_bias = dev[IM_db]['driver'].voltage_setpoint()
+            v_setpoints = current_bias + IM_scan_offsets
+        # Dither IM Bias
+            for v_setpoint in v_setpoints:
+            # Ensure Queues
+                dev[osa_db]['queue'].queue_and_wait()
+                dev[IM_db]['queue'].queue_and_wait()
+            # Adjust the setpoint
+                biases.append(v_setpoint)
+                settings_list = [{'voltage_setpoint':v_setpoint}]
                 sm.update_device_settings(IM_db, settings_list, write_log=False)
-            # Find Maximum DW
-                # Quadratic Fit
-                poly_coef = np.polyfit(biases, DWs, 2)
-                poly_fit = np.poly1d(poly_coef)
-                stationary_point = poly_fit.deriv().roots
-                maximum_found = False
-                within_bounds = False
-                if stationary_point.size:
-                # is it a maximum?
-                    maximum_found = (poly_fit.deriv(2)(stationary_point[0]) < 0)
-                    within_bounds = (v_setpoints[0] <= stationary_point[0] <= v_setpoints[-1])
-                if (maximum_found and within_bounds):
-                    new_setpoint = stationary_point[0]
-                    continue_adjusting_IM = False
-                    settings_list = [{'voltage_setpoint':new_setpoint}]
-                    sm.update_device_settings(IM_db, settings_list, write_log=True)
-                    log_str = ' IM bias optimized at {:}V'.format(new_setpoint)
-                    log.log_info(mod_name, func_name, log_str)
+            # Get New Trace
+                thread_name = 'get_new_single_quick'
+                (alive, error) = thread[thread_name].check_thread()
+                if error != None:
+                    raise error[1].with_traceback(error[2])
+                if not(alive):
+                # Start new thread
+                    thread[thread_name].start()
+            # Check Progress
+                while thread[thread_name].is_alive():
+                    time.sleep(0.1)
+                    dev[osa_db]['queue'].touch()
+                    dev[IM_db]['queue'].touch()
+            # Get Result
+                (alive, error) = thread[thread_name].check_thread()
+                if error != None:
+                    raise error[1].with_traceback(error[2])
                 else:
-                # Is the result sensible?
-                    bounds_equal_condition = (poly_fit(v_setpoints[0]) == poly_fit(v_setpoints[-1]))
-                    if bounds_equal_condition:
-                        continue_adjusting_IM = False
-                        warning_id = 'undetermined bias'
-                        log_str = ' Unable to determine IM bias adjustment'
-                        if (warning_id in warning):
-                            if (time.time() - warning[warning_id]) > warning_interval:
-                                log.log_warning(mod_name, func_name, log_str)
-                        else:
-                            warning[warning_id] = time.time()
+                    osa_trace = thread[thread_name].result
+            # Get DW
+                current_DW = np.max(osa_trace['data']['y'])
+                DWs.append(current_DW)
+        # Return to Original Setpoint
+            settings_list = [{'voltage_setpoint':current_bias}]
+            sm.update_device_settings(IM_db, settings_list, write_log=False)
+        # Find Maximum DW
+            # Quadratic Fit
+            poly_coef = np.polyfit(biases, DWs, 2)
+            poly_fit = np.poly1d(poly_coef)
+            stationary_point = poly_fit.deriv().roots
+            maximum_found = False
+            within_bounds = False
+            if stationary_point.size:
+            # is it a maximum?
+                maximum_found = (poly_fit.deriv(2)(stationary_point[0]) < 0)
+                within_bounds = (v_setpoints[0] <= stationary_point[0] <= v_setpoints[-1])
+            if (maximum_found and within_bounds):
+                new_setpoint = stationary_point[0]
+                continue_adjusting_IM = False
+                settings_list = [{'voltage_setpoint':new_setpoint}]
+                sm.update_device_settings(IM_db, settings_list, write_log=True)
+                log_str = ' IM bias optimized at {:}V'.format(new_setpoint)
+                log.log_info(mod_name, func_name, log_str)
+            else:
+            # Is the result sensible?
+                bounds_equal_condition = (poly_fit(v_setpoints[0]) == poly_fit(v_setpoints[-1]))
+                if bounds_equal_condition:
+                    continue_adjusting_IM = False
+                    warning_id = 'undetermined bias'
+                    log_str = ' Unable to determine IM bias adjustment'
+                    if (warning_id in warning):
+                        if (time.time() - warning[warning_id]) > warning_interval:
                             log.log_warning(mod_name, func_name, log_str)
                     else:
-                    # Maximum at low or high V?
-                        high_max_condition = (poly_fit(v_setpoints[0]) < poly_fit(v_setpoints[-1]))
-                        if high_max_condition:
-                            new_setpoint = v_setpoints[-1]
-                        else:
-                            new_setpoint = v_setpoints[0]
-                        within_limits = (IM_bias_limits['min'] <= new_setpoint <= IM_bias_limits['max'])
+                        warning[warning_id] = time.time()
+                        log.log_warning(mod_name, func_name, log_str)
+                else:
+                # Maximum at low or high V?
+                    high_max_condition = (poly_fit(v_setpoints[0]) < poly_fit(v_setpoints[-1]))
+                    if high_max_condition:
+                        new_setpoint = v_setpoints[-1]
+                    else:
+                        new_setpoint = v_setpoints[0]
+                within_limits = (IM_bias_limits['min'] <= new_setpoint <= IM_bias_limits['max'])
+                if not(within_limits):
+                    continue_adjusting_IM = False
+                    warning_id = 'bias limited'
+                    log_str = ' Unable to optimize IM bias, new value of {:}V is outside the acceptable limits'.format(new_setpoint)
+                    if (warning_id in warning):
+                        if (time.time() - warning[warning_id]) > warning_interval:
+                            log.log_warning(mod_name, func_name, log_str)
+                    else:
+                        warning[warning_id] = time.time()
+                        log.log_warning(mod_name, func_name, log_str)
+                else:
+                # Adjust and repeat
+                    settings_list = [{'voltage_setpoint':new_setpoint}]
+                    sm.update_device_settings(IM_db, settings_list, write_log=False)
+                    log_str = ' Moving IM bias to {:.5f}V'.format(new_setpoint)
+                    log.log_info(mod_name, func_name, log_str)
+    # Remove from Queue
+        dev[osa_db]['queue'].remove()
+        dev[IM_db]['queue'].remove()
+    # Record Data
+        monitor_db = 'spectral_shaper/DW_vs_IM_bias'
+        with mon[monitor_db]['lock']:
+            mon[monitor_db]['new'] = True
+            mon[monitor_db]['data'] = np.array([biases, DWs])
+        db[monitor_db].write_record_and_buffer({'V':biases, 'dBm':DWs})
+        
+    # Optimize DW Setpoint --------------------------------------------------------
+    def optimize_DW_setpoint(state_db):
+        angle_scan_range = 4 # 4 degree range, +-2 degree
+        angle_scan_offsets = angle_scan_range*np.linspace(-0.5, +0.5, 20) # 0.2 deg step size
+        mod_name = optimize_DW_setpoint.__module__
+        func_name = optimize_DW_setpoint.__name__
+        log_str = ' Beginning DW setpoint optimization'
+        log.log_info(mod_name, func_name, log_str)
+    # Device Databases
+        osa_db = 'spectral_shaper/device_OSA'
+        rot_db = 'spectral_shaper/device_rotation_mount'
+    # Wait for OSA queue
+        dev[osa_db]['queue'].queue_and_wait()
+    # Setup OSA
+        settings_list = STATES['spectral_shaper/state_optimizer']['optimal']['settings']['short']
+        sm.update_device_settings(osa_db, settings_list, write_log=False)
+    # Wait for Rotation Stage Queue
+        dev[rot_db]['queue'].queue_and_wait()
+    # Adjust Rotation Stage
+        continue_adjusting_angle = True
+        angles = []
+        DWs = []
+        bulks = []
+        current_angle = mon['broadening_stage/device_rotation_mount']['data'][-1]
+        while continue_adjusting_angle:
+        # Get Angle Setpoints
+            angle_setpoints = current_angle + angle_scan_offsets
+        # Dither Angles
+            for angle_setpoint in angle_setpoints:
+            # Ensure Queues
+                dev[osa_db]['queue'].queue_and_wait()
+                dev[rot_db]['queue'].queue_and_wait()
+            # Adjust the setpoint
+                angles.append(angle_setpoint)
+                settings_list = [{'position':angle_setpoint}]
+                sm.update_device_settings(rot_db, settings_list, write_log=False)
+            # Get New Trace
+                thread_name = 'get_new_single_quick'
+                (alive, error) = thread[thread_name].check_thread()
+                if error != None:
+                    raise error[1].with_traceback(error[2])
+                if not(alive):
+                # Start new thread
+                    thread[thread_name].start()
+            # Check Progress
+                while thread[thread_name].is_alive():
+                    time.sleep(0.1)
+                    dev[osa_db]['queue'].touch()
+                    dev[rot_db]['queue'].touch()
+            # Get Result
+                (alive, error) = thread[thread_name].check_thread()
+                if error != None:
+                    raise error[1].with_traceback(error[2])
+                else:
+                    osa_trace = thread[thread_name].result
+            # Get DW
+                spectrum = np.array(osa_trace['data']['y'])
+                wavelengths = np.array(osa_trace['data']['x'])
+                current_DW = spectrum[wavelengths<740].max()
+                current_bulk = spectrum[wavelengths>800].max()
+                DWs.append(current_DW)
+                bulks.append(current_bulk)
+        # Return to Original Setpoint
+            settings_list = [{'position':current_angle}]
+            sm.update_device_settings(rot_db, settings_list, write_log=False)
+        # Find Maximum DW
+            # Fit
+            DW_poly_fit = np.poly1d(np.polyfit(np.array(angles)-current_angle, DWs, 2))
+            bulk_poly_fit = np.poly1d(np.polyfit(np.array(angles)-current_angle, bulks, 3))
+            stationary_points = bulk_poly_fit.deriv().roots
+            maximum_found = False
+            within_range = False
+            within_limits = False
+            if stationary_points.size:
+            # is it a maximum?
+                max_stationary_point = stationary_points[bulk_poly_fit(stationary_points).argmax()]
+                maximum_found = (bulk_poly_fit.deriv(2)(max_stationary_point) < 0)
+                within_range = (np.min(angles) <= max_stationary_point+current_angle <= np.max(angles))
+                within_limits = (minimum_angle <= max_stationary_point+current_angle <= maximum_angle)
+            if (maximum_found and within_range and within_limits):
+                new_setpoint = max_stationary_point
+                continue_adjusting_angle = False
+                # Move to optimal angular position
+                settings_list = [{'position':current_angle+new_setpoint}]
+                sm.update_device_settings(rot_db, settings_list, write_log=False)
+                # Change DW setpoint
+                new_DW_setpoint = DW_poly_fit(new_setpoint)
+                with sm.lock[CONTROL_DB]:
+                    log_str = ' DW setpoint optimized at {:.3f}dBm'.format(new_DW_setpoint)
+                    log.log_info(mod_name, func_name, log_str)
+                    local_settings[CONTROL_DB]['DW_setpoint']['value'] = new_DW_setpoint
+                    db[CONTROL_DB].write_record_and_buffer(local_settings[CONTROL_DB])
+            else:
+            # Is the result sensible?
+                bounds_equal_condition = (bulk_poly_fit(np.min(angles)-current_angle) == bulk_poly_fit(np.max(angles)-current_angle))
+                if bounds_equal_condition:
+                    continue_adjusting_angle = False
+                    warning_id = 'undetermined DW setpoint'
+                    log_str = ' Unable to determine optimal DW setpoint'
+                    if (warning_id in warning):
+                        if (time.time() - warning[warning_id]) > warning_interval:
+                            log.log_warning(mod_name, func_name, log_str)
+                    else:
+                        warning[warning_id] = time.time()
+                        log.log_warning(mod_name, func_name, log_str)
+                else:
+                # Maximum at low or high angle?
+                    if maximum_found:
+                        high_max_condition = (max_stationary_point+current_angle > np.max(angles))
+                    else:
+                        high_max_condition = (bulk_poly_fit(np.min(angles)-current_angle) < bulk_poly_fit(np.max(angles)-current_angle))
+                    if high_max_condition:
+                        new_setpoint = np.max(angles)
+                    else:
+                        new_setpoint = np.min(angles)
+                    within_limits = (minimum_angle <= new_setpoint <= maximum_angle)
                     if not(within_limits):
-                        continue_adjusting_IM = False
-                        warning_id = 'bias limited'
-                        log_str = ' Unable to optimize IM bias, new value of {:}V is outside the acceptable limits'.format(new_setpoint)
+                        continue_adjusting_angle = False
+                        warning_id = 'angle limited'
+                        log_str = ' Unable to optimize DW setpoint, new rotation stage angle of {:} deg is outside the acceptable limits'.format(new_setpoint)
                         if (warning_id in warning):
                             if (time.time() - warning[warning_id]) > warning_interval:
                                 log.log_warning(mod_name, func_name, log_str)
@@ -951,25 +1104,27 @@ if __name__ == '__main__':
                             warning[warning_id] = time.time()
                             log.log_warning(mod_name, func_name, log_str)
                     else:
-                    # Adjust and repeat
-                        settings_list = [{'voltage_setpoint':new_setpoint}]
-                        sm.update_device_settings(IM_db, settings_list, write_log=False)
-                        log_str = ' Moving IM bias to {:}V'.format(new_setpoint)
-                        log.log_info(mod_name, func_name, log_str)
-        # Remove from Queue
-            dev[osa_db]['queue'].remove()
-            dev[IM_db]['queue'].remove()
-        # Record Data
-            monitor_db = 'spectral_shaper/DW_vs_IM_bias'
-            with mon[monitor_db]['lock']:
-                mon[monitor_db]['new'] = True
-                mon[monitor_db]['data'] = np.array([biases, DWs])
-            db[monitor_db].write_record_and_buffer({'V':biases, 'dBm':DWs})
+                    # Adjust offsets and repeat
+                        angle_scan_offsets = angle_scan_offsets + (new_setpoint - current_angle) # center new scan at adjusted offset
+    # Remove from Queue
+        dev[osa_db]['queue'].remove()
+        dev[rot_db]['queue'].remove()
+    # Record Data
+        monitor_db = 'spectral_shaper/DW_bulk_vs_waveplate_angle'
+        with mon[monitor_db]['lock']:
+            mon[monitor_db]['new'] = True
+            mon[monitor_db]['data'] = np.array([angles, bulks, DWs])
+        db[monitor_db].write_record_and_buffer({'deg':angles, 'bulk_dBm':bulks, 'DW_dBm':DWs})    
+    
+    # Optimize setpoints ----------------------------------------------------------
+    def optimize_setpoints(state_db):
+        if (datetime.datetime.now().timestamp() > local_settings[CONTROL_DB]['setpoint_optimization']['value']):
+            optimize_IM_bias(state_db)
+            optimize_DW_setpoint(state_db)
         # Schedule next optimization
             with sm.lock[CONTROL_DB]:
-                local_settings[CONTROL_DB]['IM_optimization']['value'] = tomorrow_at_noon()
+                local_settings[CONTROL_DB]['setpoint_optimization']['value'] = tomorrow_at_noon()
                 db[CONTROL_DB].write_record_and_buffer(local_settings[CONTROL_DB])
-    
     
     # %% States ===================================================================
     
@@ -1146,6 +1301,14 @@ if __name__ == '__main__':
                                             {'trace_type':[[{'mode':'WRIT', 'avg':1}]],
                                              'sensitivity':[[{'sense':'HIGH1', 'chop':'OFF'}]],
                                              'wvl_range':[[{'start':690, 'stop':740}]],
+                                             'resolution':2, 'level_scale':'LOG'}
+                                            ],
+                                    'short':[
+                                            {'fix_all':True},
+                                            {'active_trace':'TRA'},
+                                            {'trace_type':[[{'mode':'WRIT', 'avg':1}]],
+                                             'sensitivity':[[{'sense':'HIGH1', 'chop':'OFF'}]],
+                                             'wvl_range':[[{'start':690, 'stop':825}]],
                                              'resolution':2, 'level_scale':'LOG'}
                                             ],
                                     'full':[

@@ -1350,7 +1350,7 @@ if __name__ == '__main__':
                                     },
                             'routines':{
                                     'monitor':monitor_spectrum, 'search':adjust_quick,
-                                    'maintain':adjust_slow, 'operate':optimize_IM_bias}
+                                    'maintain':adjust_slow, 'operate':optimize_setpoints}
                     },
                     'safe':{
                             'settings':{},

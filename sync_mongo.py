@@ -109,6 +109,7 @@ records = [
     'spectral_shaper/DW',
     'spectral_shaper/DW_vs_IM_bias',
     'spectral_shaper/DW_vs_waveplate_angle',
+    'spectral_shaper/DW_bulk_vs_waveplate_angle',
     'spectral_shaper/mask',
     'spectral_shaper/spectrum',
         # Devices -------------------------------

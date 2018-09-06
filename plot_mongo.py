@@ -44,89 +44,89 @@ ct_to_utc_conv = lambda dt: (central_tz.localize(dt.replace(tzinfo=None))).astim
 #start_time = central_tz.localize(datetime.datetime(2018, 4, 21, 14, 40))
 #start_time = ct_to_utc_conv(datetime.datetime(2018, 5, 1, 0, 0))
 stop_time = datetime.datetime.utcnow()
-start_time = stop_time - datetime.timedelta(days=7*16)
+start_time = stop_time - datetime.timedelta(days=7)
 DBs = {
     # ambience ----------------------------------------------------------------
-#    'ambience/box_temperature_0':{
-#            'start':start_time,
-#            'stop':stop_time,
-#            'keys':{
-#                    'V':lambda v: v*100,
-#                    'std':lambda v: v*100}},
+    'ambience/box_temperature_0':{
+            'start':start_time,
+            'stop':stop_time,
+            'keys':{
+                    'V':lambda v: v*100,
+                    'std':lambda v: v*100}},
     'ambience/box_temperature_1':{
             'start':start_time,
             'stop':stop_time,
             'keys':{
                     'V':lambda v: v*100,
                     'std':lambda v: v*100}},
-#    'ambience/rack_temperature_0':{
-#            'start':start_time,
-#            'stop':stop_time,
-#            'keys':{
-#                    'V':lambda v: v*100,
-#                    'std':lambda v: v*100}},
+    'ambience/rack_temperature_0':{
+            'start':start_time,
+            'stop':stop_time,
+            'keys':{
+                    'V':lambda v: v*100,
+                    'std':lambda v: v*100}},
 #    # broadening_stage --------------------------------------------------------
     'broadening_stage/device_rotation_mount':{
             'start':start_time, 'stop':stop_time,
             'keys':{
                     'position':lambda p: p}},
 #    # comb_generator ----------------------------------------------------------
-#    'comb_generator/IM_bias':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                   'V':lambda v: v,
-#                   'std':lambda v: v}},
+    'comb_generator/IM_bias':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                   'V':lambda v: v,
+                   'std':lambda v: v}},
     # cw_laser ----------------------------------------------------------------
-#    'cw_laser/dac_limits':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'min_V':lambda v: v,
-#                    'max_V':lambda v: v,
-#                    'min_std':lambda v: v,
-#                    'max_std':lambda v: v}},
-#    'cw_laser/dac_output':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'V':lambda v: v,
-#                    'std':lambda v: v}},
-#    'cw_laser/freq_err':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'Hz':lambda f: f,
-#                    'std':lambda f: f}},
+    'cw_laser/dac_limits':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'min_V':lambda v: v,
+                    'max_V':lambda v: v,
+                    'min_std':lambda v: v,
+                    'max_std':lambda v: v}},
+    'cw_laser/dac_output':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'V':lambda v: v,
+                    'std':lambda v: v}},
+    'cw_laser/freq_err':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'Hz':lambda f: f,
+                    'std':lambda f: f}},
     # filter_cavity -----------------------------------------------------------
 #    'filter_cavity/DAQ_Vout_vs_reflect':{
 #            'start':start_time, 'stop':stop_time,
 #            'keys':{
 #                    'V_out':lambda v: v,
 #                    'V_ref':lambda v: v}},
-#    'filter_cavity/DAQ_error_signal':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'V':lambda v: v,
-#                    'std':lambda v: v}},
-#    'filter_cavity/HV_output':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'V':lambda v: v,
-#                    'std':lambda v: v}},
-#    'filter_cavity/PID_output':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'V':lambda v: v,
-#                    'std':lambda v: v}},
+    'filter_cavity/DAQ_error_signal':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'V':lambda v: v,
+                    'std':lambda v: v}},
+    'filter_cavity/HV_output':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'V':lambda v: v,
+                    'std':lambda v: v}},
+    'filter_cavity/PID_output':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'V':lambda v: v,
+                    'std':lambda v: v}},
 #    'filter_cavity/PID_output_limits':{
 #            'start':start_time, 'stop':stop_time,
 #            'keys':{
 #                    'min':lambda v: v,
 #                    'max':lambda v: v}},
-#    'filter_cavity/heater_temperature':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'set_V':lambda v: v,
-#                    'set_std':lambda v: v,
-#                    'act_V':lambda v: v,
-#                    'act_std':lambda v: v}},
+    'filter_cavity/heater_temperature':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'set_V':lambda v: v,
+                    'set_std':lambda v: v,
+                    'act_V':lambda v: v,
+                    'act_std':lambda v: v}},
     # mll_f0 ------------------------------------------------------------------
 #    'mll_f0/dac_limits':{
 #            'start':start_time, 'stop':stop_time,
@@ -135,52 +135,52 @@ DBs = {
 #                    'min_std':lambda v: v,
 #                    'max_V':lambda v: v,
 #                    'max_std':lambda v: v}},
-#    'mll_f0/dac_output':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'V':lambda v: v,
-#                    'std':lambda v: v}},
-#    'mll_f0/freq_err':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'Hz':lambda f: f,
-#                    'std':lambda f: f}},
+    'mll_f0/dac_output':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'V':lambda v: v,
+                    'std':lambda v: v}},
+    'mll_f0/freq_err':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'Hz':lambda f: f,
+                    'std':lambda f: f}},
     # mll_fR ------------------------------------------------------------------
 #    'mll_fR/DAQ_Vout_vs_freq':{
 #            'start':start_time, 'stop':stop_time,
 #            'keys':{
 #                    'V':lambda v: v,
 #                    'Hz':lambda f: f}},
-#    'mll_fR/DAQ_error_signal':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'V':lambda v: v,
-#                    'std':lambda v: v}},
-#    'mll_fR/HV_output':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'V':lambda v: v,
-#                    'std':lambda v: v}},
-#    'mll_fR/PID_output':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'V':lambda v: v,
-#                    'std':lambda v: v}},
+    'mll_fR/DAQ_error_signal':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'V':lambda v: v,
+                    'std':lambda v: v}},
+    'mll_fR/HV_output':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'V':lambda v: v,
+                    'std':lambda v: v}},
+    'mll_fR/PID_output':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'V':lambda v: v,
+                    'std':lambda v: v}},
 #    #'mll_fR/PID_output_limits':{
 #    #        'start':start_time, 'stop':stop_time,
 #    #        'keys':{
 #    #                'min':lambda v: v,
 #    #                'max':lambda v: v}},
-#    'mll_fR/TEC_current':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'A':lambda a: a,
-#                    'std':lambda a: a}},
-#    'mll_fR/TEC_temperature':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'kOhm':lambda o: o,
-#                    'std':lambda o: o}},
+    'mll_fR/TEC_current':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'A':lambda a: a,
+                    'std':lambda a: a}},
+    'mll_fR/TEC_temperature':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'kOhm':lambda o: o,
+                    'std':lambda o: o}},
     # rf_oscillators ----------------------------------------------------------
 #    'rf_oscillators/100MHz_phase_lock':{
 #            'start':start_time, 'stop':stop_time,
@@ -220,11 +220,11 @@ DBs = {
 #                    'ns':lambda s: s,
 #                    'std':lambda s: s}},
     # spectral_shaper ---------------------------------------------------------
-#    'spectral_shaper/DW':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'dBm':lambda dw: dw,
-#                    'std':lambda dw: dw}},
+    'spectral_shaper/DW':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'dBm':lambda dw: dw,
+                    'std':lambda dw: dw}},
 #    'spectral_shaper/DW_vs_IM_bias':{
 #            'start':start_time, 'stop':stop_time,
 #            'keys':{
@@ -235,24 +235,24 @@ DBs = {
 #            'keys':{
 #                    'deg':lambda d: d,
 #                    'dBm':lambda dw: dw}},
-#    'spectral_shaper/mask':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'path':lambda p: 'top' in p}},
-#    'spectral_shaper/spectrum':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'data':lambda d: {'x':d['x'], 'y':d['y'], 'y_std':d['y_std'], 'y_n':d['y_n']}}},
-#    'spectral_shaper/DW_bulk_vs_waveplate_angle':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'deg':lambda d: d,
-#                    'bulk_dBm':lambda d: d,
-#                    'DW_dBm':lambda dw: dw}},
-#    'spectral_shaper/control':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'DW_setpoint':lambda d: d['value']}},
+    'spectral_shaper/mask':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'path':lambda p: 'top' in p}},
+    'spectral_shaper/spectrum':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'data':lambda d: {'x':d['x'], 'y':d['y'], 'y_std':d['y_std'], 'y_n':d['y_n']}}},
+    'spectral_shaper/DW_bulk_vs_waveplate_angle':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'deg':lambda d: d,
+                    'bulk_dBm':lambda d: d,
+                    'DW_dBm':lambda dw: dw}},
+    'spectral_shaper/control':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'DW_setpoint':lambda d: d['value']}},
 }
 
 
@@ -388,7 +388,8 @@ for ind, database in enumerate(DBs):
         plt.xlabel('Wavelength (nm)')
         plt.tight_layout()
     #2D Amp Plot Diff -----------------------
-        specs_2D_diff = specs_2D - specs_2D.mean(axis=1)[:, np.newaxis]
+        specs_2D_diff = specs_2D
+        #specs_2D_diff = specs_2D - specs_2D.mean(axis=1)[:, np.newaxis]
         #specs_2D_diff = specs_2D - 10*np.log10(np.trapz(10**(specs_2D/10), axis=1))[:, np.newaxis]#  .mean(axis=1)[:, np.newaxis]
         #specs_2D_diff = specs_2D - (specs_2D*c_nm_ps/wvl_samp**2 / (h*c/(wvl_samp*1e-9))).max(axis=1)[:, np.newaxis]/(c_nm_ps/wvl_samp**2 / (h*c/(wvl_samp*1e-9)))
         plt.figure()
@@ -418,7 +419,7 @@ for ind, database in enumerate(DBs):
         axe = axarr[1]
         axe.plot(data[database][key][0], 1-np.cos(np.pi/180*2*(52-np.array(data[database][key][1])))**2,
              '.',  markersize=1, label='transmission')
-        axe.set_xlim((utc_to_ct_conv(start),utc_to_ct_conv(stop)))
+        axe.set_xlim((start,stop))
         axe.legend()
         axe.grid(b=True)
     elif database == 'cw_laser/dac_output':
@@ -443,7 +444,7 @@ for ind, database in enumerate(DBs):
             key = 'max_V'
             axe.plot(data[database][key][0], data[database][key][1],
                 '.',  markersize=1, label=database+':'+key)
-        axe.set_xlim((utc_to_ct_conv(start),utc_to_ct_conv(stop)))
+        axe.set_xlim((start,stop))
         axe.legend()
         axe.grid(b=True)
     elif database == 'cw_laser/dac_limits':
@@ -460,7 +461,7 @@ for ind, database in enumerate(DBs):
                  '.',  markersize=1, label=database+':'+key)
             #axe.plot(data[database][key][0], data[database][key][1],
             #     'gray',  markersize=1, label=database+':'+key)
-            axe.set_xlim((utc_to_ct_conv(start),utc_to_ct_conv(stop)))
+            axe.set_xlim((start,stop))
             axe.yaxis.set_major_formatter(ticker.EngFormatter(unit='Hz'))
             axe.legend()
             axe.grid(b=True)
@@ -469,7 +470,7 @@ for ind, database in enumerate(DBs):
         plt.figure()
         plt.title(database)
         ax1 = plt.subplot2grid((7,1),(0,0), rowspan=3)
-        ax2 = plt.subplot2grid((7,1),(3,0), rowspan=3)
+        ax2 = plt.subplot2grid((7,1),(3,0), rowspan=3, sharex=ax1)
         ax3 = plt.subplot2grid((7,1),(6,0))
         colormap = plt.cm.nipy_spectral
         ax1.set_prop_cycle(cycler('color',[colormap(i) for i in np.linspace(0, 0.95, len(data_temp))]))
@@ -478,25 +479,6 @@ for ind, database in enumerate(DBs):
         for ind2, data_list in enumerate(data_temp):
             ax1.plot(data_list[0], data_list[1], 'o')#, label=data[database]['deg'][0][ind2])
             ax2.plot(data_list[0], data_list[2], 'o')#, label=data[database]['deg'][0][ind2])
-            ax3.plot(data_list[3], 0, 'o')
-        ax1.set_ylabel('Bulk')
-        ax2.set_ylabel('DW')
-        ax3.yaxis.set_visible(False)
-        #plt.gcf().autofmt_xdate()
-        plt.tight_layout()
-        
-        plt.figure()
-        plt.title(database)
-        ax1 = plt.subplot2grid((7,1),(0,0), rowspan=3)
-        ax2 = plt.subplot2grid((7,1),(3,0), rowspan=3)
-        ax3 = plt.subplot2grid((7,1),(6,0))
-        colormap = plt.cm.nipy_spectral
-        ax1.set_prop_cycle(cycler('color',[colormap(i) for i in np.linspace(0, 0.95, len(data_temp))]))
-        ax2.set_prop_cycle(cycler('color',[colormap(i) for i in np.linspace(0, 0.95, len(data_temp))]))
-        ax3.set_prop_cycle(cycler('color',[colormap(i) for i in np.linspace(0, 0.95, len(data_temp))]))
-        for ind2, data_list in enumerate(data_temp):
-            ax1.plot(data_list[0], 10**(np.array(data_list[1])/10), 'o')#, label=data[database]['deg'][0][ind2])
-            ax2.plot(data_list[0], 10**(np.array(data_list[2])/10), 'o')#, label=data[database]['deg'][0][ind2])
             ax3.plot(data_list[3], 0, 'o')
         ax1.set_ylabel('Bulk')
         ax2.set_ylabel('DW')
@@ -516,7 +498,7 @@ for ind, database in enumerate(DBs):
                  '.',  markersize=1, label=database+':'+key)
             #axe.plot(data[database][key][0], data[database][key][1],
             #     'gray',  markersize=1, label=database+':'+key)
-            axe.set_xlim((utc_to_ct_conv(start),utc_to_ct_conv(stop)))
+            axe.set_xlim((start,stop))
             axe.legend()
             axe.grid(b=True)
 

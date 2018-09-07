@@ -434,7 +434,8 @@ class DatabaseReadWrite(DatabaseRead):
         *args
         document: a document in the format as given by the read_buffer function.
         '''
-        document.pop('_id')
+        if '_id' in document:
+            document.pop('_id') 
         self.record.insert_one(document)
 
     def write_buffer(self, entry_dict, timestamp=None):
@@ -446,6 +447,8 @@ class DatabaseReadWrite(DatabaseRead):
         *args
         entry_dict: a dictionary containing things to write to the buffer.
         '''
+        if '_id' in entry_dict:
+            entry_dict.pop('_id')
         if (timestamp == None) or (type(timestamp) != datetime.datetime):
             entry_dict['_timestamp'] = datetime.datetime.utcnow()
         else:
@@ -461,6 +464,8 @@ class DatabaseReadWrite(DatabaseRead):
         *args
         entry_dict: a dictionary containing thing to write to the record.
         '''
+        if '_id' in entry_dict:
+            entry_dict.pop('_id') 
         if (timestamp == None) or (type(timestamp) != datetime.datetime):
             entry_dict['_timestamp'] = datetime.datetime.utcnow()
         else:
@@ -517,7 +522,8 @@ class LogReadWrite(LogRead):
         *args
         document: a document in the format as given by the read_log function.
         '''
-        document.pop('_id')
+        if '_id' in document:
+            document.pop('_id')
         self.log.insert_one(document)
 
     def write_log(self, entry, log_level, timestamp=None):

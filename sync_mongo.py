@@ -148,12 +148,11 @@ logs = [
 
 # %% Connect to database and pull results
 
-local_client = MongoDB.MongoClient()
-remote_client = MongoDB.MongoClient(port=27018)
-
 start_time = datetime.datetime.utcnow()
 print('Starting sync', datetime.datetime.now())
 try:
+    local_client = MongoDB.MongoClient()
+    remote_client = MongoDB.MongoClient(port=27018)
     for database in records:
         print('Syncing {:},'.format(database), 'Elapsed Time =',(datetime.datetime.utcnow()-start_time))
         MongoDB.sync_to_local_record(local_client, remote_client, database, sync_stop_time=start_time)

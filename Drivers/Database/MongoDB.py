@@ -11,6 +11,45 @@ import datetime
 import logging
 
 
+# %% Sync Mongo
+
+def sync_to_local_record(local_client, remote_client, database, sync_stop_time=None):
+    '''
+    Update a local record with new entries from remote
+    '''
+    local = DatabaseMaster(local_client, database)
+    remote = DatabaseRead(remote_client, database)
+    
+    cursor = local.read_record(sort_ascending=False) # return newest entry first
+    doc = next(cursor, None)
+    if (doc is not None):
+        sync_start_time = doc['_timestamp']
+    else:
+        sync_start_time = None
+    
+    cursor = remote.read_record(start=sync_start_time, stop=sync_stop_time)
+    for doc in cursor:
+        local.write_document_to_record(doc)
+    
+def sync_to_local_log(local_client, remote_client, database, sync_stop_time=None):
+    '''
+    Update a local log with new entries from remote
+    '''
+    local = LogMaster(local_client, database)
+    remote = LogRead(remote_client, database)
+    
+    cursor = local.read_log(log_level=logging.DEBUG ,sort_ascending=False) # return newest entry first
+    doc = next(cursor, None)
+    if (doc is not None):
+        sync_start_time = doc['_timestamp']
+    else:
+        sync_start_time = None
+    
+    cursor = remote.read_log(start=sync_start_time, stop=sync_stop_time, log_level=logging.DEBUG)
+    for doc in cursor:
+        local.write_document_to_log(doc)
+    
+
 # %% MongoClient ==============================================================
 
 class MongoClient:
@@ -141,7 +180,7 @@ class DatabaseRead():
         # Return the cursor in full
             return cursor
 
-    def read_record(self, start, stop, number_of_documents=0, sort_ascending=True):
+    def read_record(self, start=None, stop=None, number_of_documents=0, sort_ascending=True):
         '''
         Returns an iterable cursor object containing documents from the record.
         The start and stop times are given as datetime.datetime objects. These
@@ -172,7 +211,14 @@ class DatabaseRead():
         else:
             sort_order = [('_timestamp', pymongo.DESCENDING)]
     # Ranged filter
-        ranged_filter = {'_timestamp':{'$gte':start, '$lte':stop}}
+        if (start is not None) and (stop is not None):
+            ranged_filter = {'_timestamp':{'$gt':start, '$lte':stop}}
+        elif (start is not None):
+            ranged_filter = {'_timestamp':{'$gt':start}}
+        elif (stop is not None):
+            ranged_filter = {'_timestamp':{'$lte':stop}}
+        else:
+            ranged_filter = None
     # Cursor
         cursor = self.record.find(ranged_filter, limit=number_of_documents, sort=sort_order)
         if number_of_documents == 1:
@@ -237,7 +283,7 @@ class LogRead():
     # Set constants
         self.COLLECTION_KEYS = [self.collection_name+key for key in self.COLLECTION_KEYS]
 
-    def read_log(self, start, stop, number_of_documents=0, log_level=logging.INFO, sort_ascending=True):
+    def read_log(self, start=None, stop=None, number_of_documents=0, log_level=logging.INFO, sort_ascending=True):
         '''
         Returns an iterable cursor object containing documents from the log.
         The start and stop times are given as datetime.datetime objects. These
@@ -272,7 +318,14 @@ class LogRead():
         else:
             sort_order = [('_timestamp', pymongo.DESCENDING)]
     # Ranged filter
-        ranged_filter = {'_timestamp':{'$gte':start, '$lte':stop}, 'log_level':{'$gte':log_level}}
+        if (start is not None) and (stop is not None):
+            ranged_filter = {'_timestamp':{'$gt':start, '$lte':stop}, 'log_level':{'$gte':log_level}}
+        elif (start is not None):
+            ranged_filter = {'_timestamp':{'$gt':start}, 'log_level':{'$gte':log_level}}
+        elif (stop is not None):
+            ranged_filter = {'_timestamp':{'$lte':stop}, 'log_level':{'$gte':log_level}}
+        else:
+            ranged_filter = None
     # Cursor
         cursor = self.log.find(ranged_filter, limit=number_of_documents, sort=sort_order)
         if number_of_documents == 1:
@@ -394,11 +447,10 @@ class DatabaseReadWrite(DatabaseRead):
         entry_dict: a dictionary containing things to write to the buffer.
         '''
         if (timestamp == None) or (type(timestamp) != datetime.datetime):
-            document = {'_timestamp':datetime.datetime.utcnow()}
+            entry_dict['_timestamp'] = datetime.datetime.utcnow()
         else:
-            document = {'_timestamp':timestamp}
-        document = dict(list(document.items()) + list(entry_dict.items()))
-        self.buffer.insert_one(document)
+            entry_dict['_timestamp'] = timestamp
+        self.buffer.insert_one(entry_dict)
 
     def write_record(self, entry_dict, timestamp=None):
         '''
@@ -410,11 +462,10 @@ class DatabaseReadWrite(DatabaseRead):
         entry_dict: a dictionary containing thing to write to the record.
         '''
         if (timestamp == None) or (type(timestamp) != datetime.datetime):
-            document = {'_timestamp':datetime.datetime.utcnow()}
+            entry_dict['_timestamp'] = datetime.datetime.utcnow()
         else:
-            document = {'_timestamp':timestamp}
-        document = dict(list(document.items()) + list(entry_dict.items()))
-        self.record.insert_one(document)
+            entry_dict['_timestamp'] = timestamp
+        self.record.insert_one(entry_dict)
     
     def write_record_and_buffer(self, entry_dict, timestamp=None):
         '''
@@ -426,12 +477,11 @@ class DatabaseReadWrite(DatabaseRead):
         entry_dict: a dictionary containing thing to write to the record.
         '''
         if (timestamp == None) or (type(timestamp) != datetime.datetime):
-            document = {'_timestamp':datetime.datetime.utcnow()}
+            entry_dict['_timestamp'] = datetime.datetime.utcnow()
         else:
-            document = {'_timestamp':timestamp}
-        document = dict(list(document.items()) + list(entry_dict.items()))
-        self.buffer.insert_one(document)
-        self.record.insert_one(document)
+            entry_dict['_timestamp'] = timestamp
+        self.buffer.insert_one(entry_dict)
+        self.record.insert_one(entry_dict)
 
 
 # %% LogReadWrite ========================================================

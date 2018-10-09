@@ -8,6 +8,7 @@ Created on Wed Mar 21 11:46:06 2018
 # %% Modules
 
 import matplotlib.pyplot as plt
+from matplotlib import ticker
 import datetime
 import numpy as np
 import copy
@@ -25,18 +26,20 @@ def plot_setup(count, fig_ind=None, start=0, stop=.95):
     else:
         plt.figure(fig_ind)
     plt.clf()
-    colormap = plt.cm.spectral
+    colormap = plt.cm.nipy_spectral
     #plt.gca().set_color_cycle([colormap(i) for i in np.linspace(start, stop, count)])
     plt.gca().set_prop_cycle(cycler('color',[colormap(i) for i in np.linspace(start, stop, count)]))
 
 # %% Choose data
-ct_conv = lambda dt: utc_tz.localize(dt).astimezone(central_tz)
+utc_to_ct_conv = lambda dt: (utc_tz.localize(dt.replace(tzinfo=None))).astimezone(central_tz)
+ct_to_utc_conv = lambda dt: (central_tz.localize(dt.replace(tzinfo=None))).astimezone(utc_tz)
+
 #start_time = central_tz.localize(datetime.datetime(2018, 3, 19, 14))
 #stop_time = central_tz.localize(datetime.datetime(2018, 3, 22, 6))
 #start_time = central_tz.localize(datetime.datetime(2018, 4, 21, 14, 40))
-start_time = central_tz.localize(datetime.datetime(2018, 5, 1, 0, 0))
-stop_time = central_tz.localize(datetime.datetime.now())
-#start_time = stop_time - datetime.timedelta(days=2*7)
+start_time = ct_to_utc_conv(datetime.datetime(2018, 5, 1, 0, 0))
+stop_time = datetime.datetime.utcnow()
+#start_time = stop_time - datetime.timedelta(days=7)
 DBs = {
     # ambience ----------------------------------------------------------------
     'ambience/box_temperature_0':{
@@ -76,11 +79,11 @@ DBs = {
 #                    'max_V':lambda v: v,
 #                    'min_std':lambda v: v,
 #                    'max_std':lambda v: v}},
-    'cw_laser/dac_output':{
-            'start':start_time, 'stop':stop_time,
-            'keys':{
-                    'V':lambda v: v,
-                    'std':lambda v: v}},
+#    'cw_laser/dac_output':{
+#            'start':start_time, 'stop':stop_time,
+#            'keys':{
+#                    'V':lambda v: v,
+#                    'std':lambda v: v}},
 #    'cw_laser/freq_err':{
 #            'start':start_time, 'stop':stop_time,
 #            'keys':{
@@ -212,11 +215,11 @@ DBs = {
 #                    'ns':lambda s: s,
 #                    'std':lambda s: s}},
     # spectral_shaper ---------------------------------------------------------
-    'spectral_shaper/DW':{
-            'start':start_time, 'stop':stop_time,
-            'keys':{
-                    'dBm':lambda dw: dw,
-                    'std':lambda dw: dw}},
+#    'spectral_shaper/DW':{
+#            'start':start_time, 'stop':stop_time,
+#            'keys':{
+#                    'dBm':lambda dw: dw,
+#                    'std':lambda dw: dw}},
 #    'spectral_shaper/DW_vs_IM_bias':{
 #            'start':start_time, 'stop':stop_time,
 #            'keys':{
@@ -245,8 +248,8 @@ data = {}
 try:
     for database in DBs:
         data[database] = {}
-        start = DBs[database]['start'].astimezone(utc_tz)
-        stop = DBs[database]['stop'].astimezone(utc_tz)
+        start = DBs[database]['start']
+        stop = DBs[database]['stop']
         keys = DBs[database]['keys']
         for key in keys:
             data[database][key] = [[],[]]
@@ -255,7 +258,8 @@ try:
         for doc in cursor:
             for key in keys:
                 if key in doc:
-                    data[database][key][0].append(ct_conv(doc['_timestamp']))
+                    #data[database][key][0].append(utc_to_ct_conv(doc['_timestamp']))
+                    data[database][key][0].append(doc['_timestamp'])
                     data[database][key][1].append(keys[key](doc[key]))
 finally:
     mongo_client.close()
@@ -284,7 +288,7 @@ for ind, database in enumerate(DBs):
         plt.title(database)
         ax1 = plt.subplot2grid((4,1),(0,0), rowspan=3)
         ax2 = plt.subplot2grid((4,1),(3,0))
-        colormap = plt.cm.spectral
+        colormap = plt.cm.nipy_spectral
         ax1.set_prop_cycle(cycler('color',[colormap(i) for i in np.linspace(0, 0.95, len(data_temp))]))
         ax2.set_prop_cycle(cycler('color',[colormap(i) for i in np.linspace(0, 0.95, len(data_temp))]))
         for ind2, data_list in enumerate(data_temp):
@@ -298,7 +302,7 @@ for ind, database in enumerate(DBs):
         plt.title(database)
         ax1 = plt.subplot2grid((4,1),(0,0), rowspan=3)
         ax2 = plt.subplot2grid((4,1),(3,0))
-        colormap = plt.cm.spectral
+        colormap = plt.cm.nipy_spectral
         ax1.set_prop_cycle(cycler('color',[colormap(i) for i in np.linspace(0, 0.95, len(data_temp))]))
         ax2.set_prop_cycle(cycler('color',[colormap(i) for i in np.linspace(0, 0.95, len(data_temp))]))
         for ind2, data_list in enumerate(data_temp):
@@ -307,55 +311,76 @@ for ind, database in enumerate(DBs):
         plt.gcf().autofmt_xdate()
         plt.tight_layout()
     elif database == 'spectral_shaper/spectrum':
-        data_temp = [[spectrum['x'], spectrum['y'], spectrum['y_std'], data[database]['data'][0][idx]] for idx,spectrum in enumerate(data[database]['data'][1])]
-        [next( (data_temp.pop(idx) for idx, value in enumerate(data_temp) if value[3] >= switch_time), None) for switch_time in data['spectral_shaper/mask']['path'][0]]
-        f, axarr = plt.subplots(2, sharex=True)
-        colormap = plt.cm.spectral
-        axarr[0].set_prop_cycle(cycler('color',[colormap(i) for i in np.linspace(0, 0.95, len(data_temp))]))
-        axarr[1].set_prop_cycle(cycler('color',[colormap(i) for i in np.linspace(0, 0.95, len(data_temp))]))
-        for ind3, data_list in enumerate(data_temp):
-            try:
-                len(data_list[0])==len(data_list[1])
-                axarr[0].plot(data_list[0], data_list[1], markersize=1)#, label=data[database]['data'][0][ind3])
-            except:
-                axarr[0].plot(data_list[0], np.array(data_list[0])*np.nan, '.', markersize=1)#, label=data[database]['data'][0][ind3])
-            try:
-                len(data_list[0])==len(data_list[2])
-                axarr[1].plot(data_list[0], data_list[2], markersize=1)#, label=data[database]['data'][0][ind3])
-            except:
-                axarr[1].plot(data_list[0], np.array(data_list[0])*np.nan, '.', markersize=1)#, label=data[database]['data'][0][ind3])
-        axarr[0].set_title(database+':y')
-        axarr[0].grid(b=True)
-        axarr[1].set_title(database+':y_std')
-        axarr[1].grid(b=True)
-            #2D plot
+        ##data_temp = [[spectrum['x'], spectrum['y'], spectrum['y_std'], data[database]['data'][0][idx]] for idx,spectrum in enumerate(data[database]['data'][1])]
+        # Separate Masks
+        mask_data = data['spectral_shaper/mask']['path']
+        spectrum_top = []
+        spectrum_flat = []
+        for mask_ind, mask_switch_time in enumerate(mask_data[0]):
+            mask = mask_data[1][mask_ind]
+            start_index = next(iter(idx for idx, timestamp in enumerate(data[database]['data'][0]) if timestamp >= mask_switch_time ))
+            start_index += 1 # drop data from the transition period
+            stop_index = next(iter(idx for idx, timestamp in enumerate(data[database]['data'][0]) if timestamp >= next(iter(mask_data[0][mask_ind+1:]), data[database]['data'][0][-1])))
+            for spectrum_index in range(start_index, stop_index):
+                if mask:
+                    spectrum_top.append(spectrum_index)
+                else:
+                    spectrum_flat.append(spectrum_index)
+        # 1D Plot ---------------------------------------------------
+#        f, axarr = plt.subplots(2, sharex=True)
+#        colormap = plt.cm.nipy_spectral
+#        axarr[0].set_prop_cycle(cycler('color',[colormap(i) for i in np.linspace(0, 0.95, len(spectrum_flat))]))
+#        axarr[1].set_prop_cycle(cycler('color',[colormap(i) for i in np.linspace(0, 0.95, len(spectrum_flat))]))
+#        for spectrum_index in spectrum_flat:
+#            try:
+#                axarr[0].plot(data[database]['data'][1][spectrum_index]['x'], data[database]['data'][1][spectrum_index]['y'], '.', markersize=1)#, label=data[database]['data'][0][ind3])
+#            except:
+#                axarr[0].plot(data[database]['data'][1][spectrum_index]['x'], np.array(data[database]['data'][1][spectrum_index]['x'])*np.nan, '.', markersize=1)#, label=data[database]['data'][0][ind3])
+#            try:
+#                axarr[1].plot(data[database]['data'][1][spectrum_index]['x'], data[database]['data'][1][spectrum_index]['y_std'], '.', markersize=1)#, label=data[database]['data'][0][ind3])
+#            except:
+#                axarr[1].plot(data[database]['data'][1][spectrum_index]['x'], np.array(data[database]['data'][1][spectrum_index]['x'])*np.nan, '.', markersize=1)#, label=data[database]['data'][0][ind3])
+#        axarr[0].set_title(database+':y')
+#        axarr[0].grid(b=True)
+#        axarr[1].set_title(database+':y_std')
+#        axarr[1].grid(b=True)
+        #2D Amp Plot Abs ------------------------------------------------
         plt.figure()
-        
+        plt.gcf().set_figwidth(plt.gcf().get_figwidth()*2, forward=True)
         specs_2D = []
+        wvl_samp = []
         y_data = []
-        for ind3, data_list in enumerate(data_temp):
+        for spectrum_index in spectrum_flat:
             try:
-                len(data_list[0])==len(data_list[1])
-                specs_2D.append(np.array([data_list[0], data_list[1]]))
-                y_data.append(data_list[3])
+                len(data[database]['data'][1][spectrum_index]['x']) == len(data[database]['data'][1][spectrum_index]['y'])
+                specs_2D.append(data[database]['data'][1][spectrum_index]['y'])
+                wvl_samp.append(data[database]['data'][1][spectrum_index]['x'])
+                y_data.append(data[database]['data'][0][spectrum_index])
             except:
                 pass
-        plt_specs_2D = np.flipud(np.vstack(list(zip(*specs_2D))[1]))
-        wvl_samp = np.mean(list(zip(*specs_2D))[0],axis=0)
-#        names = np.flipud(zip(*file_data)[1])
-#        y_data = np.linspace(0,1,count+1)
-#        y_diff = np.mean(np.ediff1d(y_data))
-#        y_ticks = np.arange(y_diff/2., 1+y_diff/2, y_diff)
-        plt.pcolormesh(wvl_samp, y_data, plt_specs_2D, cmap='nipy_spectral')
-        c_map = plt.get_cmap('nipy_spectral')
-        c_map.set_bad(color='k', alpha = 1)
+        specs_2D = np.flipud(specs_2D)
+        wvl_samp = np.mean(wvl_samp,axis=0)
+        y_data = np.flipud(y_data)
+        plt.pcolormesh(wvl_samp, y_data, specs_2D, cmap='nipy_spectral')
+        plt.axis("tight")
+        #c_map = plt.cm.nipy_spectral
+        #c_map.set_bad(color='k', alpha = 1)
         c_bar = plt.colorbar()
         c_bar.set_label('Amplitude (dBm/nm)')
-        plt.axis("tight")
-#        plt.yticks(y_ticks[cmap_select], names[cmap_select])
         plt.xlabel('Wavelength (nm)')
-#        plt.title(sub_name+': '+group_ident)
         plt.tight_layout()
+#        #2D Amp Plot Diff -----------------------
+#        plt.figure()
+#        plt.pcolormesh(wvl_samp, y_data, np.abs(plt_specs_2D - plt_specs_2D.mean(axis=0)), cmap='nipy_spectral')
+#        c_map = plt.get_cmap('nipy_spectral')
+#        c_map.set_bad(color='k', alpha = 1)
+#        c_bar = plt.colorbar()
+#        c_bar.set_label('Amplitude Difference (dB/nm)')
+#        plt.axis("tight")
+##        plt.yticks(y_ticks[cmap_select], names[cmap_select])
+#        plt.xlabel('Wavelength (nm)')
+##        plt.title(sub_name+': '+group_ident)
+#        plt.tight_layout()
     elif database == 'broadening_stage/device_rotation_mount':
         f, axarr = plt.subplots(2, sharex=True)
         f.autofmt_xdate()
@@ -368,9 +393,37 @@ for ind, database in enumerate(DBs):
         axe = axarr[1]
         axe.plot(data[database][key][0], 1-np.cos(np.pi/180*2*(52-np.array(data[database][key][1])))**2,
              '.',  markersize=1, label='transmission')
+        axe.set_xlim((utc_to_ct_conv(start),utc_to_ct_conv(stop)))
         axe.legend()
         axe.grid(b=True)
-    else: # sAll other data
+    elif database == 'cw_laser/dac_output':
+        f, axarr = plt.subplots(2, sharex=True)
+        f.autofmt_xdate()
+        axe = axarr[0]
+        key = 'V'
+        axe.plot(data[database][key][0], data[database][key][1],
+             '.',  markersize=1, label=database+':'+key)
+        axe = axarr[1]
+        key = 'std'
+        axe.plot(data[database][key][0], data[database][key][1],
+             '.',  markersize=1, label=database+':'+key)
+        axe.legend()
+        axe.grid(b=True)
+        axe = axarr[0]
+        if ('cw_laser/dac_limits' in DBs):
+            database = 'cw_laser/dac_limits'
+            key = 'min_V'
+            axe.plot(data[database][key][0], data[database][key][1],
+                '.',  markersize=1, label=database+':'+key)
+            key = 'max_V'
+            axe.plot(data[database][key][0], data[database][key][1],
+                '.',  markersize=1, label=database+':'+key)
+        axe.set_xlim((utc_to_ct_conv(start),utc_to_ct_conv(stop)))
+        axe.legend()
+        axe.grid(b=True)
+    elif database == 'cw_laser/dac_limits':
+        pass
+    elif database == 'cw_laser/freq_err':
         f, axarr = plt.subplots(len(keys), sharex=True)
         f.autofmt_xdate()
         for ind2, key in enumerate(keys):
@@ -382,6 +435,23 @@ for ind, database in enumerate(DBs):
                  '.',  markersize=1, label=database+':'+key)
             #axe.plot(data[database][key][0], data[database][key][1],
             #     'gray',  markersize=1, label=database+':'+key)
+            axe.set_xlim((utc_to_ct_conv(start),utc_to_ct_conv(stop)))
+            axe.yaxis.set_major_formatter(ticker.EngFormatter(unit='Hz'))
+            axe.legend()
+            axe.grid(b=True)
+    else: # All other data
+        f, axarr = plt.subplots(len(keys), sharex=True)
+        f.autofmt_xdate()
+        for ind2, key in enumerate(keys):
+            if len(keys) == 1:
+                axe = axarr
+            else:
+                axe = axarr[ind2]
+            axe.plot(data[database][key][0], data[database][key][1],
+                 '.',  markersize=1, label=database+':'+key)
+            #axe.plot(data[database][key][0], data[database][key][1],
+            #     'gray',  markersize=1, label=database+':'+key)
+            axe.set_xlim((utc_to_ct_conv(start),utc_to_ct_conv(stop)))
             axe.legend()
             axe.grid(b=True)
 

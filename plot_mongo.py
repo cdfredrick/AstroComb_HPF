@@ -34,9 +34,9 @@ ct_conv = lambda dt: utc_tz.localize(dt).astimezone(central_tz)
 #start_time = central_tz.localize(datetime.datetime(2018, 3, 19, 14))
 #stop_time = central_tz.localize(datetime.datetime(2018, 3, 22, 6))
 #start_time = central_tz.localize(datetime.datetime(2018, 4, 21, 14, 40))
-start_time = central_tz.localize(datetime.datetime(2018, 5, 1, 0, 0))
+#start_time = central_tz.localize(datetime.datetime(2018, 5, 1, 0, 0))
 stop_time = central_tz.localize(datetime.datetime.now())
-#start_time = stop_time - datetime.timedelta(days=2*7)
+start_time = stop_time - datetime.timedelta(days=7)
 DBs = {
     # ambience ----------------------------------------------------------------
     'ambience/box_temperature_0':{
@@ -366,7 +366,7 @@ for ind, database in enumerate(DBs):
         axe.legend()
         axe.grid(b=True)
         axe = axarr[1]
-        axe.plot(data[database][key][0], 1-np.cos(np.pi/180*2*(52-np.array(data[database][key][1])))**2,
+        axe.plot(data[database][key][0], 1-np.cos(np.pi/180*2*(58-np.array(data[database][key][1])))**2,
              '.',  markersize=1, label='transmission')
         axe.legend()
         axe.grid(b=True)

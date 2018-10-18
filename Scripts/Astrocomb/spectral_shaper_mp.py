@@ -650,7 +650,7 @@ if __name__ == '__main__':
         log.log_info(mod_name, func_name, log_str)
     
     # Adjust Chip Input Power (Fast) ----------------------------------------------
-    DW_limits = 4.5 #{'max':-41, 'min':-50}
+    DW_limits = 2. #4.5 #{'max':-41, 'min':-50}
     DW_range_threshold = 1. # 3.5/9 #  3.5/9 for -44.5 and -46.5 soft limits :: 1/3.6 for -43.5 and -47.5 soft limits
     minimum_angle = 20 # degrees
     maximum_angle = 52 # degrees
@@ -720,13 +720,13 @@ if __name__ == '__main__':
                         log.log_warning(mod_name, func_name, log_str)
                     continue_adjusting_angle = False
                 else:
-                    log_str = ' DW is {:.3f}dB from setpoint {:.3f}dBm, raising the 2nd stage power'.format(DW_diff, local_settings[CONTROL_DB]['DW_setpoint']['value'])
+                    log_str = ' DW is {:.3f}dB from setpoint {:.3f}dBm, raising the 2nd stage power.\n Current angle {:.3f}deg.'.format(DW_diff, local_settings[CONTROL_DB]['DW_setpoint']['value'], current_angle)
                     log.log_info(mod_name, func_name, log_str)
                 # Raise the 2nd stage power
                     settings_list = [{'position':current_angle-0.1}]
                     sm.update_device_settings(rot_db, settings_list, write_log=False)
             elif upper_limit_condition:
-                log_str = ' DW is {:.3f}dB from setpoint {:.3f}dBm, lowering the 2nd stage power'.format(DW_diff, local_settings[CONTROL_DB]['DW_setpoint']['value'])
+                log_str = ' DW is {:.3f}dB from setpoint {:.3f}dBm, lowering the 2nd stage power.\n Current angle {:.3f}deg.'.format(DW_diff, local_settings[CONTROL_DB]['DW_setpoint']['value'], current_angle)
                 log.log_info(mod_name, func_name, log_str)
             # Lower the 2nd stage power
                 settings_list = [{'position':current_angle+0.1}]
@@ -808,9 +808,11 @@ if __name__ == '__main__':
             if (new_DW_condition):
                 update = False
                 DW_diff = current_DW - local_settings[CONTROL_DB]['DW_setpoint']['value']
+                power_too_low = (DW_diff < 0)
+                power_is_close = np.isclose(DW_diff, 0, atol=0.1)
                 upper_limit_condition = (current_DW > DW_high)
                 lower_limit_condition = (current_DW < DW_low)
-                if upper_limit_condition or lower_limit_condition:
+                if not(power_is_close) or upper_limit_condition or lower_limit_condition:
                     update = True
             # Update the temperature setpoint
                 if not(update):
@@ -821,30 +823,44 @@ if __name__ == '__main__':
                         mon['broadening_stage/device_rotation_mount']['new'] = False
                         current_angle = mon['broadening_stage/device_rotation_mount']['data'][-1]
                         lower_angle_condition = (current_angle < minimum_angle)
-                # Adjust the setpoint
-                    device_db = 'spectral_shaper/device_rotation_mount'
-                    if lower_limit_condition:
-                        if lower_angle_condition:
-                            warning_id = 'low_angle_slow'
-                            log_str = ' DW is {:.3f}dB from setpoint {:.3f}dBm, but 2nd stage power is already at maximum'.format(DW_diff, local_settings[CONTROL_DB]['DW_setpoint']['value'])
-                            if (warning_id in warning):
-                                if (time.time() - warning[warning_id]) > warning_interval:
-                                    log.log_warning(mod_name, func_name, log_str)
-                            else:
-                                warning[warning_id] = time.time()
+                    if lower_angle_condition and power_too_low:
+                        warning_id = 'low_angle_slow'
+                        log_str = ' DW is {:.3f}dB from setpoint {:.3f}dBm, but 2nd stage power is already at maximum'.format(DW_diff, local_settings[CONTROL_DB]['DW_setpoint']['value'])
+                        if (warning_id in warning):
+                            if (time.time() - warning[warning_id]) > warning_interval:
                                 log.log_warning(mod_name, func_name, log_str)
                         else:
-                            log_str = ' DW is {:.3f}dB from setpoint {:.3f}dBm, raising the 2nd stage power'.format(DW_diff, local_settings[CONTROL_DB]['DW_setpoint']['value'])
+                            warning[warning_id] = time.time()
+                            log.log_warning(mod_name, func_name, log_str)
+                    else:
+                    # Adjust the setpoint
+                        device_db = 'spectral_shaper/device_rotation_mount'
+                        if lower_limit_condition:
+                            log_str = ' DW is {:.3f}dB from setpoint {:.3f}dBm, raising the 2nd stage power.\n Current angle {:.3f}deg.'.format(DW_diff, local_settings[CONTROL_DB]['DW_setpoint']['value'], current_angle)
                             log.log_info(mod_name, func_name, log_str)
                         # Raise the 2nd stage power
-                            settings_list = [{'position':current_angle-0.05}]
-                            sm.update_device_settings(device_db, settings_list)
-                    elif upper_limit_condition:
-                        log_str = ' DW is {:.3f}dB from setpoint {:.3f}dBm, lowering the 2nd stage power'.format(DW_diff, local_settings[CONTROL_DB]['DW_setpoint']['value'])
-                        log.log_info(mod_name, func_name, log_str)
-                    # Lower the 2nd stage power
-                        settings_list = [{'position':current_angle+0.05}]
-                        sm.update_device_settings(device_db, settings_list)
+                            settings_list = [{'position':current_angle-0.1}]
+                            sm.update_device_settings(device_db, settings_list, write_log=False)
+                        elif upper_limit_condition:
+                            log_str = ' DW is {:.3f}dB from setpoint {:.3f}dBm, lowering the 2nd stage power.\n Current angle {:.3f}deg.'.format(DW_diff, local_settings[CONTROL_DB]['DW_setpoint']['value'], current_angle)
+                            log.log_info(mod_name, func_name, log_str)
+                        # Lower the 2nd stage power
+                            settings_list = [{'position':current_angle+0.1}]
+                            sm.update_device_settings(device_db, settings_list, write_log=False)
+                        else:
+                            step_size = 0.05 + (0.1-0.05) * abs(DW_diff)/DW_range_threshold
+                            if power_too_low:
+                                log_str = ' DW is {:.3f}dB from setpoint {:.3f}dBm, raising the 2nd stage power.\n Current angle {:.3f}deg.'.format(DW_diff, local_settings[CONTROL_DB]['DW_setpoint']['value'], current_angle)
+                                log.log_info(mod_name, func_name, log_str)
+                            # Raise the 2nd stage power
+                                settings_list = [{'position':current_angle-step_size}]
+                                sm.update_device_settings(device_db, settings_list, write_log=False)
+                            else:
+                                log_str = ' DW is {:.3f}dB from setpoint {:.3f}dBm, lowering the 2nd stage power.\n Current angle {:.3f}deg.'.format(DW_diff, local_settings[CONTROL_DB]['DW_setpoint']['value'], current_angle)
+                                log.log_info(mod_name, func_name, log_str)
+                            # Lower the 2nd stage power
+                                settings_list = [{'position':current_angle+step_size}]
+                                sm.update_device_settings(device_db, settings_list, write_log=False)
     
     
     # %% Operate Functions ========================================================

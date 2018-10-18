@@ -15,6 +15,7 @@ import pandas as pd
 
 import matplotlib.pyplot as plt
 from matplotlib import ticker
+from matplotlib.dates import MonthLocator
 from cycler import cycler
 
 from scipy.ndimage.filters import gaussian_filter, median_filter
@@ -134,9 +135,6 @@ def nm_to_THz(x):
 
 def m_to_Hz(x):
     return c/x # m to Hz
-
-def normalize(x, y, norm, jacobian=1):
-    return (y*jacobian).mul(norm/np.abs(np.trapz(y, x, axis=0)), axis='columns')
 
 def dB(x):
     return 10.*np.log10(x)
@@ -299,7 +297,7 @@ header['mask'] = np.nan
 for mask_ind in data['mask'].index:
     mask = data['mask'].loc[mask_ind, 'mask']
     mask_start_time = data['mask'].loc[mask_ind, 'time']
-    mask_end_time = next(iter(data['mask'].loc[mask_ind+1:, 'time']), header['time'][-1])
+    mask_end_time = next(iter(data['mask'].loc[mask_ind+1:, 'time']), header['time'].iloc[-1])
     mask_index = header.loc[((header['time'] > mask_start_time) & (header['time'] <= mask_end_time))].index[1:]
     header.loc[mask_index, 'mask'] = mask
 mask_index = header.loc[((header['time'] > datetime.datetime(2018, 6, 15, 3, 23, 30)) & (header['time'] <= datetime.datetime(2018, 6, 15, 12, 16, 50)))].index
@@ -325,6 +323,8 @@ ax0.plot(data['x'].loc[:,idxs], data['y'].loc[:,idxs].apply(dB, result_type='bro
 ax1 = complementary_x_ticks(ax0, nm_to_THz, nbins=7)
 
 # %% Normalize
+def normalize(x, y, norm, jacobian=1):
+    return (y*jacobian).mul(norm/np.abs(np.trapz(y, x, axis=0)), axis='columns')
 
 # Fill in missing values
 if not('input_power' in header):
@@ -466,7 +466,7 @@ ax1.set_xlabel('Wavelength (nm)')
 ax1.grid(b=True)
 
 plt.tight_layout()
-#plt.savefig('long_spectrum.png', dpi=600, transparent=True)
+plt.savefig('long_spectrum.png', dpi=600, transparent=True)
 
 #avg_flat = copy.deepcopy(np.array([data_list[0], data_avg]))
 
@@ -476,164 +476,53 @@ flat = header['time'][header['mask']==0].sort_values().index
 fig = plt.figure(3)
 plt.clf()
 fig.set_size_inches(6.35*1.5, 4.8, forward=True)
-plt.pcolormesh(header['time'].loc[flat], data['x_nm'].loc[:,flat].mean(axis='columns'), data['y_P/nm'].loc[:,flat].apply(dB, result_type='broadcast').sub(data['y_P/nm'].loc[:,flat].apply(dB, result_type='broadcast').mean(axis='columns'), axis='index'), cmap='seismic')
-plt.clim(-1,1)
+plt.pcolormesh(header['time'].loc[flat], data['x_nm'].loc[:,flat].mean(axis='columns'), data['y_P/nm'].loc[:,flat].apply(dB, result_type='broadcast').sub(data['y_P/nm'].loc[:,flat].apply(dB, result_type='broadcast').mean(axis='columns'), axis='index'), cmap='cividis')
+plt.clim(-2,2)
 c_bar = plt.colorbar()
+fig.autofmt_xdate()
+#plt.gca().xaxis.set_major_locator(MonthLocator())
 plt.tight_layout()
 
-# %% By Polarization
+# %%
+flat = header['time'][header['mask']==0].sort_values().index
 
-# H -----------------------------------------------------------------
-idxs = header['adj_input_energy'][header['polarization']=='H'].sort_values().index
+fig = plt.figure(4)
+plt.clf()
+fig.set_size_inches(6.35*1.5, 4.8, forward=True)
+plt.pcolormesh(header['time'].loc[flat], data['x_nm'].loc[:,flat].mean(axis='columns'), data['y_std'].loc[:,flat], cmap='cividis')
+plt.clim(0,1)
+c_bar = plt.colorbar()
+fig.autofmt_xdate()
+#plt.gca().xaxis.set_major_locator(MonthLocator())
+plt.tight_layout()
 
-fig, ax0 = plot_setup(2, len(idxs), size=(6.4*1.5, 4.8))
-for idx in idxs:
-    spectrum = trace[idx]
-    if not((idx+1) % 10):
-        name = '{:}'.format(format_eng(header.loc[idx,'adj_input_energy'], unit='J', places=2))
-    else:
-        name = None
-    ax0.plot(spectrum['data']['x_THz']*1e12, dB(spectrum['data']['y_Ph/THz']), label=name)
+# %% Plot DW
+plt.figure(5)
+plt.clf()
+fig = plt.gcf()
+ax0 = plt.subplot2grid((2,1), (0,0))
+ax1 = plt.subplot2grid((2,1), (1,0), sharex=ax0)
 
-ax0.xaxis.set_major_formatter(ticker.EngFormatter(unit='Hz'))
-ax1 = complementary_x_ticks(ax0, m_to_Hz, formatter=ticker.EngFormatter(unit='m'))
+ax0.plot(data['DW'].loc[:,'time'], data['DW'].loc[:,'dBm'], '.',  markersize=3)
+ax0.set_ylabel('DW Amplitude (dBm/nm)')
 
-ax0.set_ylabel('dB \N{GREEK SMALL LETTER GAMMA}/THz')
+ax1.plot(data['DW'].loc[:,'time'], data['DW'].loc[:,'std'], '.',  markersize=3)
+ax1.set_ylabel('Std Dev (dB/nm)')
 
-ylim = ax0.get_ylim()
-ax0.set_ylim((ylim[-1]-80, ylim[-1]))
+ax0.axhline(-43.5, linestyle='--', linewidth=1, alpha=0.5, xmax=.39)
+ax0.axhline(-47.5, linestyle='--', linewidth=1, alpha=0.5, xmax=.39)
 
-fig.legend(ncol=1)
+ax0.axhline(-44.5, linestyle='--', linewidth=1, alpha=0.5, xmin=.39)
+ax0.axhline(-46.5, linestyle='--', linewidth=1, alpha=0.5, xmin=.39)
 
-title = '{:} Polarization'.format(header.loc[idx,'polarization'])
-ax0.set_title(title, pad=25)
+#first_of_the_month = [datetime.date(2018, 5, 1), datetime.date(2018, 6, 1), datetime.date(2018, 7, 1), datetime.date(2018, 8, 1), datetime.date(2018, 9, 1)]
+#ax0.set_xticks(first_of_the_month)
+#ax0.set_xticklabels(first_of_the_month)
+#ax0.set_xlim([data['DW'].loc[:,'time'].min(), data['DW'].loc[:,'time'].max()])
 
-fig.savefig(os.path.join(directory, title+'.png'))
+fig.autofmt_xdate()
+ax1.xaxis.set_major_locator(MonthLocator())
 
-
-# V -----------------------------------------------------------------
-idxs = header['adj_input_energy'][header['polarization']=='V'].sort_values().index
-
-fig, ax0 = plot_setup(3, len(idxs), size=(6.4*1.5, 4.8))
-for idx in idxs:
-    spectrum = trace[idx]
-    if not((idx+1) % 10):
-        name = '{:}'.format(format_eng(header.loc[idx,'adj_input_energy'], unit='J', places=2))
-    else:
-        name = None
-    ax0.plot(spectrum['data']['x_THz']*1e12, dB(spectrum['data']['y_Ph/THz']), label=name)
-
-ax0.xaxis.set_major_formatter(ticker.EngFormatter(unit='Hz'))
-ax1 = complementary_x_ticks(ax0, m_to_Hz, formatter=ticker.EngFormatter(unit='m'))
-
-ax0.set_ylabel('dB \N{GREEK SMALL LETTER GAMMA}/THz')
-
-ylim = ax0.get_ylim()
-ax0.set_ylim((ylim[-1]-80, ylim[-1]))
-
-fig.legend(ncol=1)
-
-title = '{:} Polarization'.format(header.loc[idx,'polarization'])
-ax0.set_title(title, pad=25)
-
-fig.savefig(os.path.join(directory, title+'.png'))
-
-# %% 2D
-
-# H -----------------------------------------------------------------
-fig, ax0 = plot_setup(4, 0, size=(6.4*1.5, 4.8))
-databox = []
-x = []
-y = []
-
-y_id = 'input_energy'
-idxs = header[y_id][header['polarization']=='H'].sort_values().index
-for idx in idxs:
-    spectrum = trace[idx]
-    databox.append(dB(spectrum['data']['y_Ph/THz']))
-    x.append(spectrum['data']['x_THz']*1e12)
-    y.append(header[y_id][idx])
-databox = np.array(databox)
-
-x = np.array(x)
-y = np.tile(y, (x.shape[1],1)).T
-
-x0 = spectrum['data']['x_THz'].min()*1e12
-x1 = spectrum['data']['x_THz'].max()*1e12
-y0 = header[y_id][idxs].min()
-y1 = header[y_id][idxs].max()
-
-plt.pcolormesh(x, y, databox, cmap=plt.cm.cividis, vmin=databox.max()-60, shading='gouraud')
-ax0.yaxis.set_major_formatter(ticker.EngFormatter(unit='J'))
-ax0.xaxis.set_major_formatter(ticker.EngFormatter(unit='Hz'))
-
-ax0.set_ylabel(y_id.replace('_',' '))
-
-ax1 = complementary_x_ticks(ax0, m_to_Hz, formatter=ticker.EngFormatter(unit='m'))
-
-cbar = plt.colorbar()
-cbar.set_label('dB \N{GREEK SMALL LETTER GAMMA}/THz')
-
-contour_levels = np.array([-30, -20, -10]) #np.arange(-50, 0, 10)
-im_ratio = databox.shape[0]/databox.shape[1]
-flt_size = 5
-num_filts = 50
-im2 = ax0.contour(x, y, gaus_filt(databox-databox.max(axis=1)[:,np.newaxis], (im_ratio*flt_size,flt_size), num_filts), contour_levels, linewidths=.75, colors='w')
-plt.clabel(im2, contour_levels, fmt='%2.0f')#, inline=1)
-
-title = '{:} Polarization'.format(header.loc[idx,'polarization'])
-ax0.set_title(title, pad=25)
-
-fig.savefig(os.path.join(directory, title+' 2D.png'))
-
-
-# V -----------------------------------------------------------------
-fig, ax0 = plot_setup(5, 0, size=(6.4*1.5, 4.8))
-databox = []
-x = []
-y = []
-
-y_id = 'input_energy'
-idxs = header[y_id][header['polarization']=='V'].sort_values().index
-for idx in idxs:
-    spectrum = trace[idx]
-    databox.append(dB(spectrum['data']['y_Ph/THz']))
-    x.append(spectrum['data']['x_THz']*1e12)
-    y.append(header[y_id][idx])
-databox = np.array(databox)
-
-x = np.array(x)
-y = np.tile(y, (x.shape[1],1)).T
-
-x0 = spectrum['data']['x_THz'].min()*1e12
-x1 = spectrum['data']['x_THz'].max()*1e12
-y0 = header[y_id][idxs].min()
-y1 = header[y_id][idxs].max()
-
-plt.pcolormesh(x, y, databox, cmap=plt.cm.cividis, vmin=databox.max()-60, shading='gouraud')
-ax0.yaxis.set_major_formatter(ticker.EngFormatter(unit='J'))
-ax0.xaxis.set_major_formatter(ticker.EngFormatter(unit='Hz'))
-
-ax0.set_ylabel(y_id.replace('_',' '))
-
-ax1 = complementary_x_ticks(ax0, m_to_Hz, formatter=ticker.EngFormatter(unit='m'))
-
-cbar = plt.colorbar()
-cbar.set_label('dB \N{GREEK SMALL LETTER GAMMA}/THz')
-
-contour_levels = np.array([-30, -20, -10]) #np.arange(-50, 0, 10)
-im_ratio = databox.shape[0]/databox.shape[1]
-flt_size = 5
-num_filts = 50
-im2 = ax0.contour(x, y, gaus_filt(databox-databox.max(axis=1)[:,np.newaxis], (im_ratio*flt_size,flt_size), num_filts), contour_levels, linewidths=.75, colors='w')
-plt.clabel(im2, contour_levels, fmt='%2.0f')#, inline=1)
-
-title = '{:} Polarization'.format(header.loc[idx,'polarization'])
-ax0.set_title(title, pad=25)
-
-fig.savefig(os.path.join(directory, title+' 2D.png'))
-
-
-
-
+plt.tight_layout()
+plt.savefig('long_DW.png', dpi=600, transparent=True)
 

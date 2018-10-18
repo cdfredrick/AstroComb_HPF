@@ -258,9 +258,9 @@ DBs = {
 
 # %% Connect to database and pull results
 
-mongo_client = MongoDB.MongoClient()
 data = {}
 try:
+    mongo_client = MongoDB.MongoClient()
     for database in DBs:
         data[database] = {}
         start = DBs[database]['start']
@@ -290,6 +290,7 @@ for ind, database in enumerate(DBs):
             plt.plot(data_list[0], data_list[1], '.', markersize=1)#, label=data[database]['V_out'][0][ind2])
         plt.title(database)
         #plt.legend()
+        plt.tight_layout()
     elif database == 'mll_fR/DAQ_Vout_vs_freq':
         data_temp = list(zip(data[database]['V'][1],data[database]['Hz'][1]))
         plot_setup(len(data_temp))
@@ -297,6 +298,7 @@ for ind, database in enumerate(DBs):
             plt.plot(data_list[0], data_list[1], '.', markersize=1)#, label=data[database]['V'][0][ind2])
         plt.title(database)
         #plt.legend()
+        plt.tight_layout()
     elif database == 'spectral_shaper/DW_vs_IM_bias':
         data_temp = list(zip(data[database]['V'][1],data[database]['dBm'][1], data[database]['dBm'][0]))
         plt.figure()
@@ -327,21 +329,32 @@ for ind, database in enumerate(DBs):
         plt.tight_layout()
     elif database == 'spectral_shaper/spectrum':
         ##data_temp = [[spectrum['x'], spectrum['y'], spectrum['y_std'], data[database]['data'][0][idx]] for idx,spectrum in enumerate(data[database]['data'][1])]
-        spectrum_flat = range(len(data[database]['data'][1]))
-#        # Separate Masks
-#        mask_data = data['spectral_shaper/mask']['path']
-#        spectrum_top = []
-#        spectrum_flat = []
-#        for mask_ind, mask_switch_time in enumerate(mask_data[0]):
-#            mask = mask_data[1][mask_ind]
-#            start_index = next(iter(idx for idx, timestamp in enumerate(data[database]['data'][0]) if timestamp >= mask_switch_time ))
-#            start_index += 1 # drop data from the transition period
-#            stop_index = next(iter(idx for idx, timestamp in enumerate(data[database]['data'][0]) if timestamp >= next(iter(mask_data[0][mask_ind+1:]), data[database]['data'][0][-1])))
-#            for spectrum_index in range(start_index, stop_index):
-#                if mask:
-#                    spectrum_top.append(spectrum_index)
-#                else:
-#                    spectrum_flat.append(spectrum_index)
+        # Separate Masks
+        mask_data = data['spectral_shaper/mask']['path']
+        spectrum_top = []
+        spectrum_flat = []
+        if len(mask_data)>0:
+            mask = mask_data[1][0]
+            mask_switch_time = mask_data[0][0]
+            start_index = 0
+            stop_index = next(iter(idx for idx, timestamp in enumerate(data[database]['data'][0]) if timestamp >= mask_switch_time ))
+            for spectrum_index in range(start_index, stop_index):
+                if not(mask):
+                    spectrum_top.append(spectrum_index)
+                else:
+                    spectrum_flat.append(spectrum_index)
+            for mask_ind, mask_switch_time in enumerate(mask_data[0]):
+                mask = mask_data[1][mask_ind]
+                start_index = next(iter(idx for idx, timestamp in enumerate(data[database]['data'][0]) if timestamp >= mask_switch_time ))
+                start_index += 1 # drop data from the transition period
+                stop_index = next(iter(idx for idx, timestamp in enumerate(data[database]['data'][0]) if timestamp >= next(iter(mask_data[0][mask_ind+1:]), data[database]['data'][0][-1])))
+                for spectrum_index in range(start_index, stop_index):
+                    if mask:
+                        spectrum_top.append(spectrum_index)
+                    else:
+                        spectrum_flat.append(spectrum_index)
+        else:
+            spectrum_flat = range(len(data[database]['data'][1]))
     # 1D Plot ---------------------------------------------------
         f, axarr = plt.subplots(2, sharex=True)
         colormap = plt.cm.nipy_spectral
@@ -349,19 +362,20 @@ for ind, database in enumerate(DBs):
         axarr[1].set_prop_cycle(cycler('color',[colormap(i) for i in np.linspace(0, 0.95, len(spectrum_flat))]))
         for spectrum_index in spectrum_flat:
             try:
-                axarr[0].plot(data[database]['data'][1][spectrum_index]['x'], np.array(data[database]['data'][1][spectrum_index]['y']), '.', markersize=1)#, label=data[database]['data'][0][ind3])
+                axarr[0].plot(data[database]['data'][1][spectrum_index]['x'], np.array(data[database]['data'][1][spectrum_index]['y']), '.', markersize=1, alpha=0.03)#, label=data[database]['data'][0][ind3])
                 #axarr[0].plot(data[database]['data'][1][spectrum_index]['x'], np.array(data[database]['data'][1][spectrum_index]['y'])-np.array(data[database]['data'][1][spectrum_index]['y']).mean(), '.', markersize=1)#, label=data[database]['data'][0][ind3])
                 #axarr[0].plot(data[database]['data'][1][spectrum_index]['x'], np.array(data[database]['data'][1][spectrum_index]['y'])-10*np.log10(np.trapz(10**(np.array(data[database]['data'][1][spectrum_index]['y'])/10))), '.', markersize=1)#, label=data[database]['data'][0][ind3])
             except:
                 axarr[0].plot(data[database]['data'][1][spectrum_index]['x'], np.array(data[database]['data'][1][spectrum_index]['x'])*np.nan, '.', markersize=1)#, label=data[database]['data'][0][ind3])
             try:
-                axarr[1].plot(data[database]['data'][1][spectrum_index]['x'], data[database]['data'][1][spectrum_index]['y_std'], '.', markersize=1)#, label=data[database]['data'][0][ind3])
+                axarr[1].plot(data[database]['data'][1][spectrum_index]['x'], data[database]['data'][1][spectrum_index]['y_std'], '.', markersize=1, alpha=0.03)#, label=data[database]['data'][0][ind3])
             except:
                 axarr[1].plot(data[database]['data'][1][spectrum_index]['x'], np.array(data[database]['data'][1][spectrum_index]['x'])*np.nan, '.', markersize=1)#, label=data[database]['data'][0][ind3])
         axarr[0].set_title(database+':y')
         axarr[0].grid(b=True)
         axarr[1].set_title(database+':y_std')
         axarr[1].grid(b=True)
+        plt.tight_layout()
     #2D Amp Plot Abs ------------------------------------------------
         plt.figure()
         plt.gcf().set_figwidth(plt.gcf().get_figwidth()*2, forward=True)
@@ -394,7 +408,7 @@ for ind, database in enumerate(DBs):
         #specs_2D_diff = specs_2D - (specs_2D*c_nm_ps/wvl_samp**2 / (h*c/(wvl_samp*1e-9))).max(axis=1)[:, np.newaxis]/(c_nm_ps/wvl_samp**2 / (h*c/(wvl_samp*1e-9)))
         plt.figure()
         plt.gcf().set_figwidth(plt.gcf().get_figwidth()*2, forward=True)
-        plt.pcolormesh(wvl_samp, y_data, np.abs(specs_2D_diff - specs_2D_diff.mean(axis=0)), cmap='nipy_spectral')
+        plt.pcolormesh(wvl_samp, y_data, np.abs(specs_2D_diff - np.median(specs_2D_diff, axis=0)), cmap='nipy_spectral')
         c_map = plt.get_cmap('nipy_spectral')
         c_map.set_bad(color='k', alpha = 1)
         c_bar = plt.colorbar()
@@ -406,6 +420,7 @@ for ind, database in enumerate(DBs):
         plt.tight_layout()
         plt.figure()
         plt.plot(10**(specs_2D_diff.std(axis=0)/10))
+        plt.tight_layout()
         print(np.median(10**(specs_2D_diff.std(axis=0)/10)))
     elif database == 'broadening_stage/device_rotation_mount':
         f, axarr = plt.subplots(2, sharex=True)
@@ -422,6 +437,7 @@ for ind, database in enumerate(DBs):
         axe.set_xlim((start,stop))
         axe.legend()
         axe.grid(b=True)
+        plt.tight_layout()
     elif database == 'cw_laser/dac_output':
         f, axarr = plt.subplots(2, sharex=True)
         f.autofmt_xdate()
@@ -447,6 +463,7 @@ for ind, database in enumerate(DBs):
         axe.set_xlim((start,stop))
         axe.legend()
         axe.grid(b=True)
+        plt.tight_layout()
     elif database == 'cw_laser/dac_limits':
         pass
     elif database == 'cw_laser/freq_err':
@@ -465,6 +482,7 @@ for ind, database in enumerate(DBs):
             axe.yaxis.set_major_formatter(ticker.EngFormatter(unit='Hz'))
             axe.legend()
             axe.grid(b=True)
+        plt.tight_layout()
     elif database == 'spectral_shaper/DW_bulk_vs_waveplate_angle':
         data_temp = list(zip(data[database]['deg'][1], data[database]['bulk_dBm'][1], data[database]['DW_dBm'][1], data[database]['deg'][0]))
         plt.figure()
@@ -483,6 +501,7 @@ for ind, database in enumerate(DBs):
         ax1.set_ylabel('Bulk')
         ax2.set_ylabel('DW')
         ax3.yaxis.set_visible(False)
+        plt.setp(ax3.get_xticklabels(), rotation=30, ha='right')
         #plt.gcf().autofmt_xdate()
         plt.tight_layout()
         
@@ -501,6 +520,7 @@ for ind, database in enumerate(DBs):
             axe.set_xlim((start,stop))
             axe.legend()
             axe.grid(b=True)
+        plt.tight_layout()
 
 # %% Save
 #data_temp = copy.deepcopy(data['rf_oscillators/Rb_time_tag']['ns'])

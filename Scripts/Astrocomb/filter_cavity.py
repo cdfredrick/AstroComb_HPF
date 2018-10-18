@@ -606,7 +606,7 @@ def find_lock(state_db, last_good_position=None):
                             current_state[state_db],
                             timestamp=datetime.datetime.utcfromtimestamp(timer['find_lock:locked']))
 # If unlocked -------------------------------------------------------
-    else:
+    if not locked:
         '''The current state has failed the lock tests. The PID controller is
         then broght into a known state, and the DAQ is used to find the lock
         point.'''
@@ -1019,7 +1019,7 @@ STATES = {
                                         'proportional_gain':-0.2, 'integral_gain':1.0e2,
                                         'upper_output_limit':2.00, 'lower_output_limit':0.00},
                                 'filter_cavity/device_HV':{
-                                        'y_min_limit':0.00, 'y_max_limit':150.00, 'y_voltage':95}},
+                                        'y_min_limit':0.00, 'y_max_limit':150.00, 'y_voltage':92}},
                         'prerequisites':{
                                 'critical':[],
                                 'necessary':[],

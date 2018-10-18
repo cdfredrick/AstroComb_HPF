@@ -9,7 +9,7 @@ Created on Sun Nov 12 12:00:00 2017
 import pymongo
 import datetime
 import logging
-
+import copy
 
 # %% Sync Mongo
 
@@ -434,6 +434,7 @@ class DatabaseReadWrite(DatabaseRead):
         *args
         document: a document in the format as given by the read_buffer function.
         '''
+        document = copy.copy(document)
         if '_id' in document:
             document.pop('_id')
         self.record.insert_one(document)
@@ -447,6 +448,7 @@ class DatabaseReadWrite(DatabaseRead):
         *args
         entry_dict: a dictionary containing things to write to the buffer.
         '''
+        entry_dict = copy.copy(entry_dict)
         if '_id' in entry_dict:
             entry_dict.pop('_id')
         if (timestamp == None) or (type(timestamp) != datetime.datetime):
@@ -464,6 +466,7 @@ class DatabaseReadWrite(DatabaseRead):
         *args
         entry_dict: a dictionary containing thing to write to the record.
         '''
+        entry_dict = copy.copy(entry_dict)
         if '_id' in entry_dict:
             entry_dict.pop('_id')
         if (timestamp == None) or (type(timestamp) != datetime.datetime):
@@ -481,6 +484,7 @@ class DatabaseReadWrite(DatabaseRead):
         *args
         entry_dict: a dictionary containing thing to write to the record.
         '''
+        entry_dict = copy.copy(entry_dict)
         if '_id' in entry_dict:
             entry_dict.pop('_id')
         if (timestamp == None) or (type(timestamp) != datetime.datetime):
@@ -524,6 +528,7 @@ class LogReadWrite(LogRead):
         *args
         document: a document in the format as given by the read_log function.
         '''
+        document = copy.copy(document)
         if '_id' in document:
             document.pop('_id')
         self.log.insert_one(document)

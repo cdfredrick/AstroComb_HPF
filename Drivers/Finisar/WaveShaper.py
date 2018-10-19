@@ -516,7 +516,7 @@ class WaveShaperHTTP():
         URL: http://<_ip_>/waveshaper/getprofile
         Response: Currently loaded WaveShaper filter profile encoded in WSP formatted string.
         '''
-        result = requests.get('http://'+ip_address+'/waveshaper/getprofile').json() #.json() or .text()?
+        result = requests.get('http://'+ip_address+'/waveshaper/getprofile').text #.json() or .text?
         return result
     
     def dev_info(self, ip_address):
@@ -557,6 +557,7 @@ class WS1000A(WaveShaperHTTP):
         self.frequency_range = np.array([result['startfreq'], result['stopfreq']]) # THz
         self.wavelength_range = np.sort(SPEED_OF_LIGHT_NM_THZ/self.frequency_range) # nm
         (self.freq, self.attn, self.phase, self.port) = parse_wsp(self.get_profile(self.ip_address)) # populate freq, attn, phase, and port arrays
+        self.wvl = SPEED_OF_LIGHT_NM_THZ/self.freq
     
     def filter_profile(self, set_profile=None, return_profile=True):
         '''Read and write filter profiles to the WaveShaper.
@@ -566,7 +567,7 @@ class WS1000A(WaveShaperHTTP):
             port number, or a dictionary containing the information necessary
             to activate a predefined filter.
         '''
-        if (set_profile == None):
+        if (set_profile is None):
         # Read profile from WaveShaper
             (self.freq, self.attn, self.phase, self.port) = parse_wsp(self.get_profile(self.ip_address)) # populate freq, attn, phase, and port arrays
             if (return_profile==True):
@@ -583,7 +584,7 @@ class WS1000A(WaveShaperHTTP):
     
     def phase_profile(self, set_profile=None):
         '''Specifically reads and writes only the phase profile'''
-        if (set_profile == None):
+        if (set_profile is None):
         # Read phase profile from WaveShaper
             self.filter_profile(return_profile=False)
             return self.phase
@@ -594,7 +595,7 @@ class WS1000A(WaveShaperHTTP):
             
     def attn_profile(self, set_profile=None):
         '''Specifically reads and writes only the attenuation profile'''
-        if (set_profile == None):
+        if (set_profile is None):
         # Read attenuation profile from WaveShaper
             self.filter_profile(return_profile=False)
             return self.attn
@@ -605,7 +606,7 @@ class WS1000A(WaveShaperHTTP):
     
     def port_profile(self, set_profile=None):
         '''Specifically reads and writes only the port profile'''
-        if (set_profile == None):
+        if (set_profile is None):
         # Read port profile from WaveShaper
             self.filter_profile(return_profile=False)
             return self.port

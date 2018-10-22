@@ -95,11 +95,11 @@ DBs = {
                     'Hz':lambda f: f,
                     'std':lambda f: f}},
     # filter_cavity -----------------------------------------------------------
-#    'filter_cavity/DAQ_Vout_vs_reflect':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'V_out':lambda v: v,
-#                    'V_ref':lambda v: v}},
+    'filter_cavity/DAQ_Vout_vs_reflect':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'V_out':lambda v: v,
+                    'V_ref':lambda v: v}},
     'filter_cavity/DAQ_error_signal':{
             'start':start_time, 'stop':stop_time,
             'keys':{
@@ -115,11 +115,11 @@ DBs = {
             'keys':{
                     'V':lambda v: v,
                     'std':lambda v: v}},
-#    'filter_cavity/PID_output_limits':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'min':lambda v: v,
-#                    'max':lambda v: v}},
+    'filter_cavity/PID_output_limits':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'min':lambda v: v,
+                    'max':lambda v: v}},
     'filter_cavity/heater_temperature':{
             'start':start_time, 'stop':stop_time,
             'keys':{
@@ -128,13 +128,13 @@ DBs = {
                     'act_V':lambda v: v,
                     'act_std':lambda v: v}},
     # mll_f0 ------------------------------------------------------------------
-#    'mll_f0/dac_limits':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'min_V':lambda v: v,
-#                    'min_std':lambda v: v,
-#                    'max_V':lambda v: v,
-#                    'max_std':lambda v: v}},
+    'mll_f0/dac_limits':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'min_V':lambda v: v,
+                    'min_std':lambda v: v,
+                    'max_V':lambda v: v,
+                    'max_std':lambda v: v}},
     'mll_f0/dac_output':{
             'start':start_time, 'stop':stop_time,
             'keys':{
@@ -146,11 +146,11 @@ DBs = {
                     'Hz':lambda f: f,
                     'std':lambda f: f}},
     # mll_fR ------------------------------------------------------------------
-#    'mll_fR/DAQ_Vout_vs_freq':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'V':lambda v: v,
-#                    'Hz':lambda f: f}},
+    'mll_fR/DAQ_Vout_vs_freq':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'V':lambda v: v,
+                    'Hz':lambda f: f}},
     'mll_fR/DAQ_error_signal':{
             'start':start_time, 'stop':stop_time,
             'keys':{
@@ -182,59 +182,59 @@ DBs = {
                     'kOhm':lambda o: o,
                     'std':lambda o: o}},
     # rf_oscillators ----------------------------------------------------------
-#    'rf_oscillators/100MHz_phase_lock':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'bit':lambda b: b,
-#                    'flips':lambda b: b}},
-#    'rf_oscillators/1GHz_phase_lock':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'bit':lambda b: b,
-#                    'flips':lambda b: b}},
-#    'rf_oscillators/Rb_OCXO_control':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'high':lambda n: n,
-#                    'high_std':lambda n: n,
-#                    'low':lambda n: n,
-#                    'low_std':lambda n: n}},
-#    'rf_oscillators/Rb_detected_signals':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'mod':lambda v: v,
-#                    'mod_std':lambda v: v,
-#                    '2mod':lambda v: v,
-#                    '2mod_std':lambda v: v}},
-#    'rf_oscillators/Rb_frequency_offset':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    '1e-12':lambda n: n}},
-#    'rf_oscillators/Rb_magnetic_read':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'DAC':lambda n: n}},
-#    'rf_oscillators/Rb_time_tag':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'ns':lambda s: s,
-#                    'std':lambda s: s}},
+    'rf_oscillators/100MHz_phase_lock':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'bit':lambda b: b,
+                    'flips':lambda b: b}},
+    'rf_oscillators/1GHz_phase_lock':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'bit':lambda b: b,
+                    'flips':lambda b: b}},
+    'rf_oscillators/Rb_OCXO_control':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'high':lambda n: n,
+                    'high_std':lambda n: n,
+                    'low':lambda n: n,
+                    'low_std':lambda n: n}},
+    'rf_oscillators/Rb_detected_signals':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'mod':lambda v: v,
+                    'mod_std':lambda v: v,
+                    '2mod':lambda v: v,
+                    '2mod_std':lambda v: v}},
+    'rf_oscillators/Rb_frequency_offset':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    '1e-12':lambda n: n}},
+    'rf_oscillators/Rb_magnetic_read':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'DAC':lambda n: n}},
+    'rf_oscillators/Rb_time_tag':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'ns':lambda s: s,
+                    'std':lambda s: s}},
     # spectral_shaper ---------------------------------------------------------
     'spectral_shaper/DW':{
             'start':start_time, 'stop':stop_time,
             'keys':{
                     'dBm':lambda dw: dw,
                     'std':lambda dw: dw}},
-#    'spectral_shaper/DW_vs_IM_bias':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'V':lambda v: v,
-#                    'dBm':lambda dw: dw}},
-#    'spectral_shaper/DW_vs_waveplate_angle':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'deg':lambda d: d,
-#                    'dBm':lambda dw: dw}},
+    'spectral_shaper/DW_vs_IM_bias':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'V':lambda v: v,
+                    'dBm':lambda dw: dw}},
+    'spectral_shaper/DW_vs_waveplate_angle':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'deg':lambda d: d,
+                    'dBm':lambda dw: dw}},
     'spectral_shaper/mask':{
             'start':start_time, 'stop':stop_time,
             'keys':{
@@ -302,8 +302,8 @@ for ind, database in enumerate(DBs):
     elif database == 'spectral_shaper/DW_vs_IM_bias':
         data_temp = list(zip(data[database]['V'][1],data[database]['dBm'][1], data[database]['dBm'][0]))
         plt.figure()
-        plt.title(database)
         ax1 = plt.subplot2grid((4,1),(0,0), rowspan=3)
+        plt.title(database)
         ax2 = plt.subplot2grid((4,1),(3,0))
         colormap = plt.cm.nipy_spectral
         ax1.set_prop_cycle(cycler('color',[colormap(i) for i in np.linspace(0, 0.95, len(data_temp))]))
@@ -311,13 +311,13 @@ for ind, database in enumerate(DBs):
         for ind2, data_list in enumerate(data_temp):
             ax1.plot(data_list[0], data_list[1], '.', markersize=10)#, label=data[database]['deg'][0][ind2])
             ax2.plot(data_list[2], 0, '.', markersize=10)
-        plt.gcf().autofmt_xdate()
+        plt.setp(ax2.get_xticklabels(), rotation=30, ha='right')
         plt.tight_layout()
     elif database == 'spectral_shaper/DW_vs_waveplate_angle':
         data_temp = list(zip(data[database]['deg'][1],data[database]['dBm'][1],data[database]['dBm'][0]))
         plt.figure()
-        plt.title(database)
         ax1 = plt.subplot2grid((4,1),(0,0), rowspan=3)
+        plt.title(database)
         ax2 = plt.subplot2grid((4,1),(3,0))
         colormap = plt.cm.nipy_spectral
         ax1.set_prop_cycle(cycler('color',[colormap(i) for i in np.linspace(0, 0.95, len(data_temp))]))
@@ -325,7 +325,7 @@ for ind, database in enumerate(DBs):
         for ind2, data_list in enumerate(data_temp):
             ax1.plot(data_list[0], data_list[1], '.', markersize=10)#, label=data[database]['deg'][0][ind2])
             ax2.plot(data_list[2], 0, '.', markersize=10)
-        plt.gcf().autofmt_xdate()
+        plt.setp(ax2.get_xticklabels(), rotation=30, ha='right')
         plt.tight_layout()
     elif database == 'spectral_shaper/spectrum':
         ##data_temp = [[spectrum['x'], spectrum['y'], spectrum['y_std'], data[database]['data'][0][idx]] for idx,spectrum in enumerate(data[database]['data'][1])]
@@ -381,19 +381,19 @@ for ind, database in enumerate(DBs):
         plt.gcf().set_figwidth(plt.gcf().get_figwidth()*2, forward=True)
         specs_2D = []
         wvl_samp = []
-        y_data = []
+        time_data = []
         for spectrum_index in spectrum_flat:
             try:
                 len(data[database]['data'][1][spectrum_index]['x']) == len(data[database]['data'][1][spectrum_index]['y'])
                 specs_2D.append(data[database]['data'][1][spectrum_index]['y'])
                 wvl_samp.append(data[database]['data'][1][spectrum_index]['x'])
-                y_data.append(data[database]['data'][0][spectrum_index])
+                time_data.append(data[database]['data'][0][spectrum_index])
             except:
                 pass
         specs_2D = np.flipud(specs_2D)
         wvl_samp = np.mean(wvl_samp,axis=0)
-        y_data = np.flipud(y_data)
-        plt.pcolormesh(wvl_samp, y_data, specs_2D, cmap='nipy_spectral')
+        time_data = np.flipud(time_data)
+        plt.pcolormesh(time_data.T, wvl_samp.T, specs_2D.T, cmap='nipy_spectral')
         plt.axis("tight")
         #c_map = plt.cm.nipy_spectral
         #c_map.set_bad(color='k', alpha = 1)
@@ -408,7 +408,7 @@ for ind, database in enumerate(DBs):
         #specs_2D_diff = specs_2D - (specs_2D*c_nm_ps/wvl_samp**2 / (h*c/(wvl_samp*1e-9))).max(axis=1)[:, np.newaxis]/(c_nm_ps/wvl_samp**2 / (h*c/(wvl_samp*1e-9)))
         plt.figure()
         plt.gcf().set_figwidth(plt.gcf().get_figwidth()*2, forward=True)
-        plt.pcolormesh(wvl_samp, y_data, np.abs(specs_2D_diff - np.median(specs_2D_diff, axis=0)), cmap='nipy_spectral')
+        plt.pcolormesh(time_data.T, wvl_samp.T, np.abs(specs_2D_diff - np.median(specs_2D_diff, axis=0)).T, cmap='nipy_spectral')
         c_map = plt.get_cmap('nipy_spectral')
         c_map.set_bad(color='k', alpha = 1)
         c_bar = plt.colorbar()
@@ -466,6 +466,34 @@ for ind, database in enumerate(DBs):
         plt.tight_layout()
     elif database == 'cw_laser/dac_limits':
         pass
+    elif database == 'mll_f0/dac_output':
+        f, axarr = plt.subplots(2, sharex=True)
+        f.autofmt_xdate()
+        axe = axarr[0]
+        key = 'V'
+        axe.plot(data[database][key][0], data[database][key][1],
+             '.',  markersize=1, label=database+':'+key)
+        axe = axarr[1]
+        key = 'std'
+        axe.plot(data[database][key][0], data[database][key][1],
+             '.',  markersize=1, label=database+':'+key)
+        axe.legend()
+        axe.grid(b=True)
+        axe = axarr[0]
+        if ('mll_f0/dac_limits' in DBs):
+            database = 'mll_f0/dac_limits'
+            key = 'min_V'
+            axe.plot(data[database][key][0], data[database][key][1],
+                '.',  markersize=1, label=database+':'+key)
+            key = 'max_V'
+            axe.plot(data[database][key][0], data[database][key][1],
+                '.',  markersize=1, label=database+':'+key)
+        axe.set_xlim((start,stop))
+        axe.legend()
+        axe.grid(b=True)
+        plt.tight_layout()
+    elif database == 'mll_f0/dac_limits':
+        pass
     elif database == 'cw_laser/freq_err':
         f, axarr = plt.subplots(len(keys), sharex=True)
         f.autofmt_xdate()
@@ -486,8 +514,8 @@ for ind, database in enumerate(DBs):
     elif database == 'spectral_shaper/DW_bulk_vs_waveplate_angle':
         data_temp = list(zip(data[database]['deg'][1], data[database]['bulk_dBm'][1], data[database]['DW_dBm'][1], data[database]['deg'][0]))
         plt.figure()
-        plt.title(database)
         ax1 = plt.subplot2grid((7,1),(0,0), rowspan=3)
+        plt.title(database)
         ax2 = plt.subplot2grid((7,1),(3,0), rowspan=3, sharex=ax1)
         ax3 = plt.subplot2grid((7,1),(6,0))
         colormap = plt.cm.nipy_spectral
@@ -509,6 +537,8 @@ for ind, database in enumerate(DBs):
         f, axarr = plt.subplots(len(keys), sharex=True)
         f.autofmt_xdate()
         for ind2, key in enumerate(keys):
+            if ind2==0:
+                plt.title(database)
             if len(keys) == 1:
                 axe = axarr
             else:

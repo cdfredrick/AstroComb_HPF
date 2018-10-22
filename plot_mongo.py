@@ -42,9 +42,10 @@ ct_to_utc_conv = lambda dt: (central_tz.localize(dt.replace(tzinfo=None))).astim
 #start_time = central_tz.localize(datetime.datetime(2018, 3, 19, 14))
 #stop_time = central_tz.localize(datetime.datetime(2018, 3, 22, 6))
 #start_time = central_tz.localize(datetime.datetime(2018, 4, 21, 14, 40))
-#start_time = central_tz.localize(datetime.datetime(2018, 5, 1, 0, 0))
-stop_time = central_tz.localize(datetime.datetime.now())
-start_time = stop_time - datetime.timedelta(days=7)
+start_time = ct_to_utc_conv(datetime.datetime(2018, 5, 1, 0, 0))
+stop_time = ct_to_utc_conv(datetime.datetime(2018, 10, 15, 0, 0))
+#stop_time = datetime.datetime.utcnow()
+#start_time = stop_time - datetime.timedelta(days=7*2.5)
 DBs = {
     # ambience ----------------------------------------------------------------
     'ambience/box_temperature_0':{

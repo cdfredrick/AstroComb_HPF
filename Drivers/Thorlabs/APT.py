@@ -58,6 +58,7 @@ message.
 
 """
 
+
 # %% Modules
 
 from functools import wraps
@@ -96,7 +97,6 @@ def _auto_connect(func):
 class APTDevice():
     def __init__(self, port, timeout=1.):
         assert isinstance(port, str)
-        assert isinstance(timeout, float)
 
         self.auto_connect = True
         self.connected = False
@@ -151,13 +151,13 @@ class APTDevice():
 # %% KDC101 Brushed Motor Controler and PRM1Z8 Rotation Stage
 
 class KDC101_PRM1Z8(APTDevice):
-    def __init__(self, port, timeout):
-        super().__init__(port, timeout=timeout)
+    # Conversion Factors
+    ENC_CNT_DEG = 1919.64 # encoder counts per degree
+    VEL_SCL_FCT = 42941.66 # encoder counts per (degrees per second)
+    ACC_SCL_FCT = 14.66 # encoder counts per (degrees per second**2)
 
-        # Conversion Factors
-        self.ENC_CNT_DEG = 1919.64 # encoder counts per degree
-        self.VEL_SCL_FCT = 42941.66 # encoder counts per (degrees per second)
-        self.ACC_SCL_FCT = 14.66 # encoder counts per (degrees per second**2)
+    def __init__(self, port, timeout=1):
+        super().__init__(port, timeout=timeout)
 
         # Suspend "End of Move Messages"
         self.suspend_EoM_msgs(True)
@@ -219,26 +219,26 @@ class KDC101_PRM1Z8(APTDevice):
         return (position, velocity, status_bits)
 
     @_auto_connect
-    def home(self, move_home=None):
-        if move_home is None:
+    def home(self, home=None):
+        if home is None:
             # Check if the device has been homed
             status_bits = self.status()[2]
             return {'homed':status_bits['homed'],
                     'homing':status_bits['homing']}
-        elif move_home == True:
+        elif home == True:
             # MGMSG_MOT_MOVE_HOME
             write_buffer = struct.pack("<BBBBBB", 0x43, 0x04, 0x01, 0x00, 0x50, 0x01)
             self.ser.write(write_buffer)
 
     @_auto_connect
-    def position(self, set_position=None):
-        if set_position is None:
+    def position(self, position=None):
+        if position is None:
             # Get the current position
             position = self.status()[0]
             return position
         else:
             # Calculate the encoder value
-            enc_cnt = int(round((set_position % 360) * self.ENC_CNT_DEG))
+            enc_cnt = int(round((position % 360) * self.ENC_CNT_DEG))
             # MGMSG_MOT_MOVE_ABSOLUTE
             write_buffer = struct.pack('<BBBBBBHl', 0x53, 0x04, 0x06, 0x00, 0x50|0x80, 0x01,
                                        0x0001, enc_cnt)
@@ -251,3 +251,212 @@ class KDC101_PRM1Z8(APTDevice):
         write_buffer = struct.pack("<BBBBBBHl", 0x48, 0x04, 0x06, 0x00, 0x50|0x80, 0x01,
                                    0x0001, enc_cnt)
         self.ser.write(write_buffer)
+
+
+# %% KPZ101 K-Cube Piezo Controller
+
+class KPZ101(APTDevice):
+    # Position Control Mode
+    OPEN_LOOP = 0x01
+    CLOSED_LOOP = 0x02
+    OPEN_LOOP_SMOOTH = 0x03
+    CLOSED_LOOP_SMOOTH = 0x04
+
+    # IO Settings
+    VOLTAGELIMIT_75V = 0x01
+    VOLTAGELIMIT_100V = 0x02
+    VOLTAGELIMIT_150V = 0x03
+    HUB_ANALOGUEIN_A = 0x01
+    HUB_ANALOGUEIN_B = 0x02
+    EXTSIG_SMA = 0x03
+
+    # Output Voltage
+    CNT_VLT_FR = 2**(16-1) - 1 # integer counts per max voltage
+    MAX_VLT = [0, 75, 100, 150]
+
+    # Input Voltage Source
+    SOFTWARE_ONLY = 0x00
+    EXTERNAL_SIGNAL = 0x01
+    POTENTIOMETER = 0x02
+
+    def __init__(self, port, timeout=1):
+        super().__init__(port, timeout=timeout)
+
+        # Set Position Control Mode
+        self.position_control_mode(mode=self.OPEN_LOOP)
+
+        # Populate IO Settings
+        self.io_settings()
+
+    @_auto_connect
+    def position_control_mode(self, mode=None, persist=True):
+        '''When in closed-loop mode, position is maintained by a feedback
+        signal from the piezo actuator. This is only possible when using
+        actuators equipped with position sensing.
+
+        mode : int
+            0x01    Open Loop (no feedback)
+
+            0x02    Closed Loop (feedback employed)
+
+            0x03    Open Loop Smooth
+
+            0x04    Closed Loop Smooth
+
+        If set to Open Loop Smooth or Closed Loop Smooth is selected, the
+        feedback status is the same as above however the transition from open
+        to closed loop (or vise versa) is achieved over a longer period in
+        order to minimize voltage transients (spikes).
+        '''
+        if mode is None:
+            # Get the current position control mode
+            # MGMSG_PZ_REQ_POSCONTROLMODE
+            write_buffer = struct.pack("<BBBBBB", 0x41, 0x06, 0x01, 0x00, 0x50, 0x01)
+            self.ser.write(write_buffer)
+            # MGMSG_PZ_GET_POSCONTROLMODE
+            read_buffer = self.ser.read(6)
+            result = struct.unpack("<BBBBBB", read_buffer)
+            mode = result[3]
+            return mode
+        else:
+            assert mode in [self.OPEN_LOOP, self.CLOSED_LOOP, self.OPEN_LOOP_SMOOTH, self.CLOSED_LOOP_SMOOTH]
+            # MGMSG_PZ_SET_POSCONTROLMODE
+            write_buffer = struct.pack("<BBBBBB", 0x40, 0x06, 0x01, mode, 0x50, 0x01)
+            self.ser.write(write_buffer)
+            if persist:
+                # MGMSG_PZ_SET_EEPROMPARAMS
+                write_buffer = struct.pack("<BBBBBBHBB", 0xD0, 0x07, 0x04, 0x00, 0x50|0x80, 0x01,
+                                           0x0001, 0x40, 0x06)
+                self.ser.write(write_buffer)
+
+    @_auto_connect
+    def input_voltage_source(self, input_source=None, persist=True):
+        '''Used to set the input source(s) which controls the output from the
+        HV amplifier circuit (i.e. the drive to the piezo actuators).
+
+        input_source : int
+            0x00 = SOFTWARE_ONLY, Unit responds only to software inputs and the
+            HV amp output is that set using the SetVoltOutput method or via the
+            GUI panel.
+
+            0x01 = EXTERNAL_SIGNAL, Unit sums the differential signal on the
+            rear panel EXT IN (+) and EXT IN (-) connectors with the voltage
+            set using the SetVoltOutput method
+
+            0x02 = POTENTIOMETER, The HV amp output is controlled by a
+            potentiometer input (either on the control panel, or connected to
+            the rear panel User I/O D-type connector) summed with the voltage
+            set using the SetVoltOutput method.
+        '''
+        if input_source is None:
+            # MGMSG_PZ_REQ_INPUTVOLTSSRC
+            write_buffer = struct.pack("<BBBBBB", 0x53, 0x06, 0x01, 0x00, 0x50, 0x01)
+            self.ser.write(write_buffer)
+            # MGMSG_PZ_GET_INPUTVOLTSSRC
+            read_buffer = self.ser.read(10)
+            result = struct.unpack("<BBBBBBHH", read_buffer)
+            voltage_source = result[7]
+            return voltage_source
+        else:
+            assert input_source in [self.SOFTWARE_ONLY, self.EXTERNAL_SIGNAL, self.POTENTIOMETER]
+            # MGMSG_PZ_SET_INPUTVOLTSSRC
+            write_buffer = struct.pack("<BBBBBBHH", 0x52, 0x06, 0x04, 0x00, 0x05|0x08, 0x01,
+                                       0x0001, input_source)
+            self.ser.write(write_buffer)
+            if persist:
+                # MGMSG_PZ_SET_EEPROMPARAMS
+                write_buffer = struct.pack("<BBBBBBHBB", 0xD0, 0x07, 0x04, 0x00, 0x50|0x80, 0x01,
+                                           0x0001, 0x52, 0x06)
+                self.ser.write(write_buffer)
+
+    @_auto_connect
+    def io_settings(self, voltage_limit=None, analog_input=None, persist=True):
+        '''This function is used to set various I/O settings.
+
+        voltage_limit : int
+            The piezo actuator connected to the T-Cube has a specific maximum
+            operating voltage range. This parameter sets the maximum output to
+            the value specified as follows...
+
+            0x01 = VOLTAGELIMIT_75V,    75V limit
+
+            0x02 = VOLTAGELIMIT_100V,   100V limit
+
+            0x03 = VOLTAGELIMIT_150V,   150V limit
+
+        analog_input : int
+            When the K-Cube Piezo Driver unit is used a feedback signal can be
+            passed from other cubes to the Piezo unit. This parameter is used
+            to select the way in which the feedback signal is routed to the
+            Piezo unit as follows...
+
+            0x01 = HUB_ANALOGUEIN_A,    all cube bays
+
+            0x02 = HUB_ANALOGUEIN_B,    adjacent pairs of cube bays (i.e. 1&2, 3&4, 5&6)
+
+            0x03 = EXTSIG_SMA,          rear panel SMA connector
+        '''
+        if (voltage_limit is None) and (analog_input is None):
+            # Get the current IO settings
+            # MGMSG_PZ_REQ_TPZ_IOSETTINGS
+            write_buffer = struct.pack("<BBBBBB", 0xD5, 0x07, 0x01, 0x00, 0x50, 0x01)
+            self.ser.write(write_buffer)
+            # MGMSG_PZ_GET_TPZ_IOSETTINGS
+            read_buffer = self.ser.read(16)
+            result = struct.unpack("<BBBBBBHHHHH", read_buffer)
+            voltage_limit = result[7]
+            analog_input = result[8]
+            self.voltage_limit = voltage_limit
+            self.analog_input = analog_input
+            return {"voltage_limit":voltage_limit,
+                    "analog_input":analog_input}
+        else:
+            if voltage_limit is None:
+                voltage_limit = self.voltage_limit
+            if analog_input is None:
+                analog_input = self.analog_input
+            # Check values
+            assert voltage_limit in [self.VOLTAGELIMIT_75V, self.VOLTAGELIMIT_100V, self.VOLTAGELIMIT_150V]
+            assert analog_input in [self.HUB_ANALOGUEIN_A, self.HUB_ANALOGUEIN_B, self.EXTSIG_SMA]
+            # MGMSG_PZ_SET_TPZ_IOSETTINGS
+            write_buffer = struct.pack("<BBBBBBHHHHH", 0xD4, 0x07, 0x0A, 0x00, 0x50|0x80, 0x01,
+                                       0x0001, voltage_limit, analog_input, 0, 0)
+            self.ser.write(write_buffer)
+            self.voltage_limit = voltage_limit
+            self.analog_input = analog_input
+            if persist:
+                # MGMSG_PZ_SET_EEPROMPARAMS
+                write_buffer = struct.pack("<BBBBBBHBB", 0xD0, 0x07, 0x04, 0x00, 0x50|0x80, 0x01,
+                                           0x0001, 0xD4, 0x07)
+                self.ser.write(write_buffer)
+
+    @_auto_connect
+    def voltage(self, voltage=None):
+        '''Used to set the output voltage applied to the piezo actuator.
+
+        This command is applicable only in Open Loop mode. If called when in
+        Closed Loop mode it is ignored.
+
+        voltage : float
+            The output voltage applied to the piezo when operating in open loop
+            mode. The voltage is scaled into the range -32768 to 32767 (-0x7FFF
+            to 0x7FFF) to which corresponds to -100% to 100% of the maximum
+            output voltage as set using the TPZ_IOSETTINGS command.
+        '''
+        if voltage is None:
+            # Get the current voltage output
+            # MGMSG_PZ_REQ_OUTPUTVOLTS
+            write_buffer = struct.pack("<BBBBBB", 0x44, 0x06, 0x01, 0x00, 0x50, 0x01)
+            self.ser.write(write_buffer)
+            # MGMSG_PZ_GET_OUTPUTVOLTS
+            read_buffer = self.ser.read(10)
+            result = struct.unpack("<BBBBBBHh", read_buffer)
+            voltage = result[7]/self.CNT_VLT_FR * self.MAX_VLT[self.voltage_limit]
+            return voltage
+        else:
+            assert (voltage >= 0) and (voltage <= self.MAX_VLT[self.voltage_limit])
+            # MGMSG_PZ_SET_OUTPUTVOLTS
+            voltage_cnt = int(round(voltage/self.MAX_VLT[self.voltage_limit] * self.CNT_VLT_FR))
+            write_buffer = struct.pack("<BBBBBBHh", 0x43, 0x06, 0x04, 0x00, 0x50|0x80, 0x01,
+                                       0x0001, voltage_cnt)
+

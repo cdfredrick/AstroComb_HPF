@@ -95,7 +95,7 @@ def _auto_connect(func):
 # %% APT Device
 
 class APTDevice():
-    def __init__(self, port, timeout=1., source=0x01, destination=0x50):
+    def __init__(self, port, timeout=1., serial_number=None, source=0x01, destination=0x50):
         assert isinstance(port, str)
 
         self.auto_connect = True
@@ -111,6 +111,9 @@ class APTDevice():
 
         self.src = source # 0x01 = host controller
         self.dst = destination # 0x50 = generic usb device
+
+        if serial_number is not None:
+            assert serial_number == self.hardware_info()["serial"]
 
     def open_port(self):
         '''Opens the serial port for read/write access'''
@@ -227,8 +230,8 @@ class KDC101_PRM1Z8(APTDevice):
     VEL_SCL_FCT = 42941.66 # encoder counts per (degrees per second)
     ACC_SCL_FCT = 14.66 # encoder counts per (degrees per second**2)
 
-    def __init__(self, port, timeout=1):
-        super().__init__(port, timeout=timeout)
+    def __init__(self, port, timeout=1, serial_number=None):
+        super().__init__(port, timeout=timeout, serial_number=serial_number)
 
         # Suspend "End of Move Messages"
         self.suspend_EoM_msgs(True)
@@ -374,8 +377,8 @@ class KPZ101(APTDevice):
     POTENTIOMETER = 0x02
     ALL_IN_SRCS = EXTERNAL_SIGNAL|POTENTIOMETER # 3
 
-    def __init__(self, port, timeout=1):
-        super().__init__(port, timeout=timeout)
+    def __init__(self, port, timeout=1, serial_number=None):
+        super().__init__(port, timeout=timeout, serial_number=serial_number)
 
         # Set Position Control Mode
         self.position_control_mode(mode=self.OPEN_LOOP)
@@ -665,8 +668,8 @@ class TNA001(APTDevice):
     RT_SMA = 0x01
     RT_SMA_HUB = 0x02
 
-    def __init__(self, port, timeout=1):
-        super().__init__(port, timeout=timeout)
+    def __init__(self, port, timeout=1, serial_number=None):
+        super().__init__(port, timeout=timeout, serial_number=serial_number)
         self.enable = lambda enable=None, channel=1: True
 
         # Get Current Position

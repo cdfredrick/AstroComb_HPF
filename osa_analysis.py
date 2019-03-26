@@ -323,8 +323,11 @@ ax0.plot(data['x'].loc[:,idxs], data['y'].loc[:,idxs].apply(dB, result_type='bro
 ax1 = complementary_x_ticks(ax0, nm_to_THz, nbins=7)
 
 # %% Normalize
+def nantrapz(y, x=None, axis=0):
+    return np.asarray(np.trapz(np.ma.masked_invalid(y), x=None if x is None else np.ma.masked_invalid(x), axis=axis))
+
 def normalize(x, y, norm, jacobian=1):
-    return (y*jacobian).mul(norm/np.abs(np.trapz(y, x, axis=0)), axis='columns')
+    return (y*jacobian).mul(norm/np.abs(nantrapz(y*jacobian, x, axis=0)), axis='columns')
 
 # Fill in missing values
 if not('input_power' in header):
@@ -466,7 +469,7 @@ ax1.set_xlabel('Wavelength (nm)')
 ax1.grid(b=True)
 
 plt.tight_layout()
-plt.savefig('long_spectrum.png', dpi=600, transparent=True)
+#plt.savefig('long_spectrum.png', dpi=600, transparent=True)
 
 #avg_flat = copy.deepcopy(np.array([data_list[0], data_avg]))
 
@@ -476,10 +479,32 @@ flat = header['time'][header['mask']==0].sort_values().index
 fig = plt.figure(3)
 plt.clf()
 fig.set_size_inches(6.35*1.5, 4.8, forward=True)
-plt.pcolormesh(header['time'].loc[flat], data['x_nm'].loc[:,flat].mean(axis='columns'), data['y_P/nm'].loc[:,flat].apply(dB, result_type='broadcast').sub(data['y_P/nm'].loc[:,flat].apply(dB, result_type='broadcast').mean(axis='columns'), axis='index'), cmap='cividis')
+plt.pcolormesh(header['time'].loc[flat],
+               data['x_nm'].loc[:,flat].mean(axis='columns'),
+               data['y_P/nm'].loc[:,flat].apply(dB, result_type='broadcast').sub(data['y_P/nm'].loc[:,flat].mean(axis='columns').apply(dB), axis='index'),
+               cmap=plt.cm.seismic)
 plt.clim(-2,2)
 c_bar = plt.colorbar()
-fig.autofmt_xdate()
+#fig.autofmt_xdate()
+plt.xlim([736810.5475672083, 736970.9387923519])
+#plt.gca().xaxis.set_major_locator(MonthLocator())
+plt.tight_layout()
+
+
+# %% Flat 2D Diff Abs
+flat = header['time'][header['mask']==0].sort_values().index
+
+fig = plt.figure(4)
+plt.clf()
+fig.set_size_inches(6.35*1.5, 4.8, forward=True)
+plt.pcolormesh(header['time'].loc[flat],
+               data['x_nm'].loc[:,flat].mean(axis='columns'),
+               (data['y_P/nm'].loc[:,flat].apply(dB, result_type='broadcast').sub(data['y_P/nm'].loc[:,flat].mean(axis='columns').apply(dB), axis='index')).apply(np.abs, result_type='broadcast'),
+               cmap=plt.cm.nipy_spectral)
+plt.clim(0,2)
+c_bar = plt.colorbar()
+#fig.autofmt_xdate()
+plt.xlim([736810.5475672083, 736970.9387923519])
 #plt.gca().xaxis.set_major_locator(MonthLocator())
 plt.tight_layout()
 
@@ -489,7 +514,10 @@ flat = header['time'][header['mask']==0].sort_values().index
 fig = plt.figure(4)
 plt.clf()
 fig.set_size_inches(6.35*1.5, 4.8, forward=True)
-plt.pcolormesh(header['time'].loc[flat], data['x_nm'].loc[:,flat].mean(axis='columns'), data['y_std'].loc[:,flat], cmap='cividis')
+plt.pcolormesh(header['time'].loc[flat],
+               data['x_nm'].loc[:,flat].mean(axis='columns'), 
+               data['y_std'].loc[:,flat],
+               cmap=plt.cm.nipy_spectral)
 plt.clim(0,1)
 c_bar = plt.colorbar()
 fig.autofmt_xdate()
@@ -524,5 +552,5 @@ fig.autofmt_xdate()
 ax1.xaxis.set_major_locator(MonthLocator())
 
 plt.tight_layout()
-plt.savefig('long_DW.png', dpi=600, transparent=True)
+#plt.savefig('long_DW.png', dpi=600, transparent=True)
 

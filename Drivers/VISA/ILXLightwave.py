@@ -213,7 +213,7 @@ class LDC3900(vo.VISA):
 class LaserModule(LDC3900):
     @log.log_this()
     def __init__(self, visa_address, laser_channel, res_manager=None):
-        super(LaserModule, self).__init__(visa_address, res_manager=res_manager)
+        LDC3900.__init__(self, visa_address, res_manager=res_manager)
         self.las_channel = laser_channel
         self.las_open_command = 'LAS:CHAN {:}'.format(self.las_channel)
         self.las_opened = False
@@ -686,7 +686,7 @@ class LaserModule(LDC3900):
 class TECModule(LDC3900):
     @log.log_this()
     def __init__(self, visa_address, tec_channel, res_manager=None):
-        super(TECModule, self).__init__(visa_address, res_manager=res_manager)
+        LDC3900.__init__(self, visa_address, res_manager=res_manager)
         self.tec_channel = tec_channel
         self.tec_opened = False
         self.tec_open_command = 'TEC:CHAN {:}'.format(self.tec_channel)
@@ -1335,11 +1335,8 @@ class CombinationModule(LaserModule, TECModule):
         '''
         if output is None:
         # Send query
-            laser_result = self.laser_conditions()
-            tec_result = self.tec_conditions()
-        # Parse results
-            laser_result = 10 in laser_result
-            tec_result = 10 in tec_result
+            laser_result =self.laser_output()
+            tec_result = self.tec_output()
             return laser_result, tec_result
         else:
         # Send commands

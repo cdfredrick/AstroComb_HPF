@@ -630,7 +630,7 @@ def find_lock(state_db, last_good_position=None):
         daq_db = 'filter_cavity/device_DAQ_Vout_vs_reflect'
         dev[daq_db]['queue'].queue_and_wait(priority=True)
     # Get lock point data ---------------------------------
-        x = np.linspace(v_low, v_high, 200)
+        x = np.linspace(v_low, v_high, 500)
         y = np.copy(x)
         w = np.copy(x)
         for ind, x_val in enumerate(x):
@@ -1019,7 +1019,7 @@ STATES = {
                                         'proportional_gain':-0.2, 'integral_gain':1.0e2,
                                         'upper_output_limit':2.00, 'lower_output_limit':0.00},
                                 'filter_cavity/device_HV':{
-                                        'y_min_limit':0.00, 'y_max_limit':150.00, 'y_voltage':92}},
+                                        'y_min_limit':0.00, 'y_max_limit':150.00, 'y_voltage':94}},
                         'prerequisites':{
                                 'critical':[],
                                 'necessary':[],

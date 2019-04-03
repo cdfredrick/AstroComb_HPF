@@ -29,26 +29,6 @@ from Drivers.Database import CouchbaseDB
 '''The following are helper functions that increase the readablity of code in
     this script.'''
 
-# Update a 1D circular buffer -------------------------------------------------
-@log.log_this()
-def update_buffer(buffer, new_data, length):
-    '''Use this function to update a 1D rolling buffer, as typically found in
-    the monitor variables.
-    '''
-    length = int(abs(length))
-    buffer = np.append(buffer, new_data)
-    if buffer.size > length:
-        buffer = buffer[-length:]
-    return buffer
-
-# Periodic Timer --------------------------------------------------------------
-@log.log_this()
-def get_lap(time_interval):
-    '''Use this function to get an incrementing integer linked to the system
-    clock.
-    '''
-    return int(time.time() // time_interval)
-
 
 # %% Threading Error Handling
 class ThreadFactory():
@@ -173,7 +153,7 @@ class Machine():
         7. `Machine.init_monitors`
         8. `Machine.init_states`
     '''
-
+    #--- Initialization Functions ---------------------------------------------
     @log.log_this()
     def __init__(self, log_error_interval=100):
         self.timer = {}
@@ -182,7 +162,7 @@ class Machine():
         self.error = {}
         self.error_interval = log_error_interval # seconds
 
-# Communications queue --------------------------------------------------------
+    # Communications queue ----------------------------------------------------
     @log.log_this()
     def init_comms(self, COMMS):
         '''Initialize the communications queue.
@@ -202,7 +182,7 @@ class Machine():
         self.COMMS = COMMS
         self.comms = CouchbaseDB.PriorityQueue(self.COMMS)
 
-# Internal database names -----------------------------------------------------
+    # Internal database names -------------------------------------------------
     @log.log_this()
     def init_master_DB_names(self, STATE_DBs, DEVICE_DBs, MONITOR_DBs, LOG_DB, CONTROL_DB):
         '''Initialize the list of master databases.
@@ -246,7 +226,7 @@ class Machine():
         self.CONTROL_DB = CONTROL_DB
         self.MASTER_DBs = STATE_DBs + DEVICE_DBs + MONITOR_DBs + [LOG_DB] + [CONTROL_DB]
 
-# External database names -----------------------------------------------------
+    # External database names -------------------------------------------------
     @log.log_this()
     def init_read_DB_names(self, STATE_DBs, DEVICE_DBs, MONITOR_DBs):
         '''Initialize the list of read databases.
@@ -260,7 +240,7 @@ class Machine():
         self.R_MONITOR_DBs = MONITOR_DBs
         self.READ_DBs = STATE_DBs + DEVICE_DBs + MONITOR_DBs
 
-# Default settings ------------------------------------------------------------
+    # Default settings --------------------------------------------------------
     @log.log_this()
     def init_default_settings(self, STATE_SETTINGS, DEVICE_SETTINGS, CONTROL_PARAMS):
         '''A template for all settings used in this script.
@@ -394,19 +374,24 @@ class Machine():
         self.CONTROL_PARAMS[self.CONTROL_DB]['main_loop'] = {'value':True,'type':'bool'}
         self.SETTINGS = dict(list(STATE_SETTINGS.items()) + list(DEVICE_SETTINGS.items()) + list(CONTROL_PARAMS.items()))
 
-# Connect to MongoDB ----------------------------------------------------------
+    # Connect to MongoDB ------------------------------------------------------
     @log.log_this()
     def init_DBs(self, db={}):
         '''Creates a client and connects to all defined databases
 
         This method also initializes all thread locks necessary for safely
         accesing the databases.
+
+        Notes
+        -----
+        All database instances are saved to `Machine.db`, and all locks are
+        saved to `Machine.lock`.
         '''
         self.mongo_client = MongoDB.MongoClient()
         self.db = db
         self.lock = {}
         for database in self.MASTER_DBs:
-            # Initialize "current_state" locks --------------------------------
+            # Initialize locks ------------------------------------------------
             self.lock[database] = threading.Lock()
             # Initialize Databases --------------------------------------------
             if database in self.LOG_DB:
@@ -418,7 +403,7 @@ class Machine():
             # Initialize Read Only Databases ----------------------------------
             self.db[database] = MongoDB.DatabaseRead(self.mongo_client, database)
 
-# Start Logging ---------------------------------------------------------------
+    # Start Logging -----------------------------------------------------------
     def init_logging(self, database_object=None, logger_level=logging.DEBUG, log_buffer_handler_level=logging.DEBUG, log_handler_level=logging.WARNING):
         '''Initializes logging for this script.
 
@@ -430,7 +415,7 @@ class Machine():
         following command.'''
         log.start_logging(logger_level=logger_level, log_buffer_handler_level=log_buffer_handler_level, log_handler_level=log_handler_level, database=database_object)
 
-# Initialize all Devices and Settings -----------------------------------------
+    # Initialize all Devices and Settings -------------------------------------
     @log.log_this()
     def _init_device_drivers_and_settings(self, dev={}, local_settings={}):
         '''Initializes all device objects and checks that all settings (as
@@ -450,6 +435,10 @@ class Machine():
             dev[<device database path>] = {
                 'driver':<driver object>,
                 'queue':<queue objecct>}
+
+        - The current device settings (as found in
+          `Machine.init_default_settings`) will be saved to
+          `Machine.local_settings`.
         '''
     # Logging
         mod_name = self.init_device_drivers_and_settings.__module__
@@ -549,50 +538,51 @@ class Machine():
                 kwargs={'dev':self.dev,'local_settings':self.local_settings})
         self.thread_to_completion(thread_name)
 
-# Initialize Local Copy of Monitors -------------------------------------------
+    # Initialize Local Copy of Monitors ---------------------------------------
     @log.log_this()
     def init_monitors(self, mon={}):
         '''Initialize the local copy of the monitor objects.
 
-        Monitors should associate the monitor databases with the local,
-        circular buffers of the monitored data. Monitors should indicate when
-        they have recieved new data.
+        Monitors should associate the monitor databases with the local buffers
+        of the monitored data. Monitors should indicate when they have recieved
+        new data.
 
-        - Monitors from the internal databases must be entered manually and
-          should contain the following::
+        - Monitors from the master databases contain the following::
 
             {<database path>:{
-                'data':<local data copy>,
-                'new':<bool>,
-                'lock':threading.Lock()},
+                'data':[],
+                'new':<bool>},
             ...}
 
-        - Monitors from the read database should have their cursors exhausted so
-          that only their most recent values are accessible::
+        - Monitors from the read database have their cursors exhausted so that
+          only their most recent values are accessible::
 
             {<database path>:{
-                'data':<local data copy>,
+                'data':[],
                 'cursor':<tailable cursor object>,
                 'new':<bool>,
-                'lock':threading.Lock(),
             ...}
 
         Notes
         -----
-        - Only the read databases are automatically populated. The monitors for
-          the internal databases must be entered manually into `Machine.mon`.
+        - The monitors are initialized with an empty list.
         '''
         self.mon = mon
+        # Internal Master Databases ---------------------
+        for database in self.MONITOR_DBs:
+            if not database in self.mon:
+                self.mon[database] = {
+                    'data':[],
+                    'new':False}
         # External Read Databases------------------------
         for database in self.R_MONITOR_DBs:
             cursor = self.db[database].read_buffer(tailable_cursor=True, no_cursor_timeout=True)
             self.mon[database] = {
-                    'data':np.array([]),
+                    'data':[],
                     'cursor':self.exhaust_cursor(cursor),
-                    'new':False,
-                    'lock':threading.Lock()}
+                    'new':False}
 
-# Initialize States -----------------------------------------------------------
+    # Initialize States -------------------------------------------------------
     @log.log_this()
     def init_states(self, STATES):
         '''Initialize the state machines state parameters.
@@ -830,10 +820,16 @@ class Machine():
                   has the same loop interval as the main loop.
                 - This is the interval between checks of the prereqs and calls
                   to the state machine's routines.
+        Notes
+        -----
+        The current state (as defined in `Machine.init_default_settings`) is
+        saved to `Machine.current_state`.
         '''
         self.STATES = STATES
 
-# Run the main loop -----------------------------------------------------------
+    #--- State Machine Functions ----------------------------------------------
+
+    # Run the main loop -------------------------------------------------------
     @log.log_this()
     def operate_machine(self, current_state={}, main_loop_interval=0.5):
         mod_name = self.operate_machine.__module__
@@ -870,17 +866,17 @@ class Machine():
         self.loop_timer = {}
         # Main Loop
         self.loop_interval['main'] = main_loop_interval # seconds
-        self.loop_timer['main'] = get_lap(self.loop_interval['main'])+1
+        self.loop_timer['main'] = self.get_lap(self.loop_interval['main'])+1
         # State Machines
         for state_db in self.STATE_DBs:
             if 'loop_interval' in self.STATES[state_db]:
                 self.loop_interval[state_db] = self.STATES[state_db]['loop_interval']
             else:
                 self.loop_interval[state_db] = main_loop_interval
-            self.loop_timer[state_db] = get_lap(self.loop_interval[state_db])+1
+            self.loop_timer[state_db] = self.get_lap(self.loop_interval[state_db])+1
         # Communications
         self.loop_interval['check_for_messages'] = main_loop_interval
-        self.loop_timer['check_for_messages'] = get_lap(self.loop_interval['check_for_messages'])+1
+        self.loop_timer['check_for_messages'] = self.get_lap(self.loop_interval['check_for_messages'])+1
         #--- Initialize Thread Events -----------------------------------------
         for state_db in self.STATE_DBs:
             self.event[state_db] = threading.Event()
@@ -933,7 +929,7 @@ class Machine():
             else:
                 log_str = " Execution time exceeded the set loop interval {:}s by {:.2g}s".format(self.loop_interval['main'], abs(pause))
                 log.log_info(mod_name, func_name, log_str)
-                self.loop_timer['main'] = get_lap(self.loop_interval['main'])+1
+                self.loop_timer['main'] = self.get_lap(self.loop_interval['main'])+1
         #--- Main Loop has exited ---------------------------------------------
         log_str = " Shut down command accepted. Exiting the control script."
         log.log_info(mod_name, func_name, log_str)
@@ -1086,9 +1082,9 @@ class Machine():
             else:
                 log_str = " Execution time exceeded the set loop interval {:}s by {:.2g}s".format(self.loop_interval[state_db], abs(pause))
                 log.log_info(mod_name, func_name, log_str)
-                self.loop_timer[state_db] = get_lap(self.loop_interval[state_db])+1
+                self.loop_timer[state_db] = self.get_lap(self.loop_interval[state_db])+1
 
-# Check the Prerequisites of a Given State ------------------------------------
+    # Check the Prerequisites of a Given State --------------------------------
     @log.log_this()
     def check_prereqs(self, state_db, state, level, log_all_failures=None):
         '''A helper function to automate the process of checking prerequisites.
@@ -1132,7 +1128,7 @@ class Machine():
                 prereqs_pass *= prereq_status
         return bool(prereqs_pass)
 
-# Setup the Transition to a New State -----------------------------------------
+    # Setup the Transition to a New State -------------------------------------
     @log.log_this()
     def setup_state(self, state_db, state, critical=True, necessary=True, optional=True):
         '''A helper function to automate the process of setting up new states.
@@ -1157,7 +1153,7 @@ class Machine():
             self.db[state_db].write_record_and_buffer(self.current_state[state_db]) # The desired state should be left unaltered
 
 
-# Update Device Settings ------------------------------------------------------
+    # Update Device Settings --------------------------------------------------
     @log.log_this()
     def update_device_settings(self, device_db, settings_list, write_log=True):
         '''A helper function to automate the process of updating the settings
@@ -1214,7 +1210,9 @@ class Machine():
             if updated:
                 self.db[device_db].write_record_and_buffer(self.local_settings[device_db])
 
-# Check the Communications Queue ----------------------------------------------
+    #--- Communications Functions ---------------------------------------------
+
+    # Check the Communications Queue ------------------------------------------
     @log.log_this()
     def check_for_messages(self):
         '''This checks for and parses new messages in the communications queue.
@@ -1234,9 +1232,9 @@ class Machine():
             else:
                 log_str = " Execution time exceeded the set loop interval {:}s by {:.2g}s".format(self.loop_interval['check_for_messages'], abs(pause))
                 log.log_info(mod_name, func_name, log_str)
-                self.loop_timer['check_for_messages'] = get_lap(self.loop_interval['check_for_messages'])+1
+                self.loop_timer['check_for_messages'] = self.get_lap(self.loop_interval['check_for_messages'])+1
 
-# Parse Messages from the Communications Queue --------------------------------
+    # Parse Messages from the Communications Queue ----------------------------
     @log.log_this()
     def parse_message(self, message):
         '''A helper function to automate the parsing of messages from the
@@ -1332,8 +1330,7 @@ class Machine():
                     if updated:
                         self.db[self.CONTROL_DB].write_record_and_buffer(self.local_settings[self.CONTROL_DB])
 
-# Convert Type from a "type string" -------------------------------------------
-    @log.log_this()
+    # Convert Type from a "type string" ---------------------------------------
     def convert_type(self, obj, type_str):
         '''A helper function to convert an object to a specific type.
         '''
@@ -1342,79 +1339,7 @@ class Machine():
         obj = valid_types[type_str](obj)
         return obj
 
-# Exhaust a MongoDB Cursor to Queue up the Most Recent Values -----------------
-    @log.log_this()
-    def exhaust_cursor(self, cursor):
-        '''A helper fuction to queue new values from a MongoDB capped
-        collection.
-        '''
-        for doc in cursor:
-            pass
-        return cursor
-
-# Get Values from Nested Dictionary -------------------------------------------
-    @log.log_this()
-    def from_keys(self, nested_dict, key_list):
-        '''A helper function which parses nested dictionaries given a list of
-        keys.
-        '''
-        if isinstance(key_list, list):
-            for key in key_list:
-                nested_dict = nested_dict[key]
-        else:
-            nested_dict = nested_dict[key_list]
-        return nested_dict
-
-# Parse and Send Arguments to Functions ---------------------------------------
-    @log.log_this()
-    def send_args(self, func, obj=None):
-        '''Single arguments should be entered as is:
-            obj = arg
-        Place multiple arguments in a list containing a list of positional
-        arguments and a dictionary of keyword arguments:
-            obj = [[<args>], {<kwargs>}]
-            obj = [[<args>]]
-            obj = [{<kwargs>}]
-        '''
-        try:
-            obj_length = len(obj)
-        except:
-            obj_length = None
-        if (obj_length == 1):
-        # Check for an internal list or dictionary
-            if isinstance(obj[0], list):
-                args = obj[0]
-                kwargs = {}
-            elif isinstance(obj[0], dict):
-                args = []
-                kwargs = obj[0]
-            else:
-                args = [obj]
-                kwargs = {}
-        elif (obj_length == 2):
-        # Check for both an internal list and dictionary
-            if ((list and dict) in [type(obj[0]), type(obj[1])]):
-                if isinstance(obj[0], list):
-                    args = obj[0]
-                    kwargs = obj[1]
-                else:
-                    args = obj[1]
-                    kwargs = obj[2]
-            else:
-                args = [obj]
-                kwargs = {}
-        else:
-        # Check if no input
-            if obj == None:
-                args = []
-                kwargs = {}
-            else:
-                args = [obj]
-                kwargs = {}
-        result = func(*args, **kwargs)
-        return result
-
-# Threading Functions ---------------------------------------------------------
+    #--- Threading Functions --------------------------------------------------
     @log.log_this()
     def thread_to_completion(self, thread_name):
         '''A helper function that blocks until a thread has sucessfully
@@ -1468,7 +1393,105 @@ class Machine():
             self.thread[thread_name].start()
         return error
 
-    # Do nothing function ---------------------------------------------------------
-    def nothing(self, *args, **kwargs):
+    #--- Helper Functions -----------------------------------------------------
+
+    # Parse and Send Arguments to Functions -----------------------------------
+    @staticmethod
+    def send_args(func, obj=None):
+        '''Single arguments should be entered as is:
+            obj = arg
+        Place multiple arguments in a list containing a list of positional
+        arguments and a dictionary of keyword arguments:
+            obj = [[<args>], {<kwargs>}]
+            obj = [[<args>]]
+            obj = [{<kwargs>}]
+        '''
+        try:
+            obj_length = len(obj)
+        except:
+            obj_length = None
+        if (obj_length == 1):
+        # Check for an internal list or dictionary
+            if isinstance(obj[0], list):
+                args = obj[0]
+                kwargs = {}
+            elif isinstance(obj[0], dict):
+                args = []
+                kwargs = obj[0]
+            else:
+                args = [obj]
+                kwargs = {}
+        elif (obj_length == 2):
+        # Check for both an internal list and dictionary
+            if ((list and dict) in [type(obj[0]), type(obj[1])]):
+                if isinstance(obj[0], list):
+                    args = obj[0]
+                    kwargs = obj[1]
+                else:
+                    args = obj[1]
+                    kwargs = obj[2]
+            else:
+                args = [obj]
+                kwargs = {}
+        else:
+        # Check if no input
+            if obj == None:
+                args = []
+                kwargs = {}
+            else:
+                args = [obj]
+                kwargs = {}
+        result = func(*args, **kwargs)
+        return result
+
+    # Exhaust a MongoDB Cursor to Queue up the Most Recent Values -------------
+    @staticmethod
+    def exhaust_cursor(cursor):
+        '''A helper fuction to queue new values from a MongoDB capped
+        collection.
+        '''
+        for doc in cursor:
+            pass
+        return cursor
+
+    # Get Values from Nested Dictionary ---------------------------------------
+    @staticmethod
+    def from_keys(nested_dict, key_list):
+        '''A helper function which parses nested dictionaries given a list of
+        keys.
+        '''
+        if isinstance(key_list, list):
+            for key in key_list:
+                nested_dict = nested_dict[key]
+        else:
+            nested_dict = nested_dict[key_list]
+        return nested_dict
+
+    # Do nothing function -----------------------------------------------------
+    @staticmethod
+    def nothing(*args, **kwargs):
         '''A functional placeholder for cases where nothing should happen.'''
         pass
+
+    # Update a circular buffer ------------------------------------------------
+    @staticmethod
+    def update_buffer(buffer, new_data, length, extend=False):
+        '''Use this function to update a rolling buffer, as typically found in
+        the monitors. Set `extend` to true if adding multiple values at once.
+        '''
+        length = int(length)
+        if extend:
+            buffer.extend(new_data)
+        else:
+            buffer.append(new_data)
+        if len(buffer) > length:
+            buffer = buffer[-length:]
+        return buffer
+
+    # Periodic Timer ----------------------------------------------------------
+    @staticmethod
+    def get_lap(time_interval):
+        '''Use this function to get an incrementing integer linked to the
+        system clock.
+        '''
+        return int(time.time() // time_interval)

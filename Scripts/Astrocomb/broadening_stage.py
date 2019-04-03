@@ -12,7 +12,6 @@ import numpy as np
 import time
 import datetime
 import logging
-import threading
 
 import os
 import sys
@@ -33,30 +32,21 @@ from modules.optimizer import Minimizer
     this script. These functions are defined by the user and should not
     directly appear in the main loop of the state machine.'''
 
-# Update a 1D circular buffer -------------------------------------------------
-@log.log_this()
-def update_buffer(buffer, new_data, length):
-    length = int(abs(length))
-    buffer.append(new_data)
-    if len(buffer) > length:
-        buffer = buffer[-length:]
-    return buffer
-
-# Periodic Timer --------------------------------------------------------------
-@log.log_this()
-def get_lap(time_interval):
-    return int(time.time() // time_interval)
-
 
 # %% Initialization ===========================================================
+
 sm = Machine()
 
 
 # %% Databases and Settings ===================================================
 
 #--- Communications queue -----------------------------------------------------
+'''The communications queue is a couchbase queue that serves as the
+intermediary between this script and others.
+'''
 COMMS = 'broadening_stage'
 sm.init_comms(COMMS)
+
 
 #--- Internal database names --------------------------------------------------
 '''The following are all of the databases that this script directly
@@ -70,6 +60,7 @@ nanotracks = ['nanotrack_in', 'nanotrack_out']
 STATE_DBs = [
     'broadening_stage/state_2nd_stage',
     ]
+
 DEVICE_DBs =[
     'broadening_stage/device_rotation_mount',
     ]
@@ -79,6 +70,7 @@ for piezo in piezos:
 for nt in nanotracks:
     dev_db = 'broadening_stage/device_' + nt
     DEVICE_DBs.append(dev_db)
+
 MONITOR_DBs = [
     'broadening_stage/rot_stg_position',
     'broadening_stage/rot_stg_velocity',
@@ -99,8 +91,8 @@ LOG_DB = 'broadening_stage'
 CONTROL_DB = 'broadening_stage/control'
 
 MASTER_DBs = STATE_DBs + DEVICE_DBs + MONITOR_DBs + [LOG_DB] + [CONTROL_DB]
-
 sm.init_master_DB_names(STATE_DBs, DEVICE_DBs, MONITOR_DBs, LOG_DB, CONTROL_DB)
+
 
 #--- External database names --------------------------------------------------
 '''This is a list of all databases external to this control script that are
@@ -108,6 +100,7 @@ sm.init_master_DB_names(STATE_DBs, DEVICE_DBs, MONITOR_DBs, LOG_DB, CONTROL_DB)
 R_STATE_DBs = []
 R_DEVICE_DBs =[]
 R_MONITOR_DBs = []
+
 READ_DBs = R_STATE_DBs + R_DEVICE_DBs + R_MONITOR_DBs
 sm.init_read_DB_names(R_STATE_DBs, R_DEVICE_DBs, R_MONITOR_DBs)
 
@@ -213,14 +206,17 @@ sm.init_default_settings(STATE_SETTINGS, DEVICE_SETTINGS, CONTROL_PARAMS)
 
 #--- Connect to MongoDB -------------------------------------------------------
 '''Creates a client and connects to all defined databases'''
-db = {}
-sm.init_DBs(db=db)
+sm.init_DBs()
 
 #--- Start Logging ------------------------------------------------------------
 '''Initializes logging for this script. If the logging database is unset then
 all logs will be output to the stout.
 '''
-sm.init_logging(database_object=db[LOG_DB], logger_level=logging.INFO, log_buffer_handler_level=logging.DEBUG, log_handler_level=logging.WARNING)
+sm.init_logging(
+    database_object=sm.db[LOG_DB],
+    logger_level=logging.INFO,
+    log_buffer_handler_level=logging.DEBUG,
+    log_handler_level=logging.WARNING)
 
 #--- Initialize All Devices and Settings --------------------------------------
 '''This initializes all device drivers and checks that all settings
@@ -232,9 +228,7 @@ format is as follows:
             'driver':<driver object>,
             'queue':<queue objecct>}
 '''
-dev = {}
-local_settings={}
-sm.init_device_drivers_and_settings(dev=dev, local_settings=local_settings)
+sm.init_device_drivers_and_settings()
 
 #--- Initialize Local Copy of Monitors ----------------------------------------
 '''Monitors should associate the monitor databases with the local, circular
@@ -245,8 +239,7 @@ recieved new data.
 
             {<database path>:{
                 'data':<local data copy>,
-                'new':<bool>,
-                'lock':threading.Lock()}}
+                'new':<bool>}}
 
         - Monitors from the read database should have their cursors exhausted so
           that only their most recent values are accessible::
@@ -254,49 +247,12 @@ recieved new data.
             {<database path>:{
                 'data':<local data copy>,
                 'cursor':<tailable cursor object>,
-                'new':<bool>,
-                'lock':threading.Lock()}}
+                'new':<bool>}}
 
         - Only the read databases are automatically populated. The monitors for the
           internal databases must be entered manually into `Machine.mon`.
 '''
-mon = {}
-mon['broadening_stage/2nd_stage_z_in_optimizer'] = {
-    'data':{},
-    'new':False,
-    }
-mon['broadening_stage/2nd_stage_z_out_optimizer'] = {
-    'data':{},
-    'new':False,
-    }
-mon['broadening_stage/rot_stg_position'] = {
-    'data':[],
-    'new':False,
-    }
-mon['broadening_stage/rot_stg_velocity'] = {
-    'data':[],
-    'new':False,
-    }
-mon['broadening_stage/rot_stg_status'] = {
-    'data':{},
-    'new':False,
-    }
-for piezo in piezos:
-    mon_db = 'broadening_stage/'+piezo+'_HV_output'
-    mon[mon_db] = {
-        'data':[],
-        'new':False
-        }
-for nt in nanotracks:
-    monitors = ['_position', '_TIA', '_status']
-    for monitor in monitors:
-        mon_db = 'broadening_stage/' + nt + monitor
-        mon[mon_db] = {
-            'data':[],
-            'new':False
-            }
-
-sm.init_monitors(mon=mon)
+sm.init_monitors()
 
 
 # %% State Functions ==========================================================
@@ -319,20 +275,20 @@ piezo_limits = {"min":0, "max":75}
 array['rot_stg:pos'] = []
 array['rot_stg:vel'] = []
 rot_mount_record_interval = 10.0 # seconds
-timer['rot_stg:record'] = get_lap(rot_mount_record_interval)
+timer['rot_stg:record'] = sm.get_lap(rot_mount_record_interval)
 def get_rotation_mount_data():
     # Get lap number
-    new_record_lap = get_lap(rot_mount_record_interval)
+    new_record_lap = sm.get_lap(rot_mount_record_interval)
 
     #--- Get data ---------------------------------------------------------
     # Device DB
     device_db = 'broadening_stage/device_rotation_mount'
     # Wait for queue
-    dev[device_db]['queue'].queue_and_wait()
+    sm.dev[device_db]['queue'].queue_and_wait()
     # Get status
-    status = dev[device_db]['driver'].status()
+    status = sm.dev[device_db]['driver'].status()
     # Remove from Queue
-    dev[device_db]['queue'].remove()
+    sm.dev[device_db]['queue'].remove()
 
     #--- Record position --------------------------------------------------
     mon_db = 'broadening_stage/rot_stg_position'
@@ -340,17 +296,17 @@ def get_rotation_mount_data():
     timer_id = "rot_stg:record"
     data = status["position"] # degrees
     with sm.lock[mon_db]:
-        mon[mon_db]['new'] = True
-        mon[mon_db]['data'] = update_buffer(
-            mon[mon_db]['data'],
+        sm.mon[mon_db]['new'] = True
+        sm.mon[mon_db]['data'] = sm.update_buffer(
+            sm.mon[mon_db]['data'],
             data, 500)
-        db[mon_db].write_buffer({'deg':data})
+        sm.db[mon_db].write_buffer({'deg':data})
         # Append to the record array
         array[array_id].append(data)
         if new_record_lap > timer[timer_id]:
             array[array_id] = np.array(array[array_id])
             # Record statistics
-            db[mon_db].write_record(
+            sm.db[mon_db].write_record(
                 {'deg':array[array_id].mean(),
                  'std':array[array_id].std(),
                  'n':array[array_id].size})
@@ -363,17 +319,17 @@ def get_rotation_mount_data():
     timer_id = "rot_stg:record"
     data = status["velocity"] # degrees/s
     with sm.lock[mon_db]:
-        mon[mon_db]['new'] = True
-        mon[mon_db]['data'] = update_buffer(
-            mon[mon_db]['data'],
+        sm.mon[mon_db]['new'] = True
+        sm.mon[mon_db]['data'] = sm.update_buffer(
+            sm.mon[mon_db]['data'],
             data, 500)
-        db[mon_db].write_buffer({'deg/s':data})
+        sm.db[mon_db].write_buffer({'deg/s':data})
         # Append to the record array
         array[array_id].append(data)
         if new_record_lap > timer[timer_id]:
             array[array_id] = np.array(array[array_id])
             # Record statistics
-            db[mon_db].write_record(
+            sm.db[mon_db].write_record(
                 {'deg/s':array[array_id].mean(),
                  'std':array[array_id].std(),
                  'n':array[array_id].size})
@@ -385,10 +341,10 @@ def get_rotation_mount_data():
     timer_id = "rot_stg:record"
     data = status["flags"] # status flags
     with sm.lock[mon_db]:
-        mon[mon_db]['new'] = True
-        if mon[mon_db]['data'] != data:
-            mon[mon_db]['data'] = data
-            db[mon_db].write_record_and_buffer(data)
+        if sm.mon[mon_db]['data'] != data:
+            sm.mon[mon_db]['new'] = True
+            sm.mon[mon_db]['data'] = data
+            sm.db[mon_db].write_record_and_buffer(data)
 
     #--- Propogate lap numbers --------------------------------------------
     if new_record_lap > timer[timer_id]:
@@ -402,20 +358,20 @@ thread['get_rotation_mount_data'] = ThreadFactory(target=get_rotation_mount_data
 piezo_record_interval = 10.0 # seconds
 for piezo in piezos:
     array[piezo+':HV'] = []
-    timer[piezo+':record'] = get_lap(piezo_record_interval)
+    timer[piezo+':record'] = sm.get_lap(piezo_record_interval)
 def get_piezo_data(device):
     # Get lap number
-    new_record_lap = get_lap(piezo_record_interval)
+    new_record_lap = sm.get_lap(piezo_record_interval)
 
     #--- Get data ---------------------------------------------------------
     # Device DB
     device_db = 'broadening_stage/device_'+device
     # Wait for queue
-    dev[device_db]['queue'].queue_and_wait()
+    sm.dev[device_db]['queue'].queue_and_wait()
     # Get status
-    voltage = dev[device_db]['driver'].voltage()
+    voltage = sm.dev[device_db]['driver'].voltage()
     # Remove from Queue
-    dev[device_db]['queue'].remove()
+    sm.dev[device_db]['queue'].remove()
 
     #--- Record voltage ---------------------------------------------------
     mon_db = 'broadening_stage/'+device+'_HV_output'
@@ -423,17 +379,17 @@ def get_piezo_data(device):
     timer_id = device+':record'
     data = voltage # volts
     with sm.lock[mon_db]:
-        mon[mon_db]['new'] = True
-        mon[mon_db]['data'] = update_buffer(
-            mon[mon_db]['data'],
+        sm.mon[mon_db]['new'] = True
+        sm.mon[mon_db]['data'] = sm.update_buffer(
+            sm.mon[mon_db]['data'],
             data, 500)
-        db[mon_db].write_buffer({'V':data})
+        sm.db[mon_db].write_buffer({'V':data})
         # Append to the record array
         array[array_id].append(data)
         if new_record_lap > timer[timer_id]:
             array[array_id] = np.array(array[array_id])
             # Record statistics
-            db[mon_db].write_record(
+            sm.db[mon_db].write_record(
                 {'V':array[array_id].mean(),
                  'std':array[array_id].std(),
                  'n':array[array_id].size})
@@ -456,46 +412,46 @@ nanotrack_record_interval = 10.0 # seconds
 for nt in nanotracks:
     array[nt+':pos'] = []
     array[nt+':tia'] = []
-    timer[nt+':record'] = get_lap(nanotrack_record_interval)
+    timer[nt+':record'] = sm.get_lap(nanotrack_record_interval)
 def get_nanotrack_data(device):
     # Get lap number
     timer_id = device+':record'
-    new_record_lap = get_lap(nanotrack_record_interval)
+    new_record_lap = sm.get_lap(nanotrack_record_interval)
 
     #--- Get data ---------------------------------------------------------
     # Device DB
     device_db = 'broadening_stage/device_'+device
-    # Connect
-    dev[device_db]['driver'].open_port()
     # Wait for queue
-    dev[device_db]['queue'].queue_and_wait()
+    sm.dev[device_db]['queue'].queue_and_wait()
+    # Connect
+    sm.dev[device_db]['driver'].open_port()
     # Get position
-    position = dev[device_db]['driver'].position()
+    position = sm.dev[device_db]['driver'].position()
     # Get tia reading
-    tia_reading = dev[device_db]['driver'].tia_reading()
+    tia_reading = sm.dev[device_db]['driver'].tia_reading()
     # Get position
-    status = dev[device_db]['driver'].status()
+    status = sm.dev[device_db]['driver'].status()
     # Disconnect
-    dev[device_db]['driver'].close_port()
+    sm.dev[device_db]['driver'].close_port()
     # Remove from Queue
-    dev[device_db]['queue'].remove()
+    sm.dev[device_db]['queue'].remove()
 
     #--- Record Position --------------------------------------------------
     mon_db = 'broadening_stage/'+device+'_position'
     array_id = device+':pos'
     data = [position["x"], position["y"]] # {"x":x, "y":y}
     with sm.lock[mon_db]:
-        mon[mon_db]['new'] = True
-        mon[mon_db]['data'] = update_buffer(
-            mon[mon_db]['data'],
+        sm.mon[mon_db]['new'] = True
+        sm.mon[mon_db]['data'] = sm.update_buffer(
+            sm.mon[mon_db]['data'],
             data, 500)
-        db[mon_db].write_buffer(data)
+        sm.db[mon_db].write_buffer(data)
         # Append to the record array
         array[array_id].append(data)
         if new_record_lap > timer[timer_id]:
             array[array_id] = np.array(array[array_id]).T
             # Record statistics
-            db[mon_db].write_record(
+            sm.db[mon_db].write_record(
                 {'x':       array[array_id][0].mean(),
                  'x_std':   array[array_id][0].std(),
                  'x_n':     array[array_id][0].size,
@@ -515,17 +471,21 @@ def get_nanotrack_data(device):
         tia_reading["under over"]
         ]
     with sm.lock[mon_db]:
-        mon[mon_db]['new'] = True
-        mon[mon_db]['data'] = update_buffer(
-            mon[mon_db]['data'],
+        sm.mon[mon_db]['new'] = True
+        sm.mon[mon_db]['data'] = sm.update_buffer(
+            sm.mon[mon_db]['data'],
             data, 500)
-        db[mon_db].write_buffer(data)
+        sm.db[mon_db].write_buffer(data)
         # Append to the record array
         array[array_id].append(data)
         if new_record_lap > timer[timer_id]:
             array[array_id] = np.array(array[array_id]).T
+            n = array[array_id][0].size
+            norm_read = n - np.count_nonzero(array[array_id][3] - TNA001.NORM_READ)
+            under_read = n - np.count_nonzero(array[array_id][3] - TNA001.UNDER_READ)
+            over_read = n - np.count_nonzero(array[array_id][3] - TNA001.OVER_READ)
             # Record statistics
-            db[mon_db].write_record(
+            sm.db[mon_db].write_record(
                 {'A':           array[array_id][0].mean(),
                  'A_std':       array[array_id][0].std(),
                  'n':           array[array_id][0].size,
@@ -533,9 +493,9 @@ def get_nanotrack_data(device):
                  'rel_std':     array[array_id][1].std(),
                  'range':       array[array_id][2].mean(),
                  'range_std':   array[array_id][2].std(),
-                 'reading_avg': array[array_id][3].mean(),
-                 'reading_max': array[array_id][3].max(),
-                 'reading_min': array[array_id][3].min(),
+                 'norm read':   norm_read,
+                 'under read':  under_read,
+                 'over read':   over_read,
                  })
             # Empty the array
             array[array_id] = []
@@ -544,10 +504,10 @@ def get_nanotrack_data(device):
     mon_db = 'broadening_stage/'+device+'_status'
     data = status # status flags
     with sm.lock[mon_db]:
-        mon[mon_db]['new'] = True
-        if mon[mon_db]['data'] != data:
-            mon[mon_db]['data'] = data
-            db[mon_db].write_record_and_buffer(data)
+        if sm.mon[mon_db]['data'] != data:
+            sm.mon[mon_db]['new'] = True
+            sm.mon[mon_db]['data'] = data
+            sm.db[mon_db].write_record_and_buffer(data)
 
     #--- Propogate lap numbers --------------------------------------------
     if new_record_lap > timer[timer_id]:
@@ -564,11 +524,11 @@ for nt in nanotracks:
 # Optimize Z Coupling ---------------------------------------------------------
 def optimize_z_coupling(pz_db, nt_db, mon_db, sig, scan_range=10.):
     #--- Queue and wait -------------------------------------------------------
-    dev[nt_db]['queue'].queue_and_wait()
-    dev[pz_db]['queue'].queue_and_wait()
+    sm.dev[nt_db]['queue'].queue_and_wait()
+    sm.dev[pz_db]['queue'].queue_and_wait()
 
     #--- Setup optimizer ------------------------------------------------------
-    current_position = dev[pz_db]['driver'].voltage()
+    current_position = sm.dev[pz_db]['driver'].voltage()
     start_scan = current_position - scan_range/2
     stop_scan = current_position + scan_range/2
     if start_scan < piezo_limits["min"]:
@@ -590,11 +550,11 @@ def optimize_z_coupling(pz_db, nt_db, mon_db, sig, scan_range=10.):
     new_x = [current_position]
     while search:
         #--- Ensure queues
-        dev[nt_db]['queue'].queue_and_wait()
-        dev[pz_db]['queue'].queue_and_wait()
+        sm.dev[nt_db]['queue'].touch()
+        sm.dev[pz_db]['queue'].touch()
 
         #--- Measure new point
-        tia_reading = dev[nt_db]['driver'].tia_reading()["abs reading"]
+        tia_reading = sm.dev[nt_db]['driver'].tia_reading()["abs reading"]
         new_y = -np.log10(tia_reading) # maximize the tia_reading
         opt_x, diag = optimizer.tell(new_x, new_y, diagnostics=True)
 
@@ -610,16 +570,16 @@ def optimize_z_coupling(pz_db, nt_db, mon_db, sig, scan_range=10.):
     new_output = new_x[0]
 
     #--- Implement result -----------------------------------------------------
-    dev[pz_db]['driver'].voltage(new_output)
+    sm.dev[pz_db]['driver'].voltage(new_output)
 
     #--- Remove from queue ----------------------------------------------------
-    dev[nt_db]['queue'].remove()
-    dev[pz_db]['queue'].remove()
+    sm.dev[nt_db]['queue'].remove()
+    sm.dev[pz_db]['queue'].remove()
 
     #--- Record result --------------------------------------------------------
     with sm.lock[mon_db]:
-        mon[mon_db]['new'] = True
-        mon[mon_db]['data'] = {
+        sm.mon[mon_db]['new'] = True
+        sm.mon[mon_db]['data'] = {
             "x":optimizer.x, # Volts
             "y":optimizer.y, # log10(Amps)
             "y meas":np.power(10., -optimizer.y).tolist(),
@@ -627,7 +587,7 @@ def optimize_z_coupling(pz_db, nt_db, mon_db, sig, scan_range=10.):
             "n obs":optimizer.n_obs,
             "significance":optimizer.sig,
             }
-        db[mon_db].write_record_and_buffer(mon[mon_db]['data'])
+        sm.db[mon_db].write_record_and_buffer(sm.mon[mon_db]['data'])
     return new_output
 
 
@@ -636,10 +596,10 @@ def optimize_z_coupling(pz_db, nt_db, mon_db, sig, scan_range=10.):
 
 # Monitor 2nd Stage -----------------------------------------------------------
 passive_interval = 1.0 # s
-timer['monitor_2nd_stage:passive'] = get_lap(passive_interval)
+timer['monitor_2nd_stage:passive'] = sm.get_lap(passive_interval)
 def monitor_2nd_stage(state_db):
     # Get lap number
-    new_passive_lap = get_lap(passive_interval)
+    new_passive_lap = sm.get_lap(passive_interval)
     #--- Update Passive Monitors ------------------------------------------
     if (new_passive_lap > timer['monitor_2nd_stage:passive']):
         #--- Rotation Stage Data ------------------------------------------
@@ -684,17 +644,17 @@ def minimize_power(state_db):
     device_db = 'broadening_stage/device_rotation_mount'
     # Check if homed
     mon_db = 'broadening_stage/rot_stg_status'
-    if mon[mon_db]['new']:
+    if sm.mon[mon_db]['new']:
         with sm.lock[mon_db]:
-            mon[mon_db]['new'] = False
-            homed = mon[mon_db]['homed']
+            sm.mon[mon_db]['new'] = False
+            homed = sm.mon[mon_db]['homed']
         if homed:
             # Move to minimum transmission
             settings_list = [{'position':rot_stg_min_pwr}]
             sm.update_device_settings(device_db, settings_list, write_log=True)
             with sm.lock[state_db]:
-                current_state[state_db]['compliance'] = True
-                db[state_db].write_record_and_buffer(current_state[state_db])
+                sm.current_state[state_db]['compliance'] = True
+                sm.db[state_db].write_record_and_buffer(sm.current_state[state_db])
 
 def track_2nd_stage(state_db):
     mod_name = __name__
@@ -703,13 +663,13 @@ def track_2nd_stage(state_db):
     device_db = 'broadening_stage/device_rotation_mount'
     #--- Track if homed -------------------------------------------------------
     mon_db = 'broadening_stage/rot_stg_status'
-    if mon[mon_db]['new']:
+    if sm.mon[mon_db]['new']:
         with sm.lock[mon_db]:
-            mon[mon_db]['new'] = False
-            homed = mon[mon_db]['homed']
+            sm.mon[mon_db]['new'] = False
+            homed = sm.mon[mon_db]['homed']
         if homed:
             # Check if rotation stage is minimized
-            if dev[device_db]['position'] > rot_stg_limits['max']:
+            if sm.dev[device_db]['position'] > rot_stg_limits['max']:
                 # Move to baseline minimum power (small, but measurable)
                 settings_list = [{'position':rot_stg_limits['max']}]
                 sm.update_device_settings(device_db, settings_list, write_log=True)
@@ -760,8 +720,8 @@ def track_2nd_stage(state_db):
 
             #--- Update state db ----------------------------------------------
             with sm.lock[state_db]:
-                current_state[state_db]['compliance'] = True
-                db[state_db].write_record_and_buffer(current_state[state_db])
+                sm.current_state[state_db]['compliance'] = True
+                sm.db[state_db].write_record_and_buffer(sm.current_state[state_db])
 
 
 # %% Maintenance Routines ========================================================
@@ -774,11 +734,11 @@ def keep_2nd_stage(state_db):
     # Check tracking status
     for nt in nanotracks:
         mon_db = 'broadening_stage/'+nt+'_status'
-        if mon[mon_db]['new']:
+        if sm.mon[mon_db]['new']:
             with sm.lock[mon_db]:
-                mon[mon_db]['new'] = False
-                tracking = mon[mon_db]['data']["tracking"]
-                signal = mon[mon_db]['data']["signal"]
+                sm.mon[mon_db]['new'] = False
+                tracking = sm.mon[mon_db]['data']["tracking"]
+                signal = sm.mon[mon_db]['data']["signal"]
             if not(tracking) or not(signal):
                 if not tracking:
                     log_str = " tracking lost, tracking was disabled"
@@ -788,8 +748,8 @@ def keep_2nd_stage(state_db):
 
                 #--- Update state db --------------------------------------
                 with sm.lock[state_db]:
-                    current_state[state_db]['compliance'] = False
-                    db[state_db].write_record_and_buffer(current_state[state_db])
+                    sm.current_state[state_db]['compliance'] = False
+                    sm.db[state_db].write_record_and_buffer(sm.current_state[state_db])
 
 
 # %% Operation Routines =======================================================
@@ -871,5 +831,4 @@ sm.init_states(STATES)
 # %% STATE MACHINE ============================================================
 
 '''Operates the state machine.'''
-current_state={}
-sm.operate_machine(current_state=current_state, main_loop_interval=0.5)
+sm.operate_machine(main_loop_interval=0.5)

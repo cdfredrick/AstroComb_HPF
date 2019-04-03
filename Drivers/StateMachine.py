@@ -558,24 +558,29 @@ class Machine():
         circular buffers of the monitored data. Monitors should indicate when
         they have recieved new data.
 
-        - Monitors from the internal databases should be associated with the
-          device that they pull data from::
+        - Monitors from the internal databases must be entered manually and
+          should contain the following::
 
             {<database path>:{
-                'data':<local data copy>},
-                'device':<device object>,
+                'data':<local data copy>,
                 'new':<bool>,
-                'lock':threading.Lock()}
+                'lock':threading.Lock()},
+            ...}
+
         - Monitors from the read database should have their cursors exhausted so
           that only their most recent values are accessible::
 
             {<database path>:{
-                'data':<local data copy>},
+                'data':<local data copy>,
                 'cursor':<tailable cursor object>,
                 'new':<bool>,
-                'lock':threading.Lock()}
-        -Only the read databases are automatically populated. The monitors for the
-        internal databases must be entered manually into `Machine.mon`.
+                'lock':threading.Lock(),
+            ...}
+
+        Notes
+        -----
+        - Only the read databases are automatically populated. The monitors for
+          the internal databases must be entered manually into `Machine.mon`.
         '''
         self.mon = mon
         # External Read Databases------------------------
@@ -1462,3 +1467,8 @@ class Machine():
         elif (alive == False):
             self.thread[thread_name].start()
         return error
+
+    # Do nothing function ---------------------------------------------------------
+    def nothing(self, *args, **kwargs):
+        '''A functional placeholder for cases where nothing should happen.'''
+        pass

@@ -155,12 +155,13 @@ class Machine():
     '''
     #--- Initialization Functions ---------------------------------------------
     @log.log_this()
-    def __init__(self, log_error_interval=100):
+    def __init__(self, log_error_interval=100, log_warning_interval=100):
         self.timer = {}
         self.thread = {}
         self.event = {}
         self.error = {}
         self.error_interval = log_error_interval # seconds
+        self.warning_interval = log_warning_interval # seconds
 
     # Communications queue ----------------------------------------------------
     @log.log_this()
@@ -840,11 +841,18 @@ class Machine():
         self.current_state = current_state
         for state_db in self.STATE_DBs:
             self.current_state[state_db] = self.db[state_db].read_buffer()
-            if self.current_state[state_db]['initialized'] != False:
-                self.current_state[state_db]['initialized'] = False
-                self.db[state_db].write_record_and_buffer(self.current_state[state_db])
+            with self.lock[state_db]:
+                if len(self.current_state[state_db]):
+                    # Transfer the last know state into the record
+                    self.db[state_db].write_record(
+                        self.current_state[state_db],
+                        timestamp=self.current_state[state_db]['heartbeat'])
+                if self.current_state[state_db]['initialized'] != False:
+                    # The current state is not initialized
+                    self.current_state[state_db]['initialized'] = False
+                    self.db[state_db].write_record_and_buffer(self.current_state[state_db])
 
-        #--- Initialize Failed Prereq Log Timers ------------------------------
+        #--- Initialize Prereq Failure Log Timers -----------------------------
         '''These are set so that the logs do not become cluttered with
         repetitions of the same failure. The timer values are used in the
         check_prerequisites function.
@@ -1246,18 +1254,22 @@ class Machine():
             Requesting to change state::
 
                     message = {"state":{
-                                  <state DB path>:{"state":<state>},...}}
+                                  <state DB path>:{"state":<state>},
+                                  ...}}
 
             Requesting to change device settings::
 
                     message = {"device_setting":{
                                   <device driver DB path>:{
-                                      <method name>:<args>,...},...}}
+                                      <method name>:<args>,
+                                      ...},
+                                  ...}}
 
             Requesting to change a control parameter::
 
                     message = {"control_parameter":{
-                                  <parameter name>:<value>,...}}
+                                  <parameter name>:<value>,
+                                  ...}}
 
         - Commands are sent into the queue by setting the "message" keyword
           argument within the CouchbaseDB queue.push() method.
@@ -1334,8 +1346,8 @@ class Machine():
     def convert_type(self, obj, type_str):
         '''A helper function to convert an object to a specific type.
         '''
-        valid_types = {'bool':bool, 'complex':complex,
-                       'float':float, 'int':int, 'str':str}
+        valid_types = {'bool':bool, 'float':float, 'int':int, 'str':str,
+                       'list':list, 'tuple':tuple, 'dict':dict}
         obj = valid_types[type_str](obj)
         return obj
 

@@ -263,6 +263,7 @@ used by the state routines.'''
 timer = {}
 thread = {}
 array = {}
+warning = {}
 
 rot_stg_min_pwr = 58 # degrees
 rot_stg_limits = {"min":20, "max":45}
@@ -521,13 +522,21 @@ for nt in nanotracks:
 
 
 #--- Optimization Functions ---------------------------------------------------
+
 # Optimize Z Coupling ---------------------------------------------------------
-def optimize_z_coupling(pz_db, nt_db, mon_db, sig, scan_range=10.):
-    #--- Queue and wait -------------------------------------------------------
+def optimize_z_coupling(pz_db, nt_db, mon_db, sig, scan_range=10., max_iter=None):
+    # Info
+    mod_name = __name__
+    func_name = optimize_z_coupling.__name__
+    log_str = ' Beginning z pizeo optimization'
+    log.log_info(mod_name, func_name, log_str)
+    start_time = time.time()
+
+    #--- Queue and wait ---------------------------------------------------
     sm.dev[nt_db]['queue'].queue_and_wait()
     sm.dev[pz_db]['queue'].queue_and_wait()
 
-    #--- Setup optimizer ------------------------------------------------------
+    #--- Setup optimizer --------------------------------------------------
     current_position = sm.dev[pz_db]['driver'].voltage()
     start_scan = current_position - scan_range/2
     stop_scan = current_position + scan_range/2
@@ -539,13 +548,14 @@ def optimize_z_coupling(pz_db, nt_db, mon_db, sig, scan_range=10.):
         start_scan = stop_scan - scan_range
     bounds = [(start_scan, stop_scan)]
 
-    #--- Initialize optimizer -------------------------------------------------
+    #--- Initialize optimizer ---------------------------------------------
     optimizer = Minimizer(
         bounds,
         n_initial_points=5, sig=sig,
         abs_bounds=[(piezo_limits["min"], piezo_limits["max"])])
 
-    #--- Optimize -------------------------------------------------------------
+    #--- Optimize ---------------------------------------------------------
+    converged = False
     search = True
     new_x = [current_position]
     while search:
@@ -555,40 +565,98 @@ def optimize_z_coupling(pz_db, nt_db, mon_db, sig, scan_range=10.):
 
         #--- Measure new point
         tia_reading = sm.dev[nt_db]['driver'].tia_reading()["abs reading"]
+
+        #--- Update Model
         new_y = -np.log10(tia_reading) # maximize the tia_reading
         opt_x, diag = optimizer.tell(new_x, new_y, diagnostics=True)
+
+        #--- Write Intermediate Result to Buffer
+        with sm.lock[mon_db]:
+            sm.mon[mon_db]['new'] = True
+            sm.mon[mon_db]['data'] = {
+                "V":np.array(optimizer.x).flatten().tolist(), # Volts
+                "A":np.power(10., -np.array(optimizer.y)).tolist(), # Amps
+                "model":{
+                    "opt x":opt_x,
+                    "x":optimizer.x, # Volts
+                    "y":optimizer.y, # -log10(Amps)
+                    "diagnostics":diag,
+                    "n obs":optimizer.n_obs,
+                    "target sig":optimizer.sig,
+                    "time":time.time() - start_time
+                    }
+                }
+            sm.db[mon_db].write_buffer(sm.mon[mon_db]['data'])
 
         #--- Check convergence
         if optimizer.convergence_count >= 3:
             #--- End the search
+            converged = True
             search = False
-        else:
+        elif max_iter:
+            if optimizer.n_obs >= max_iter:
+                converged = False
+                search = False
+                opt_x = [current_position]
+                log_str = ' Model did not converge to {:} sig after {:} samples, returning to initial point.'.format(
+                    optimizer.sig,
+                    optimizer.n_obs)
+                warning_id = 'piezo z optimization'
+                if (warning_id in warning):
+                    if (time.time() - warning[warning_id]) > sm.warning_interval:
+                        log.log_warning(mod_name, func_name, log_str)
+                else:
+                    warning[warning_id] = time.time()
+                    log.log_warning(mod_name, func_name, log_str)
+
+        #--- Get new point
+        if search:
             #--- Ask for new point
             new_x = optimizer.ask()
+            #--- Move to new point
+            sm.dev[pz_db]['driver'].voltage(new_x[0])
             # System settle time
             time.sleep(1)
-    new_output = new_x[0]
+    # Optimum output
+    new_position = opt_x[0]
+    stop_time = time.time()
 
-    #--- Implement result -----------------------------------------------------
-    sm.dev[pz_db]['driver'].voltage(new_output)
+    #--- Implement result -------------------------------------------------
+    sm.dev[pz_db]['driver'].voltage(new_position)
 
-    #--- Remove from queue ----------------------------------------------------
+    #--- Remove from queue ------------------------------------------------
     sm.dev[nt_db]['queue'].remove()
     sm.dev[pz_db]['queue'].remove()
 
-    #--- Record result --------------------------------------------------------
+    #--- Log Result -------------------------------------------------------
+    if converged:
+        log_str = ' Z piezo optimized at {:.3f}V'.format(new_position)
+        log.log_info(mod_name, func_name, log_str)
+        log_str = ' {:} sig after {:.3g}s and {:} observations'.format(
+            optimizer.sig,
+            stop_time - start_time,
+            optimizer.n_obs)
+        log.log_info(mod_name, func_name, log_str)
+
+    #--- Record result ----------------------------------------------------
     with sm.lock[mon_db]:
         sm.mon[mon_db]['new'] = True
         sm.mon[mon_db]['data'] = {
-            "x":optimizer.x, # Volts
-            "y":optimizer.y, # log10(Amps)
-            "y meas":np.power(10., -optimizer.y).tolist(),
-            "diagnostics":diag,
-            "n obs":optimizer.n_obs,
-            "significance":optimizer.sig,
+            "V":np.array(optimizer.x).flatten().tolist(), # Volts
+            "A":np.power(10., -np.array(optimizer.y)).tolist(), # Amps
+            "model":{
+                "opt x":opt_x,
+                "x":optimizer.x, # Volts
+                "y":optimizer.y, # -log10(Amps)
+                "diagnostics":diag,
+                "n obs":optimizer.n_obs,
+                "target sig":optimizer.sig,
+                "time":stop_time - start_time,
+                "converged":converged
+                }
             }
         sm.db[mon_db].write_record_and_buffer(sm.mon[mon_db]['data'])
-    return new_output
+    return new_position
 
 
 # %% Monitor Routines =========================================================

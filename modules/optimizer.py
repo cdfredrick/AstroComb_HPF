@@ -34,11 +34,28 @@ class Minimizer():
         self.x_range = [x_max-x_min for idx in range(self.n_dims)
                                     for (x_min, x_max) in self.dims]
         self.y = []
-        self.y_avg = 0.
-        self.y_scl = 0.
+        self.y_avg = np.nan
+        self.y_scl = np.nan
         self.n_obs = len(self.x)
         self.optimizer = skopt.Optimizer(self.dims,
                                          n_initial_points=self.n_init)
+
+    @classmethod
+    def new_model(cls, new_x, new_y, n_initial_points=5, abs_bounds=None, sig=1.):
+        '''Initialize the `Minimizer` class with an existing data set.'''
+        assert isinstance(new_x, list)
+        assert isinstance(new_y, list)
+        # Multiple points entered
+        assert all([isinstance(x, list) for x in new_x])
+        # Determine Boundaries
+        dimensions = [(np.min(x), np.max(x)) for x in np.array(new_x).T]
+        assert all([len(x)==len(dimensions) for x in new_x])
+        # Create new Minimizer class
+        optimizer = cls(dimensions, n_initial_points=n_initial_points,
+                        abs_bounds=abs_bounds, sig=sig)
+        # Add data
+        optimizer.tell(new_x, new_y)
+        return optimizer
 
     def check_bounds(self, x, fract=0):
         '''Check if the test point is within the defined boundaries'''
@@ -62,7 +79,7 @@ class Minimizer():
         new_x = self.optimizer.ask()
         if self.n_obs >= self.n_init:
             update_model = False
-            lower_edge, upper_edge = self.check_bounds(new_x, fract=.05)
+            lower_edge, upper_edge = self.check_bounds(new_x, fract=.02)
             for idx in range(self.n_dims):
                 x_min, x_max = self.dims[idx]
                 abs_x_min, abs_x_max = self.abs_bounds[idx]
@@ -81,10 +98,16 @@ class Minimizer():
                     self.dims[idx] = new_dim
                     update_model = True
             if update_model:
+                # Scale the input data
+                self.y_avg = np.average(self.y)
+                self.y_scl = np.std(self.y)
+                x_mdl = self.x
+                y_mdl = ((np.array(self.y) - self.y_avg)/self.y_scl).tolist()
+
                 self.optimizer = skopt.Optimizer(self.dims,
                                                  n_initial_points=self.n_init)
-                self.model = self.optimizer.tell(self.model.x_iters,
-                                                 self.model.func_vals.tolist())
+                self.model = self.optimizer.tell(x_mdl,
+                                                 y_mdl)
                 self.convergence_count = 0
         return new_x
 
@@ -108,22 +131,29 @@ class Minimizer():
             self.y.append(new_y)
         self.n_obs = len(self.x)
 
-        # Scale the input data
-        self.y_avg = np.average(self.y)
-        self.y_scl = np.std(self.y)
-
         # Expand the model
         if self.n_obs < self.n_init:
             self.model = self.optimizer.tell(new_x, new_y)
             opt_x = self.optimum_x()
         else:
-            x_mdl = self.x
-            y_mdl = ((np.array(self.y) - self.y_avg)/self.y_scl).tolist()
+            if (self.y_avg is np.nan) or (self.y_scl is np.nan):
+                # Scale the input data
+                self.y_avg = np.average(self.y)
+                self.y_scl = np.std(self.y)
+                x_mdl = self.x
+                y_mdl = ((np.array(self.y) - self.y_avg)/self.y_scl).tolist()
 
-            # Create a new model
-            self.optimizer = skopt.Optimizer(self.dims,
-                                             n_initial_points=self.n_init)
-            self.model = self.optimizer.tell(x_mdl, y_mdl)
+                # Create a new model
+                self.optimizer = skopt.Optimizer(self.dims,
+                                                 n_initial_points=self.n_init)
+                self.model = self.optimizer.tell(x_mdl, y_mdl)
+            else:
+                # Scale the input data
+                x_mdl = new_x
+                y_mdl = ((np.array(new_y) - self.y_avg)/self.y_scl).tolist()
+
+                # Update the current model
+                self.model = self.optimizer.tell(x_mdl, y_mdl)
 
             # Calculate optimum
             opt_x = self.optimum_x()
@@ -205,7 +235,7 @@ class Minimizer():
         else:
             return y_pred
 
-    def fitness(self):
+    def fitness(self, test_x=None):
         '''Calculate measures of the model's fitness.'''
         if self.n_obs < self.n_init:
             # No model has been fit yet
@@ -213,10 +243,16 @@ class Minimizer():
                        "optimum y std": np.nan,
                        "residuals": np.array([np.nan]*self.n_obs),
                        "residuals std": np.nan,
-                       "predicted std": np.array([np.nan]*self.n_obs)}
+                       "predicted std": np.array([np.nan]*self.n_obs),
+                       "significance":np.nan}
         else:
-            # Calculate optimum
-            opt_x = self.optimum_x()
+            if test_x is not None:
+                assert isinstance(test_x, list)
+                assert len(test_x)==len(self.dims)
+                opt_x = test_x
+            else:
+                # Calculate the optimum
+                opt_x = self.optimum_x()
 
             # Calculate the optimum's error
             opt_y, opt_y_std = self.predict(opt_x, return_std=True)
@@ -226,10 +262,12 @@ class Minimizer():
             residuals = (y_pred - self.y)
             resid_std = np.std(residuals)
 
-            fitness = {"optimum y": opt_y,
-                       "optimum y std": opt_y_std,
-                       "residuals": residuals,
-                       "residuals std": resid_std,
-                       "predicted std": y_pred_std}
+            fitness = {
+                "optimum y": opt_y,
+                "optimum y std": opt_y_std,
+                "residuals": residuals,
+                "residuals std": resid_std,
+                "predicted std": y_pred_std,
+                "significance":resid_std/opt_y_std}
         return fitness
 

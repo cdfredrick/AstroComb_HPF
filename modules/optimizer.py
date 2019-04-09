@@ -31,8 +31,7 @@ class Minimizer():
 
         # Internal Variables
         self.x = []
-        self.x_range = [x_max-x_min for idx in range(self.n_dims)
-                                    for (x_min, x_max) in self.dims]
+        self.x_range = [x_max-x_min for (x_min, x_max) in self.dims]
         self.y = []
         self.y_avg = np.nan
         self.y_scl = np.nan
@@ -108,13 +107,12 @@ class Minimizer():
                                                  n_initial_points=self.n_init)
                 self.model = self.optimizer.tell(x_mdl,
                                                  y_mdl)
-                self.convergence_count = 0
         return new_x
 
     def tell(self, new_x, new_y, diagnostics=False):
         '''Enter a new observations into the model.
 
-        This method calculates updates the current model with the input data
+        This method updates the current model with the input data
         and gives a measure of the model's convergence.
         '''
         assert isinstance(new_x, list)
@@ -158,7 +156,7 @@ class Minimizer():
             # Calculate optimum
             opt_x = self.optimum_x()
 
-        # Calculate diagnostics
+        # Calculate fitness diagnostics
         fit = self.fitness()
         opt_y_std = fit["optimum y std"]
         resid_std = fit["residuals std"]

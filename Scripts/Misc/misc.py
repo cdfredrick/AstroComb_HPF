@@ -11,6 +11,8 @@ from Drivers.VISA.Keysight import E36103A
 
 from Drivers.Database.CouchbaseDB import PriorityQueue
 
+from Drivers.Thorlabs import APT
+
 # %% ILX 1 ====================================================================
 #==============================================================================
 # %% RIO TEC
@@ -134,12 +136,69 @@ mll_amp2.output()
 #==============================================================================
 imbias = E36103A('USB0::0x2A8D::0x0702::MY57427460::INSTR')
 
-imbias.voltage_setpoint(set_voltage=3.5245)
+imbias.voltage_setpoint()
+#Out[2]: 3.5245
 
 imbias.output()
+#Out[3]: True
+
+
+# %% 2nd Stage Coupling =======================================================
+#==============================================================================
+# x, y -> nanotrack; z -> focus
+
+# %% Rotation Stage ===========================================================
+
+rt_stg = APT.KDC101_PRM1Z8(port, serial_number='')
+
+# %% 2nd Stage Input ==========================================================
+
+# X in ()
+x_in = APT.KPZ101(port, serial_number='')
+
+# Y in ()
+y_in = APT.KPZ101(port, serial_number='')
+
+# Z in ()
+z_in = APT.KPZ101(port, serial_number='')
+
+# Nanotrack in
+nt_in = APT.TNA001(port, serial_number='')
+
+# %% 2nd Stage Out ============================================================
+
+# X out ()
+x_out = APT.KPZ101(port, serial_number)
+
+# Y out ()
+y_out = APT.KPZ101(port, serial_number)
+
+# Z out ()
+z_out = APT.KPZ101(port, serial_number)
+
+# Nanotrack out
+nt_out = APT.TNA001(port, serial_number='')
+
 
 # %% Spectral Optimization ====================================================
 # =============================================================================
 spec_opt = PriorityQueue('spectral_shaper')
 
-spect_opt.push(message={'control_parameter':{'setpoint_optimization':0}})
+spec_opt.push(message={'control_parameter':{'abort_optimizer':True}})
+
+spec_opt.push(message={'control_parameter':{'setpoint_optimization':0}})
+
+spec_opt.push(message={'control_parameter':{'run_optimizer':{'target':"optimize_DW_setpoint",
+                                                             'sig':3}}})
+
+spec_opt.push(message={'control_parameter':{'run_optimizer':{'target':"optimize_z_in_coupling",
+                                                             'sig':3}}})
+
+spec_opt.push(message={'control_parameter':{'run_optimizer':{'target':"optimize_z_out_coupling",
+                                                             'sig':3}}})
+
+spec_opt.push(message={'control_parameter':{'run_optimizer':{'target':"optimize_IM_bias",
+                                                             'sig':3}}})
+
+spec_opt.push(message={'control_parameter':{'run_optimizer':{'target':"optimize_optical_phase",
+                                                             'sig':3}}})

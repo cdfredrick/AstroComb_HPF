@@ -96,7 +96,7 @@ records = [
     'rf_oscillators/Rb_detected_signals',
     'rf_oscillators/Rb_frequency_offset',
     'rf_oscillators/Rb_magnetic_read',
-    'rf_oscillators/status',
+    'rf_oscillators/Rb_status',
     'rf_oscillators/Rb_time_tag',
         # Devices -------------------------------
     'rf_oscillators/device_Rb_clock',
@@ -165,4 +165,3 @@ finally:
     finally:
         local_client.close()
 print('Sync complete!', 'Elapsed Time =',(datetime.datetime.utcnow()-start_time))
-    

@@ -184,7 +184,7 @@ sm.init_master_DB_names(STATE_DBs, DEVICE_DBs, MONITOR_DBs, LOG_DB, CONTROL_DB)
 R_STATE_DBs = []
 R_DEVICE_DBs =[]
 R_MONITOR_DBs = [
-    'broadening_stage/device_rotation_mount',
+    'broadening_stage/rot_stg_position',
     'comb_generator/device_IM_bias',
     ]
 READ_DBs = R_STATE_DBs + R_DEVICE_DBs + R_MONITOR_DBs
@@ -320,7 +320,7 @@ warning = {}
 warning_interval = 100 # seconds
 
 IM_bias_limits = {'max':5.5, 'min':0.5}
-rot_stg_limits = {"min":20, "max":45}
+rot_stg_limits = {"min":16, "max":45}
 piezo_limits = {"min":0, "max":75}
 
 #--- Monitor Functions --------------------------------------------------------
@@ -457,10 +457,10 @@ def optimize_DW_setpoint(sig=3, max_iter=None):
     stop_scan = current_angle + angle_scan_range/2
     if start_scan < rot_stg_limits["min"]:
         start_scan = rot_stg_limits["min"]
-        stop_scan = start_scan + rot_stg_limits
+        stop_scan = start_scan + angle_scan_range
     if stop_scan > rot_stg_limits["max"]:
         stop_scan = rot_stg_limits["max"]
-        start_scan = stop_scan - rot_stg_limits
+        start_scan = stop_scan - angle_scan_range
     bounds = [(start_scan, stop_scan)]
 
     #--- Initialize optimizer ---------------------------------------------
@@ -618,7 +618,7 @@ def optimize_DW_setpoint(sig=3, max_iter=None):
         with sm.lock[CONTROL_DB]:
             log_str = ' Optimal DW = {:.3g}+-{:.2g} dBm'.format(opt_DW, opt_DW_std)
             log.log_info(mod_name, func_name, log_str)
-            log_str = ' {:} sig after {:.3g}s and {:} observations'.format(
+            log_str = ' >{:} sig after {:.3g}s and {:} observations'.format(
                 optimizer.sig,
                 stop_time - start_time,
                 optimizer.n_obs)
@@ -744,11 +744,11 @@ def optimize_z_coupling(sig=3, max_iter=None, stage="in"):
             sm.mon[mon_db]['new'] = True
             sm.mon[mon_db]['data'] = {
                 "V":np.array(optimizer.x).flatten().tolist(), # Volts
-                "A":np.power(10., -np.array(optimizer.y)).tolist(), # Amps
+                "dBm":(-np.array(optimizer.y)).tolist(), # dBm
                 "model":{
                     "opt x":opt_x,
                     "x":optimizer.x, # Volts
-                    "y":optimizer.y, # -log10(Amps)
+                    "y":optimizer.y, # -dBm
                     "diagnostics":diag,
                     "n obs":optimizer.n_obs,
                     "target sig":optimizer.sig,
@@ -825,11 +825,11 @@ def optimize_z_coupling(sig=3, max_iter=None, stage="in"):
         sm.mon[mon_db]['new'] = True
         sm.mon[mon_db]['data'] = {
             "V":np.array(optimizer.x).flatten().tolist(), # Volts
-            "A":np.power(10., -np.array(optimizer.y)).tolist(), # Amps
+            "dBm":(-np.array(optimizer.y)).tolist(), # dBm
             "model":{
                 "opt x":opt_x,
                 "x":optimizer.x, # Volts
-                "y":optimizer.y, # -log10(Amps)
+                "y":optimizer.y, # -dBm
                 "diagnostics":diag,
                 "n obs":optimizer.n_obs,
                 "target sig":optimizer.sig,
@@ -1215,13 +1215,13 @@ def optimize_optical_phase(sig=3, max_iter=None):
 '''This section is for defining the methods needed to monitor the system.'''
 
 ## Initialize monitor
-#monitor_db = 'broadening_stage/device_rotation_mount'
+#monitor_db = 'broadening_stage/rot_stg_position'
 # # Update buffers -----------------------
 #with sm.lock[monitor_db]:
 #    sm.mon[monitor_db]['new'] = True
 #    sm.mon[monitor_db]['data'] = update_buffer(
 #        sm.mon[monitor_db]['data'],
-#        sm.db[monitor_db].read_buffer()['position'], 500)
+#        sm.db[monitor_db].read_buffer()['deg'], 500)
 
 # Record Spectrum -------------------------------------------------------------
 control_interval = 0.5 # s
@@ -1237,9 +1237,9 @@ def monitor_spectrum(state_db):
 # Pull data from external databases -----------------------
     # Rotation Mount
         new_data = []
-        monitor_db = 'broadening_stage/device_rotation_mount'
+        monitor_db = 'broadening_stage/rot_stg_position'
         for doc in sm.mon[monitor_db]['cursor']:
-            new_data.append(doc['position'])
+            new_data.append(doc['deg'])
          # Update buffers -----------------------
         if len(new_data) > 0:
             with sm.lock[monitor_db]:
@@ -1306,8 +1306,8 @@ def apply_mask(state_db):
 # Adjust Chip Input Power (Fast) ----------------------------------------------
 DW_limits = 2. #4.5 #{'max':-41, 'min':-50}
 DW_range_threshold = 1. # 3.5/9 #  3.5/9 for -44.5 and -46.5 soft limits :: 1/3.6 for -43.5 and -47.5 soft limits
-minimum_angle = 20 # degrees
-maximum_angle = 52 # degrees
+minimum_angle = rot_stg_limits["min"] # degrees
+maximum_angle = rot_stg_limits["max"] # degrees
 def adjust_quick(state_db):
     mod_name = adjust_quick.__module__
     func_name = adjust_quick.__name__
@@ -1473,9 +1473,10 @@ def adjust_slow(state_db):
                 pass
             else:
             # If approaching the state limits, adjust the 2nd stage power setpoint
-                with sm.lock['broadening_stage/device_rotation_mount']:
-                    sm.mon['broadening_stage/device_rotation_mount']['new'] = False
-                    current_angle = sm.mon['broadening_stage/device_rotation_mount']['data'][-1]
+                mon_db = 'broadening_stage/rot_stg_position'
+                with sm.lock[mon_db]:
+                    sm.mon[mon_db]['new'] = False
+                    current_angle = sm.mon[mon_db]['data'][-1]
                     lower_angle_condition = (current_angle < minimum_angle)
                 if lower_angle_condition and power_too_low:
                     warning_id = 'low_angle_slow'

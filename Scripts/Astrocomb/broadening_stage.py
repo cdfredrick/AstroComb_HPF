@@ -266,7 +266,7 @@ array = {}
 warning = {}
 
 rot_stg_min_pwr = 58 # degrees
-rot_stg_limits = {"min":20, "max":45}
+rot_stg_limits = {"min":16, "max":45}
 piezo_limits = {"min":0, "max":75}
 
 
@@ -712,17 +712,19 @@ def minimize_power(state_db):
     device_db = 'broadening_stage/device_rotation_mount'
     # Check if homed
     mon_db = 'broadening_stage/rot_stg_status'
-    if sm.mon[mon_db]['new']:
-        with sm.lock[mon_db]:
+    with sm.lock[mon_db]:
+        if sm.mon[mon_db]['new']:
             sm.mon[mon_db]['new'] = False
             homed = sm.mon[mon_db]['homed']
-        if homed:
-            # Move to minimum transmission
-            settings_list = [{'position':rot_stg_min_pwr}]
-            sm.update_device_settings(device_db, settings_list, write_log=True)
-            with sm.lock[state_db]:
-                sm.current_state[state_db]['compliance'] = True
-                sm.db[state_db].write_record_and_buffer(sm.current_state[state_db])
+        else:
+            homed = False
+    if homed:
+        # Move to minimum transmission
+        settings_list = [{'position':rot_stg_min_pwr}]
+        sm.update_device_settings(device_db, settings_list, write_log=True)
+        with sm.lock[state_db]:
+            sm.current_state[state_db]['compliance'] = True
+            sm.db[state_db].write_record_and_buffer(sm.current_state[state_db])
 
 def track_2nd_stage(state_db):
     mod_name = __name__
@@ -731,65 +733,67 @@ def track_2nd_stage(state_db):
     device_db = 'broadening_stage/device_rotation_mount'
     #--- Track if homed -------------------------------------------------------
     mon_db = 'broadening_stage/rot_stg_status'
-    if sm.mon[mon_db]['new']:
-        with sm.lock[mon_db]:
+    with sm.lock[mon_db]:
+        if sm.mon[mon_db]['new']:
             sm.mon[mon_db]['new'] = False
             homed = sm.mon[mon_db]['homed']
-        if homed:
-            # Check if rotation stage is minimized
-            if sm.dev[device_db]['position'] > rot_stg_limits['max']:
-                # Move to baseline minimum power (small, but measurable)
-                settings_list = [{'position':rot_stg_limits['max']}]
-                sm.update_device_settings(device_db, settings_list, write_log=True)
-
-            #--- Enable input tracking ----------------------------------------
-            device_db = 'broadening_stage/device_nanotrack_in'
-            settings_list = [{'track_mode':TNA001.TRACK_MODE}]
+        else:
+            homed = False
+    if homed:
+        # Check if rotation stage is minimized
+        if sm.dev[device_db]['position'] > rot_stg_limits['max']:
+            # Move to baseline minimum power (small, but measurable)
+            settings_list = [{'position':rot_stg_limits['max']}]
             sm.update_device_settings(device_db, settings_list, write_log=True)
-            time.sleep(2)
 
-            #--- Enable output tracking ---------------------------------------
-            device_db = 'broadening_stage/device_nanotrack_out'
-            settings_list = [{'track_mode':TNA001.TRACK_MODE}]
-            sm.update_device_settings(device_db, settings_list, write_log=True)
-            time.sleep(2)
+        #--- Enable input tracking ----------------------------------------
+        device_db = 'broadening_stage/device_nanotrack_in'
+        settings_list = [{'track_mode':TNA001.TRACK_MODE}]
+        sm.update_device_settings(device_db, settings_list, write_log=True)
+        time.sleep(2)
 
-            #--- Optimize input coupling --------------------------------------
-            # Device dbs
-            nt_db = "broadening_stage/device_nanotrack_in"
-            pz_db = "broadening_stage/device_piezo_z_in"
+        #--- Enable output tracking ---------------------------------------
+        device_db = 'broadening_stage/device_nanotrack_out'
+        settings_list = [{'track_mode':TNA001.TRACK_MODE}]
+        sm.update_device_settings(device_db, settings_list, write_log=True)
+        time.sleep(2)
 
-            # Monitor db
-            mon_db = 'broadening_stage/2nd_stage_z_in_optimizer'
+        #--- Optimize input coupling --------------------------------------
+        # Device dbs
+        nt_db = "broadening_stage/device_nanotrack_in"
+        pz_db = "broadening_stage/device_piezo_z_in"
 
-            # Optimize
-            sig = 3.
-            new_output = optimize_z_coupling(pz_db, nt_db, mon_db, sig)
+        # Monitor db
+        mon_db = 'broadening_stage/2nd_stage_z_in_optimizer'
 
-            # Log Result
-            log_str = ' Input coupling optimized at z = {:.3f}V'.format(new_output)
-            log.log_info(mod_name, func_name, log_str)
+        # Optimize
+        sig = 3.
+        new_output = optimize_z_coupling(pz_db, nt_db, mon_db, sig)
 
-            #--- Optimize output coupling -------------------------------------
-            # Device dbs
-            nt_db = "broadening_stage/device_nanotrack_out"
-            pz_db = "broadening_stage/device_piezo_z_out"
+        # Log Result
+        log_str = ' Input coupling optimized at z = {:.3f}V'.format(new_output)
+        log.log_info(mod_name, func_name, log_str)
 
-            # Monitor db
-            mon_db = 'broadening_stage/2nd_stage_z_out_optimizer'
+        #--- Optimize output coupling -------------------------------------
+        # Device dbs
+        nt_db = "broadening_stage/device_nanotrack_out"
+        pz_db = "broadening_stage/device_piezo_z_out"
 
-            # Optimize
-            sig = 3.
-            new_output = optimize_z_coupling(pz_db, nt_db, mon_db, sig)
+        # Monitor db
+        mon_db = 'broadening_stage/2nd_stage_z_out_optimizer'
 
-            # Log Result
-            log_str = ' Output coupling optimized at z = {:.3f}V'.format(new_output)
-            log.log_info(mod_name, func_name, log_str)
+        # Optimize
+        sig = 3.
+        new_output = optimize_z_coupling(pz_db, nt_db, mon_db, sig)
 
-            #--- Update state db ----------------------------------------------
-            with sm.lock[state_db]:
-                sm.current_state[state_db]['compliance'] = True
-                sm.db[state_db].write_record_and_buffer(sm.current_state[state_db])
+        # Log Result
+        log_str = ' Output coupling optimized at z = {:.3f}V'.format(new_output)
+        log.log_info(mod_name, func_name, log_str)
+
+        #--- Update state db ----------------------------------------------
+        with sm.lock[state_db]:
+            sm.current_state[state_db]['compliance'] = True
+            sm.db[state_db].write_record_and_buffer(sm.current_state[state_db])
 
 
 # %% Maintenance Routines ========================================================
@@ -802,22 +806,25 @@ def keep_2nd_stage(state_db):
     # Check tracking status
     for nt in nanotracks:
         mon_db = 'broadening_stage/'+nt+'_status'
-        if sm.mon[mon_db]['new']:
-            with sm.lock[mon_db]:
+        with sm.lock[mon_db]:
+            if sm.mon[mon_db]['new']:
                 sm.mon[mon_db]['new'] = False
                 tracking = sm.mon[mon_db]['data']["tracking"]
                 signal = sm.mon[mon_db]['data']["signal"]
-            if not(tracking) or not(signal):
-                if not tracking:
-                    log_str = " tracking lost, tracking was disabled"
-                elif not signal:
-                    log_str = " tracking lost, low signal"
-                log.log_error(mod_name, func_name, log_str)
+            else:
+                tracking = True
+                signal = True
+        if not(tracking) or not(signal):
+            if not tracking:
+                log_str = " tracking lost, tracking was disabled"
+            elif not signal:
+                log_str = " tracking lost, low signal"
+            log.log_error(mod_name, func_name, log_str)
 
-                #--- Update state db --------------------------------------
-                with sm.lock[state_db]:
-                    sm.current_state[state_db]['compliance'] = False
-                    sm.db[state_db].write_record_and_buffer(sm.current_state[state_db])
+            #--- Update state db --------------------------------------
+            with sm.lock[state_db]:
+                sm.current_state[state_db]['compliance'] = False
+                sm.db[state_db].write_record_and_buffer(sm.current_state[state_db])
 
 
 # %% Operation Routines =======================================================
@@ -833,6 +840,12 @@ STATES = {
         'broadening_stage/state_2nd_stage':{
                 'lock':{
                         'settings':{
+                                'broadening_stage/device_nanotrack_in':{
+                                        'track_mode':TNA001.LATCH_MODE,
+                                        'position':{"x":0.5, "y":0.6}},
+                                'broadening_stage/device_nanotrack_out':{
+                                        'track_mode':TNA001.LATCH_MODE,
+                                        'position':{"x":0.5, "y":0.6}},
                                 'broadening_stage/device_rotation_mount':{
                                         'enable':True},
                                 'broadening_stage/device_piezo_x_in':{
@@ -847,12 +860,7 @@ STATES = {
                                         'enable':True},
                                 'broadening_stage/device_piezo_z_out':{
                                         'enable':True},
-                                'broadening_stage/device_nanotrack_in':{
-                                        'track_mode':TNA001.LATCH_MODE,
-                                        'position':{"x":0.5, "y":0.6}},
-                                'broadening_stage/device_nanotrack_out':{
-                                        'track_mode':TNA001.LATCH_MODE,
-                                        'position':{"x":0.5, "y":0.6}}}},
+                                },
                         'prerequisites':{}, #TODO: prereqs are setup and 1st stage properties
                         'routines':{
                                 'monitor':monitor_2nd_stage, 'search':track_2nd_stage,
@@ -860,6 +868,12 @@ STATES = {
                         },
                 'safe':{
                         'settings':{
+                                'broadening_stage/device_nanotrack_in':{
+                                        'track_mode':TNA001.LATCH_MODE,
+                                        'position':{"x":0.5, "y":0.6}},
+                                'broadening_stage/device_nanotrack_out':{
+                                        'track_mode':TNA001.LATCH_MODE,
+                                        'position':{"x":0.5, "y":0.6}},
                                 'broadening_stage/device_rotation_mount':{
                                         'enable':True},
                                 'broadening_stage/device_piezo_x_in':{
@@ -874,12 +888,7 @@ STATES = {
                                         'enable':True},
                                 'broadening_stage/device_piezo_z_out':{
                                         'enable':True},
-                                'broadening_stage/device_nanotrack_in':{
-                                        'track_mode':TNA001.LATCH_MODE,
-                                        'position':{"x":0.5, "y":0.6}},
-                                'broadening_stage/device_nanotrack_out':{
-                                        'track_mode':TNA001.LATCH_MODE,
-                                        'position':{"x":0.5, "y":0.6}}},
+                                },
                         'prerequisites':{},
                         'routines':{
                                 'monitor':monitor_2nd_stage, 'search':minimize_power,
@@ -893,6 +902,7 @@ STATES = {
                                 'maintain':sm.nothing, 'operate':sm.nothing},
                         }
                 }
+        }
 sm.init_states(STATES)
 
 

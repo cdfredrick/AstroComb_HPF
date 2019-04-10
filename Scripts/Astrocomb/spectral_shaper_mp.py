@@ -652,7 +652,7 @@ if __name__ == '__main__':
     # Adjust Chip Input Power (Fast) ----------------------------------------------
     DW_limits = 2. #4.5 #{'max':-41, 'min':-50}
     DW_range_threshold = 1. # 3.5/9 #  3.5/9 for -44.5 and -46.5 soft limits :: 1/3.6 for -43.5 and -47.5 soft limits
-    minimum_angle = 20 # degrees
+    minimum_angle = 16 # degrees
     maximum_angle = 52 # degrees
     def adjust_quick(state_db):
         mod_name = adjust_quick.__module__

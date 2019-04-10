@@ -574,7 +574,11 @@ def keep_lock(state_db):
     with sm.lock['filter_cavity/PID_output_limits']:
         no_new_limits_condition = not(sm.mon['filter_cavity/PID_output_limits']['new'])
         sm.mon['filter_cavity/PID_output_limits']['new'] = False
-        current_limits = sm.mon['filter_cavity/PID_output_limits']['data']
+        if no_new_limits_condition:
+            current_limits = {'max':sm.local_settings['filter_cavity/device_PID']['upper_output_limit'],
+                              'min':sm.local_settings['filter_cavity/device_PID']['lower_output_limit']}
+        else:
+            current_limits = sm.mon['filter_cavity/PID_output_limits']['data']
     lock_age_condition = ((time.time() - timer['find_lock:locked']) > lock_age_threshold)
     # Lock threshold
     v_high = (1-v_range_threshold)*current_limits['max'] + v_range_threshold*current_limits['min']

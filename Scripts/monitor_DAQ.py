@@ -427,7 +427,7 @@ def record_ai(monitor_db, data, timestamp, write_record, array_identifier, chann
             array_size = [] # check if data is in arrays
             for ind, name in enumerate(channel_identifiers):
                 array[array_identifier[ind]].extend(data[ind])
-                array_size.append(array[array_identifier[ind]].size)
+                array_size.append(len(array[array_identifier[ind]]))
             if write_record:
                 data_record = {}
                 if np.all(array_size):
@@ -505,7 +505,7 @@ def read_ai_DAQ(state_db):
             channel_index_set = 2 # ai2
             channel_index_act = 3 # ai3
             channel_indicies = [channel_index_set, channel_index_act]
-            data = multi_channel_reading[channel_indicies]
+            data = [multi_channel_reading[channel_index] for channel_index in channel_indicies]
             # Update buffer
             args = [monitor_db, multi_channel_mean[channel_indicies],
                     multi_channel_std[channel_indicies], multi_channel_n,
@@ -628,7 +628,7 @@ def record_di(monitor_db, data, timestamp, write_record, array_identifier, chann
             array_size = []
             for ind, name in enumerate(channel_identifiers):
                 array[array_identifier[ind]].extend(data[ind])
-                array_size.append(array[array_identifier[ind]].size)
+                array_size.append(len(array[array_identifier[ind]]))
             if write_record:
                 data_record = {}
                 if np.all(array_size):

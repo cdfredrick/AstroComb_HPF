@@ -180,6 +180,8 @@ class Machine():
         are parsed into commands within this class. See `Machine.parse_message`
         for documentation on the message syntax.
         '''
+        log_str = " Initializing comms"
+        print(log_str)
         self.COMMS = COMMS
         self.comms = CouchbaseDB.PriorityQueue(self.COMMS)
 
@@ -220,6 +222,8 @@ class Machine():
             - This should be a single database that contains all control
               loop variables accessible to commands from the comms queue.
         '''
+        log_str = " Initializing master DB names"
+        print(log_str)
         self.STATE_DBs = STATE_DBs
         self.DEVICE_DBs = DEVICE_DBs
         self.MONITOR_DBs = MONITOR_DBs
@@ -236,6 +240,8 @@ class Machine():
         needed to check prerequisites. These databases must be initialized by
         another instance of `Machine`.
         '''
+        log_str = " Initializing read DB names"
+        print(log_str)
         self.R_STATE_DBs = STATE_DBs
         self.R_DEVICE_DBs = DEVICE_DBs
         self.R_MONITOR_DBs = MONITOR_DBs
@@ -367,6 +373,8 @@ class Machine():
           values from the device, but set values are written to the device.
           All initialized settings are read from the device at startup.
         '''
+        log_str = " Initializing default settings"
+        print(log_str)
         self.STATE_SETTINGS = STATE_SETTINGS
         self.DEVICE_SETTINGS = DEVICE_SETTINGS
         self.CONTROL_PARAMS = CONTROL_PARAMS
@@ -388,6 +396,8 @@ class Machine():
         All database instances are saved to `Machine.db`, and all locks are
         saved to `Machine.lock`.
         '''
+        log_str = " Initializing Mongo DBs"
+        print(log_str)
         self.mongo_client = MongoDB.MongoClient()
         self.db = db
         self.lock = {}
@@ -414,6 +424,8 @@ class Machine():
         other logs warnings and above to the permanent log database. The
         threshold for the base logger, and the two handlers, may be set in the
         following command.'''
+        log_str = " Initializing logging"
+        print(log_str)
         log.start_logging(logger_level=logger_level, log_buffer_handler_level=log_buffer_handler_level, log_handler_level=log_handler_level, database=database_object)
 
     # Initialize all Devices and Settings -------------------------------------
@@ -455,10 +467,14 @@ class Machine():
                     if hasattr(self.dev[device_db]['driver'],'_release'):
                         getattr(self.dev[device_db]['driver'],'_release')()
         # Create New Object
+            queue = CouchbaseDB.PriorityQueue(self.DEVICE_SETTINGS[device_db]['queue'])
+            queue.queue_and_wait()
+            driver = self.send_args(self.DEVICE_SETTINGS[device_db]['driver'],
+                                    self.DEVICE_SETTINGS[device_db]['__init__'])
+            queue.remove()
             self.dev[device_db] = {
-                    'driver':self.send_args(self.DEVICE_SETTINGS[device_db]['driver'],
-                                       self.DEVICE_SETTINGS[device_db]['__init__']),
-                    'queue':CouchbaseDB.PriorityQueue(self.DEVICE_SETTINGS[device_db]['queue'])}
+                    'driver':driver,
+                    'queue':queue}
         gc.collect() # garbage collect old references
     # Settings
         self.local_settings = local_settings
@@ -568,6 +584,10 @@ class Machine():
         -----
         - The monitors are initialized with an empty list.
         '''
+        mod_name = __name__
+        func_name = self.init_monitors.__name__
+        log_str = " Initializing monitor data structures"
+        log.log_info(mod_name, func_name, log_str)
         self.mon = mon
         # Internal Master Databases ---------------------
         for database in self.MONITOR_DBs:
@@ -826,6 +846,10 @@ class Machine():
         The current state (as defined in `Machine.init_default_settings`) is
         saved to `Machine.current_state`.
         '''
+        mod_name = __name__
+        func_name = self.init_states.__name__
+        log_str = " Initializing states"
+        log.log_info(mod_name, func_name, log_str)
         self.STATES = STATES
 
     #--- State Machine Functions ----------------------------------------------

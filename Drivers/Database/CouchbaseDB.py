@@ -18,6 +18,13 @@ import time
 from Drivers.Logging import EventLog as log
 
 
+# %%
+def get_lap(time_interval):
+    '''Use this function to get an incrementing integer linked to the
+    system clock.
+    '''
+    return int(time.time() // time_interval)
+
 # %% Priority Queue ===========================================================
 
 class PriorityQueue():
@@ -213,6 +220,8 @@ class PriorityQueue():
     
     @log.log_this()
     def queue_and_wait(self, priority=False, message=''):
+        lap = get_lap(10)
+        start_lap = lap
         queued = True
         wait_for_queue = True
         while wait_for_queue:
@@ -226,7 +235,13 @@ class PriorityQueue():
                 self.push(priority=priority, message=message)
             else:
             # Wait for queue
+                new_lap = get_lap(10)
+                if new_lap > lap:
+                    lap = new_lap
+                    print(" waiting for {:} queue, {:}s".format(self.q_ID, (lap-start_lap)*10))
                 time.sleep(0.01)
+        if lap > start_lap:
+            print(" {:} queue complete, {:}".format(self.q_ID), time.strftime('%c'))
         return queued
 
 

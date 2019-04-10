@@ -239,9 +239,9 @@ class Minimizer():
             # No model has been fit yet
             fitness = {"optimum y": np.min(self.y),
                        "optimum y std": np.nan,
-                       "residuals": np.array([np.nan]*self.n_obs),
+                       "residuals": np.array([np.nan]*self.n_obs).tolist(),
                        "residuals std": np.nan,
-                       "predicted std": np.array([np.nan]*self.n_obs),
+                       "predicted std": np.array([np.nan]*self.n_obs).tolist(),
                        "significance":np.nan}
         else:
             if test_x is not None:
@@ -263,9 +263,9 @@ class Minimizer():
             fitness = {
                 "optimum y": opt_y,
                 "optimum y std": opt_y_std,
-                "residuals": residuals,
+                "residuals": residuals.tolist(),
                 "residuals std": resid_std,
-                "predicted std": y_pred_std,
+                "predicted std": y_pred_std.tolist(),
                 "significance":resid_std/opt_y_std}
         return fitness
 

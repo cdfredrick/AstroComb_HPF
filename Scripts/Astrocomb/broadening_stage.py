@@ -123,76 +123,76 @@ STATE_SETTINGS = {
 DEVICE_SETTINGS = {
         'broadening_stage/device_rotation_mount':{
                 'driver':KDC101_PRM1Z8,
-                'queue':'27251608',
-                '__init__':[[''], #TODO: add COM port
-                            {'timeout':5,
+                'queue':'COM10',
+                '__init__':[['COM10'],
+                            {'timeout':1,
                              'serial_number':27251608}],
                 'home':None, 'position':None},
         'broadening_stage/device_piezo_x_in':{
                 'driver':KPZ101,
-                'queue':'', #TODO: add serial number
-                '__init__':[[''], #TODO: add COM port
-                            {'timeout':5,
-                             'serial_number':0}],
+                'queue':'COM12', 
+                '__init__':[['COM12'], 
+                            {'timeout':1,
+                             'serial_number':29500912}],
                 'position_control_mode':None, 'input_voltage_source':None,
-                'io_settings':None, 'voltage':None},
+                'io_settings':None},
         'broadening_stage/device_piezo_y_in':{
                 'driver':KPZ101,
-                'queue':'', #TODO: add serial number
-                '__init__':[[''], #TODO: add COM port
-                            {'timeout':5,
-                             'serial_number':0}],
+                'queue':'COM11', 
+                '__init__':[['COM11'], 
+                            {'timeout':1,
+                             'serial_number':29500931}],
                 'position_control_mode':None, 'input_voltage_source':None,
-                'io_settings':None, 'voltage':None},
+                'io_settings':None},
         'broadening_stage/device_piezo_z_in':{
                 'driver':KPZ101,
-                'queue':'', #TODO: add serial number
-                '__init__':[[''], #TODO: add COM port
-                            {'timeout':5,
-                             'serial_number':0}],
+                'queue':'COM18',
+                '__init__':[['COM18'],
+                            {'timeout':1,
+                             'serial_number':29501649}],
                 'position_control_mode':None, 'input_voltage_source':None,
-                'io_settings':None, 'voltage':None},
+                'io_settings':None},
         'broadening_stage/device_piezo_x_out':{
                 'driver':KPZ101,
-                'queue':'', #TODO: add serial number
-                '__init__':[[''], #TODO: add COM port
-                            {'timeout':5,
-                             'serial_number':0}],
+                'queue':'COM15',
+                '__init__':[['COM15'],
+                            {'timeout':1,
+                             'serial_number':29500921}],
                 'position_control_mode':None, 'input_voltage_source':None,
-                'io_settings':None, 'voltage':None},
+                'io_settings':None},
         'broadening_stage/device_piezo_y_out':{
                 'driver':KPZ101,
-                'queue':'', #TODO: add serial number
-                '__init__':[[''], #TODO: add COM port
-                            {'timeout':5,
-                             'serial_number':0}],
+                'queue':'COM14',
+                '__init__':[['COM14'],
+                            {'timeout':1,
+                             'serial_number':29500575}],
                 'position_control_mode':None, 'input_voltage_source':None,
-                'io_settings':None, 'voltage':None},
+                'io_settings':None},
         'broadening_stage/device_piezo_z_out':{
                 'driver':KPZ101,
-                'queue':'', #TODO: add serial number
-                '__init__':[[''], #TODO: add COM port
-                            {'timeout':5,
-                             'serial_number':0}],
+                'queue':'COM17', 
+                '__init__':[['COM17'], 
+                            {'timeout':1,
+                             'serial_number':29501638}],
                 'position_control_mode':None, 'input_voltage_source':None,
-                'io_settings':None, 'voltage':None},
+                'io_settings':None},
         'broadening_stage/device_nanotrack_in':{
                 'driver':TNA001,
-                'queue':'', #TODO: add serial number
-                '__init__':[[''], #TODO: add COM port
-                            {'timeout':5,
-                             'serial_number':0}],
-                'track_mode':None, 'track_threshold':None, 'position':None,
+                'queue':'COM19',
+                '__init__':[['COM19'],
+                            {'timeout':1,
+                             'serial_number':82873587}],
+                'track_mode':None, 'track_threshold':None,
                 'circle_parameters':None, 'phase_comp':None,
                 'tia_range_parameters':None, 'gain':None,
                 'feedback_source':None, 'io_settings':None},
         'broadening_stage/device_nanotrack_out':{
                 'driver':TNA001,
-                'queue':'', #TODO: add serial number
-                '__init__':[[''], #TODO: add COM port
-                            {'timeout':5,
-                             'serial_number':0}],
-                'track_mode':None, 'track_threshold':None, 'position':None,
+                'queue':'COM16',
+                '__init__':[['COM16'],
+                            {'timeout':1,
+                             'serial_number':82875187}],
+                'track_mode':None, 'track_threshold':None,
                 'circle_parameters':None, 'phase_comp':None,
                 'tia_range_parameters':None, 'gain':None,
                 'feedback_source':None, 'io_settings':None}}
@@ -259,7 +259,7 @@ sm.init_monitors()
 '''This section is for defining the helper functions, threads, and constants
 used by the state routines.'''
 
-#-- Global Variables ----------------------------------------------------------
+#--- Global Variables ----------------------------------------------------------
 timer = {}
 thread = {}
 array = {}
@@ -305,12 +305,12 @@ def get_rotation_mount_data():
         # Append to the record array
         array[array_id].append(data)
         if new_record_lap > timer[timer_id]:
-            array[array_id] = np.array(array[array_id])
+            np_array = np.array(array[array_id])
             # Record statistics
             sm.db[mon_db].write_record(
-                {'deg':array[array_id].mean(),
-                 'std':array[array_id].std(),
-                 'n':array[array_id].size})
+                {'deg':np_array.mean(),
+                 'std':np_array.std(),
+                 'n':np_array.size})
             # Empty the array
             array[array_id] = []
 
@@ -328,12 +328,12 @@ def get_rotation_mount_data():
         # Append to the record array
         array[array_id].append(data)
         if new_record_lap > timer[timer_id]:
-            array[array_id] = np.array(array[array_id])
+            np_array = np.array(array[array_id])
             # Record statistics
             sm.db[mon_db].write_record(
-                {'deg/s':array[array_id].mean(),
-                 'std':array[array_id].std(),
-                 'n':array[array_id].size})
+                {'deg/s':np_array.mean(),
+                 'std':np_array.std(),
+                 'n':np_array.size})
             # Empty the array
             array[array_id] = []
 
@@ -388,12 +388,12 @@ def get_piezo_data(device):
         # Append to the record array
         array[array_id].append(data)
         if new_record_lap > timer[timer_id]:
-            array[array_id] = np.array(array[array_id])
+            np_array = np.array(array[array_id])
             # Record statistics
             sm.db[mon_db].write_record(
-                {'V':array[array_id].mean(),
-                 'std':array[array_id].std(),
-                 'n':array[array_id].size})
+                {'V':np_array.mean(),
+                 'std':np_array.std(),
+                 'n':np_array.size})
             # Empty the array
             array[array_id] = []
 
@@ -404,7 +404,7 @@ def get_piezo_data(device):
 # Initialize threads
 for piezo in piezos:
     thread['get_piezo_data:'+piezo] = ThreadFactory(
-        target=get_rotation_mount_data,
+        target=get_piezo_data,
         args=[piezo])
 
 
@@ -446,24 +446,25 @@ def get_nanotrack_data(device):
         sm.mon[mon_db]['data'] = sm.update_buffer(
             sm.mon[mon_db]['data'],
             data, 500)
-        sm.db[mon_db].write_buffer(data)
+        sm.db[mon_db].write_buffer({"x":data[0], "y":data[1]})
         # Append to the record array
         array[array_id].append(data)
         if new_record_lap > timer[timer_id]:
-            array[array_id] = np.array(array[array_id]).T
+            np_array = np.array(array[array_id]).T
             # Record statistics
             sm.db[mon_db].write_record(
-                {'x':       array[array_id][0].mean(),
-                 'x_std':   array[array_id][0].std(),
-                 'x_n':     array[array_id][0].size,
-                 'y':       array[array_id][1].mean(),
-                 'y_std':   array[array_id][1].std(),
-                 'y_n':     array[array_id][1].size})
+                {'x':       np_array[0].mean(),
+                 'x_std':   np_array[0].std(),
+                 'x_n':     np_array[0].size,
+                 'y':       np_array[1].mean(),
+                 'y_std':   np_array[1].std(),
+                 'y_n':     np_array[1].size})
             # Empty the array
             array[array_id] = []
 
     #--- Record TIA Reading -----------------------------------------------
     mon_db = 'broadening_stage/'+device+'_TIA'
+    array_id = device+':tia'
     timer_id = device+':record'
     data = [
         tia_reading["abs reading"],
@@ -476,24 +477,27 @@ def get_nanotrack_data(device):
         sm.mon[mon_db]['data'] = sm.update_buffer(
             sm.mon[mon_db]['data'],
             data, 500)
-        sm.db[mon_db].write_buffer(data)
+        sm.db[mon_db].write_buffer({'A':data[0],
+                                    're':data[1],
+                                    'range':data[2],
+                                    'under over':data[3]})
         # Append to the record array
         array[array_id].append(data)
         if new_record_lap > timer[timer_id]:
-            array[array_id] = np.array(array[array_id]).T
-            n = array[array_id][0].size
-            norm_read = n - np.count_nonzero(array[array_id][3] - TNA001.NORM_READ)
-            under_read = n - np.count_nonzero(array[array_id][3] - TNA001.UNDER_READ)
-            over_read = n - np.count_nonzero(array[array_id][3] - TNA001.OVER_READ)
+            np_array = np.array(array[array_id]).T
+            n = np_array[0].size
+            norm_read = n - np.count_nonzero(np_array[3] - TNA001.NORM_READ)
+            under_read = n - np.count_nonzero(np_array[3] - TNA001.UNDER_READ)
+            over_read = n - np.count_nonzero(np_array[3] - TNA001.OVER_READ)
             # Record statistics
             sm.db[mon_db].write_record(
-                {'A':           array[array_id][0].mean(),
-                 'A_std':       array[array_id][0].std(),
-                 'n':           array[array_id][0].size,
-                 'rel':         array[array_id][1].mean(),
-                 'rel_std':     array[array_id][1].std(),
-                 'range':       array[array_id][2].mean(),
-                 'range_std':   array[array_id][2].std(),
+                {'A':           np_array[0].mean(),
+                 'A_std':       np_array[0].std(),
+                 'n':           np_array[0].size,
+                 'rel':         np_array[1].mean(),
+                 'rel_std':     np_array[1].std(),
+                 'range':       np_array[2].mean(),
+                 'range_std':   np_array[2].std(),
                  'norm read':   norm_read,
                  'under read':  under_read,
                  'over read':   over_read,
@@ -517,7 +521,7 @@ def get_nanotrack_data(device):
 # Initialize threads
 for nt in nanotracks:
     thread['get_nanotrack_data:'+nt] = ThreadFactory(
-        target=get_rotation_mount_data,
+        target=get_nanotrack_data,
         args=[nt])
 
 
@@ -611,6 +615,8 @@ def optimize_z_coupling(pz_db, nt_db, mon_db, sig, scan_range=10., max_iter=None
 
         #--- Get new point
         if search:
+            if not (optimizer.n_obs % 5):
+                print(" {:} observations, {:.3g}s".format(optimizer.n_obs, time.time()-start_time))
             #--- Ask for new point
             new_x = optimizer.ask()
             #--- Move to new point
@@ -715,7 +721,7 @@ def minimize_power(state_db):
     with sm.lock[mon_db]:
         if sm.mon[mon_db]['new']:
             sm.mon[mon_db]['new'] = False
-            homed = sm.mon[mon_db]['homed']
+            homed = sm.mon[mon_db]['data']['homed']
         else:
             homed = False
     if homed:
@@ -736,12 +742,19 @@ def track_2nd_stage(state_db):
     with sm.lock[mon_db]:
         if sm.mon[mon_db]['new']:
             sm.mon[mon_db]['new'] = False
-            homed = sm.mon[mon_db]['homed']
+            homed = sm.mon[mon_db]['data']['homed']
         else:
             homed = False
     if homed:
         # Check if rotation stage is minimized
-        if sm.dev[device_db]['position'] > rot_stg_limits['max']:
+        mon_db = 'broadening_stage/rot_stg_position'
+        with sm.lock[mon_db]:
+            if sm.mon[mon_db]['new']:
+                current_position = sm.mon[mon_db]['data'][-1]
+            else:
+                current_position = 0
+                
+        if current_position > rot_stg_limits['max']:
             # Move to baseline minimum power (small, but measurable)
             settings_list = [{'position':rot_stg_limits['max']}]
             sm.update_device_settings(device_db, settings_list, write_log=True)

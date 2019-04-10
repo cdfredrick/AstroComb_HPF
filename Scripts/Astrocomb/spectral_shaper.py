@@ -223,9 +223,9 @@ STATE_SETTINGS = {
 DEVICE_SETTINGS = {
     'spectral_shaper/device_rotation_mount':{
         'driver':KDC101_PRM1Z8,
-        'queue':'27251608',
+        'queue':'COM10',
         '__init__':[
-            [''], #TODO: add COM port
+            ['COM10'],
             {'timeout':5,
              'serial_number':27251608}
             ]
@@ -240,19 +240,19 @@ DEVICE_SETTINGS = {
         'queue':'IM_bias',
         '__init__':[['USB0::0x2A8D::0x0702::MY57427460::INSTR']]
         },
-    'broadening_stage/device_piezo_z_in':{
+    'spectral_shaper/device_piezo_z_in':{
         'driver':KPZ101,
-        'queue':'', #TODO: add serial number
-        '__init__':[[''], #TODO: add COM port
+        'queue':"COM18",
+        '__init__':[["COM18"],
                     {'timeout':5,
-                     'serial_number':0}]
+                     'serial_number':29501649}]
         },
-    'broadening_stage/device_piezo_z_out':{
+    'spectral_shaper/device_piezo_z_out':{
         'driver':KPZ101,
-        'queue':'', #TODO: add serial number
-        '__init__':[[''], #TODO: add COM port
+        'queue':'COM17', 
+        '__init__':[['COM17'], 
                     {'timeout':5,
-                     'serial_number':0}]
+                     'serial_number':29501638}]
         },
     'spectral_shaper/device_waveshaper':{
         'driver':WaveShaper.WS1000A,
@@ -380,15 +380,15 @@ def get_spectrum():
             array[array_id].append(data)
         if (new_record_lap > timer[timer_id]) or reset[reset_id]:
             if len(array[array_id]):
-                array[array_id] = np.array(array[array_id])
-                array[array_id] = np.power(10, array[array_id]/10)*1e-3
+                np_array = np.array(array[array_id])
+                np_array = np.power(10, np_array/10)*1e-3
                 # Record statistics ---------------------
                 sm.db[monitor_db].write_record({
-                    'W':array[array_id].mean(),
-                    'W_std':array[array_id].std(),
-                    'dBm':10*np.log10(1e3*array[array_id].mean()),
-                    'dBm_std':10/(array[array_id].mean() * np.log(10)) * array[array_id].std(),
-                    'n':array[array_id].size})
+                    'W':np_array.mean(),
+                    'W_std':np_array.std(),
+                    'dBm':10*np.log10(1e3*np_array.mean()),
+                    'dBm_std':10/(np_array.mean() * np.log(10)) * np_array.std(),
+                    'n':np_array.size})
                 # Empty the array
                 array[array_id] = []
     # Spectrum -----MUST BE LAST!!!------------------------
@@ -403,12 +403,12 @@ def get_spectrum():
             array[array_id].append(osa_trace['data']['y'])
         if (new_record_lap > timer[timer_id]) or reset[reset_id]:
             if len(array[array_id]):
-                array[array_id] = np.array(array[array_id])
-                array[array_id] = np.power(10, array[array_id]/10)*1e-3
+                np_array = np.array(array[array_id])
+                np_array = np.power(10, np_array/10)*1e-3
                 # Record statistics ---------------------
-                y_mean = array[array_id].mean(axis=0)
-                y_std = array[array_id].std(axis=0)
-                y_n = array[array_id].shape[0]
+                y_mean = np_array.mean(axis=0)
+                y_std = np_array.std(axis=0)
+                y_n = np_array.shape[0]
                 osa_trace['data']['W'] = y_mean.tolist()
                 osa_trace['data']['W_std'] = y_std.tolist()
                 osa_trace['data']['W_n'] = y_n
@@ -581,6 +581,8 @@ def optimize_DW_setpoint(sig=3, max_iter=None):
 
         #--- Get new point
         if search:
+            if not (optimizer.n_obs % 5):
+                print(" {:} observations, {:.3g}s".format(optimizer.n_obs, time.time()-start_time))
             #--- Ask for new point
             new_x = optimizer.ask()
             #--- Move to new point
@@ -793,6 +795,8 @@ def optimize_z_coupling(sig=3, max_iter=None, stage="in"):
 
         #--- Get new point
         if search:
+            if not (optimizer.n_obs % 5):
+                print(" {:} observations, {:.3g}s".format(optimizer.n_obs, time.time()-start_time))
             #--- Ask for new point
             new_x = optimizer.ask()
             #--- Move to new point
@@ -971,6 +975,8 @@ def optimize_IM_bias(sig=3, max_iter=None):
 
         #--- Get new point
         if search:
+            if not (optimizer.n_obs % 5):
+                print(" {:} observations, {:.3g}s".format(optimizer.n_obs, time.time()-start_time))
             #--- Ask for new point
             new_x = optimizer.ask()
             #--- Move to new point
@@ -1152,6 +1158,8 @@ def optimize_optical_phase(sig=3, max_iter=None):
 
         #--- Get new point
         if search:
+            if not (optimizer.n_obs % 5):
+                print(" {:} observations, {:.3g}s".format(optimizer.n_obs, time.time()-start_time))
             #--- Ask for new coefs
             new_x = optimizer.ask()
             #--- Calculate phase profile

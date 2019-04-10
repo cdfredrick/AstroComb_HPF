@@ -5,6 +5,8 @@ Created on Thu Jan 10 12:15:09 2019
 @author: National Institute
 """
 # %% Drivers
+import datetime
+
 from Drivers.VISA.ILXLightwave import LaserModule, TECModule, CombinationModule
 
 from Drivers.VISA.Keysight import E36103A
@@ -12,6 +14,14 @@ from Drivers.VISA.Keysight import E36103A
 from Drivers.Database.CouchbaseDB import PriorityQueue
 
 from Drivers.Thorlabs import APT
+
+# %% Helper Functions
+
+def tomorrow_at_noon():
+    tomorrow = datetime.date.today()+datetime.timedelta(days=1)
+    noon = datetime.time(hour=12)
+    return datetime.datetime.combine(tomorrow,noon).timestamp()
+
 
 # %% ILX 1 ====================================================================
 #==============================================================================
@@ -143,42 +153,77 @@ imbias.output()
 #Out[3]: True
 
 
+# %% APT Testing
+test = APT.APTDevice("COM19", serial_number=82873587)
+
 # %% 2nd Stage Coupling =======================================================
 #==============================================================================
 # x, y -> nanotrack; z -> focus
 
 # %% Rotation Stage ===========================================================
 
-rt_stg = APT.KDC101_PRM1Z8(port, serial_number='')
+rt_stg = APT.KDC101_PRM1Z8("COM10", serial_number=27251608)
+
+rt_stg.home()
+#Out[2]: {'homed': True, 'homing': False}
 
 # %% 2nd Stage Input ==========================================================
 
 # X in ()
-x_in = APT.KPZ101(port, serial_number='')
+x_in = APT.KPZ101("COM12", serial_number=29500912)
 
 # Y in ()
-y_in = APT.KPZ101(port, serial_number='')
+y_in = APT.KPZ101("COM11", serial_number=29500931)
 
 # Z in ()
-z_in = APT.KPZ101(port, serial_number='')
+z_in = APT.KPZ101("COM18", serial_number=29501649)
+
+z_in.voltage()
+#Out[5]: 42.989898373363445
 
 # Nanotrack in
-nt_in = APT.TNA001(port, serial_number='')
+nt_in = APT.TNA001("COM19", serial_number=82873587)
+
+nt_in.position()
+#Out[7]: {'x': 0.47512016479743646, 'y': 0.5457541771572442}
+
+nt_in.TRACK_MODE
+#Out[8]: 3
+
+nt_in.LATCH_MODE
+#Out[9]: 2
+
+nt_in.track_mode()
+#Out[10]: 2
 
 # %% 2nd Stage Out ============================================================
 
 # X out ()
-x_out = APT.KPZ101(port, serial_number)
+x_out = APT.KPZ101("COM15", serial_number=29500921)
 
 # Y out ()
-y_out = APT.KPZ101(port, serial_number)
+y_out = APT.KPZ101("COM14", serial_number=29500575)
 
 # Z out ()
-z_out = APT.KPZ101(port, serial_number)
+z_out = APT.KPZ101("COM17", serial_number=29501638)
+
+z_out.voltage()
+#Out[5]: 69.98275704214606
 
 # Nanotrack out
-nt_out = APT.TNA001(port, serial_number='')
+nt_out = APT.TNA001("COM16", serial_number=82875187)
 
+nt_out.position()
+#Out[7]: {'x': 0.5883268482490273, 'y': 0.5646753643091478}
+
+nt_out.TRACK_MODE
+#Out[8]: 3
+
+nt_out.LATCH_MODE
+#Out[9]: 2
+
+nt_out.track_mode()
+#Out[10]: 2
 
 # %% Spectral Optimization ====================================================
 # =============================================================================

@@ -1248,7 +1248,7 @@ def monitor_spectrum(state_db):
         monitor_db = 'broadening_stage/rot_stg_position'
         for doc in sm.mon[monitor_db]['cursor']:
             new_data.append(doc['deg'])
-         # Update buffers -----------------------
+        # Update buffers -----------------------
         if len(new_data) > 0:
             with sm.lock[monitor_db]:
                 sm.mon[monitor_db]['new'] = True

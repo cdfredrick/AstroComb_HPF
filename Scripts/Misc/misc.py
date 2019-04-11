@@ -6,6 +6,7 @@ Created on Thu Jan 10 12:15:09 2019
 """
 # %% Drivers
 import datetime
+import numpy as np
 
 from Drivers.VISA.ILXLightwave import LaserModule, TECModule, CombinationModule
 
@@ -14,6 +15,8 @@ from Drivers.VISA.Keysight import E36103A
 from Drivers.Database.CouchbaseDB import PriorityQueue
 
 from Drivers.Thorlabs import APT
+
+from Drivers.Finisar import WaveShaper
 
 # %% Helper Functions
 
@@ -152,6 +155,44 @@ imbias.voltage_setpoint()
 imbias.output()
 #Out[3]: True
 
+# %% WaveShaper ===============================================================
+#==============================================================================
+ws = WaveShaper.WS1000A('192.168.0.5')
+
+domain = [280.18, 283.357]
+
+new_coefs = [
+    23.27920156,
+    -0.31415927,
+    -0.53407075,
+    -0.06283185,
+    1.57079633,
+    -0.12566371,
+    0.,
+    -0.12566371,
+    -0.56548668,
+    -0.18849556]
+
+new_coefs = [
+    12.873779823260552,
+    -0.00010805471567221225,
+    -8.382069235254972,
+    0.24959336119687642,
+    -1.5047378684494916,
+    0.19003929512744833]
+
+new_coefs = [
+    12.957652700500315,
+    -0.49569232204816693,
+    -8.414189277585605,
+    0.380450128189349,
+    -1.3942859402315253,
+    0.3111486710709459,
+    0.18849527583609194]
+
+new_poly_fit = np.polynomial.Legendre([0,0]+new_coefs, domain=domain)
+# Send new phase profile
+ws.phase_profile(new_poly_fit(ws.freq))
 
 # %% APT Testing
 test = APT.APTDevice("COM19", serial_number=82873587)
@@ -232,9 +273,7 @@ spec_opt = PriorityQueue('spectral_shaper')
 spec_opt.push(message={'control_parameter':{'abort_optimizer':True}})
 
 spec_opt.push(message={'control_parameter':{'setpoint_optimization':0}})
-
-spec_opt.push(message={'control_parameter':{'run_optimizer':{'target':"optimize_DW_setpoint",
-                                                             'sig':3}}})
+spec_opt.push(message={'control_parameter':{'setpoint_optimization':tomorrow_at_noon()}})
 
 spec_opt.push(message={'control_parameter':{'run_optimizer':{'target':"optimize_z_in_coupling",
                                                              'sig':3}}})
@@ -246,4 +285,7 @@ spec_opt.push(message={'control_parameter':{'run_optimizer':{'target':"optimize_
                                                              'sig':3}}})
 
 spec_opt.push(message={'control_parameter':{'run_optimizer':{'target':"optimize_optical_phase",
+                                                             'sig':1}}})
+
+spec_opt.push(message={'control_parameter':{'run_optimizer':{'target':"optimize_DW_setpoint",
                                                              'sig':3}}})

@@ -40,14 +40,13 @@ class Minimizer():
                                          n_initial_points=self.n_init)
 
     @classmethod
-    def new_model(cls, new_x, new_y, n_initial_points=5, abs_bounds=None, sig=1.):
+    def new_model(cls, new_x, new_y, dimensions, n_initial_points=5, abs_bounds=None, sig=1.):
         '''Initialize the `Minimizer` class with an existing data set.'''
         assert isinstance(new_x, list)
         assert isinstance(new_y, list)
         # Multiple points entered
         assert all([isinstance(x, list) for x in new_x])
         # Determine Boundaries
-        dimensions = [(np.min(x), np.max(x)) for x in np.array(new_x).T]
         assert all([len(x)==len(dimensions) for x in new_x])
         # Create new Minimizer class
         optimizer = cls(dimensions, n_initial_points=n_initial_points,
@@ -94,8 +93,9 @@ class Minimizer():
                         if new_x_min > abs_x_min:
                             new_x_min = abs_x_min
                         new_dim = (new_x_min, x_max)
+                    change_detected = (self.dims[idx] == new_dim)
                     self.dims[idx] = new_dim
-                    update_model = True
+                    update_model = (update_model or change_detected)
             if update_model:
                 # Scale the input data
                 self.y_avg = np.average(self.y)
@@ -199,39 +199,51 @@ class Minimizer():
             assert len(x)==len(self.dims)
             x = [x]
 
-        # Ensure that all sample points are within range
-        for samp_idx in range(len(x)):
-            lower_edge, upper_edge = self.check_bounds(x[samp_idx])
-            for idx in range(self.n_dims):
-                x_min, x_max = self.dims[idx]
-                if upper_edge[idx] or lower_edge[idx]:
-                    if upper_edge[idx]:
-                        x[samp_idx][idx] = x_max
-                    else:
-                        x[samp_idx][idx] = x_min
-
-        x_samp_model = self.model.space.transform(x)
-
-        if return_std:
-            y_pred, y_pred_std = self.model.models[-1].predict(
-                x_samp_model,
-                return_std=True)
+        if len(self.model.models):
+            # Ensure that all sample points are within range
+            for samp_idx in range(len(x)):
+                lower_edge, upper_edge = self.check_bounds(x[samp_idx])
+                for idx in range(self.n_dims):
+                    x_min, x_max = self.dims[idx]
+                    if upper_edge[idx] or lower_edge[idx]:
+                        if upper_edge[idx]:
+                            x[samp_idx][idx] = x_max
+                        else:
+                            x[samp_idx][idx] = x_min
+    
+            x_samp_model = self.model.space.transform(x)
+    
+            if return_std:
+                y_pred, y_pred_std = self.model.models[-1].predict(
+                    x_samp_model,
+                    return_std=True)
+            else:
+                y_pred = self.model.models[-1].predict(
+                    x_samp_model,
+                    return_std=False)
+    
+            y_pred = y_pred*self.y_scl + self.y_avg
+            if len(x)==1:
+                y_pred = y_pred[0]
+    
+            if return_std:
+                y_pred_std *= self.y_scl
+                if len(x)==1:
+                    y_pred_std = y_pred_std[0]
+                return y_pred, y_pred_std
+            else:
+                return y_pred
         else:
-            y_pred = self.model.models[-1].predict(
-                x_samp_model,
-                return_std=False)
-
-        y_pred = y_pred*self.y_scl + self.y_avg
-        if len(y_pred)==1:
-            y_pred = y_pred[0]
-
-        if return_std:
-            y_pred_std *= self.y_scl
-            if len(y_pred_std)==1:
-                y_pred_std = y_pred_std[0]
-            return y_pred, y_pred_std
-        else:
-            return y_pred
+            if len(x)==1:
+                y_pred = np.nan
+                y_pred_std = np.nan
+            else:
+                y_pred = np.array([np.nan]*len(x))
+                y_pred_std = np.array([np.nan]*len(x))
+            if return_std:
+                return y_pred, y_pred_std
+            else:
+                return y_pred
 
     def fitness(self, test_x=None):
         '''Calculate measures of the model's fitness.'''
@@ -242,7 +254,8 @@ class Minimizer():
                        "residuals": np.array([np.nan]*self.n_obs).tolist(),
                        "residuals std": np.nan,
                        "predicted std": np.array([np.nan]*self.n_obs).tolist(),
-                       "significance":np.nan}
+                       "significance":np.nan,
+                       "domains":self.dims}
         else:
             if test_x is not None:
                 assert isinstance(test_x, list)
@@ -266,6 +279,7 @@ class Minimizer():
                 "residuals": residuals.tolist(),
                 "residuals std": resid_std,
                 "predicted std": y_pred_std.tolist(),
-                "significance":resid_std/opt_y_std}
+                "significance":resid_std/opt_y_std,
+                "domains":self.dims}
         return fitness
 

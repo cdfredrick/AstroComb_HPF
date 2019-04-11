@@ -594,7 +594,7 @@ class LogReadWrite(LogRead):
 # %% DatabaseMaster ===========================================================
 
 class DatabaseMaster(DatabaseReadWrite):
-    def __init__(self, mongo_client, database, capped_collection_size=int(1e6)):
+    def __init__(self, mongo_client, database, capped_collection_size=int(10e6)):
         '''
         The "master" handler for the database. This class enforces the database
             settings as given in the kwargs and ensures that the record and log

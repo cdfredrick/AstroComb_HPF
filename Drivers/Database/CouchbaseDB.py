@@ -241,7 +241,7 @@ class PriorityQueue():
                     print(" waiting for {:} queue, {:}s".format(self.q_ID, (lap-start_lap)*10))
                 time.sleep(0.01)
         if lap > start_lap:
-            print(" {:} queue complete, {:}".format(self.q_ID), time.strftime('%c'))
+            print(" {:} queue complete, {:}".format(self.q_ID, time.strftime('%c')))
         return queued
 
 

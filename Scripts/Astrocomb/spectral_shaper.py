@@ -466,7 +466,7 @@ def optimize_DW_setpoint(sig=3, max_iter=None):
     #--- Initialize optimizer ---------------------------------------------
     optimizer = Minimizer(
         bounds,
-        n_initial_points=5, sig=sig,
+        n_initial_points=10, sig=sig,
         abs_bounds=[(rot_stg_limits["min"], rot_stg_limits["max"])])
 
     #--- Setup OSA --------------------------------------------------------
@@ -515,7 +515,7 @@ def optimize_DW_setpoint(sig=3, max_iter=None):
         DWs.append(current_DW)
 
         #--- Calculate Optimal DW Amplitude
-        dw_model = Minimizer.new_model(optimizer.x, DWs)
+        dw_model = Minimizer.new_model(optimizer.x, DWs, optimizer.dims)
         opt_DW, opt_DW_std = dw_model.predict(opt_x, return_std=True)
 
         #--- Write Intermediate Result to Buffer
@@ -582,7 +582,7 @@ def optimize_DW_setpoint(sig=3, max_iter=None):
         #--- Get new point
         if search:
             if not (optimizer.n_obs % 5):
-                print(" {:} observations, {:.3g}s".format(optimizer.n_obs, time.time()-start_time))
+                print(" {:} observations, {:.2f} significance, {:.3g}s".format(optimizer.n_obs, diag["significance"], time.time()-start_time))
             #--- Ask for new point
             new_x = optimizer.ask()
             #--- Move to new point
@@ -699,7 +699,7 @@ def optimize_z_coupling(sig=3, max_iter=None, stage="in"):
     #--- Initialize optimizer ---------------------------------------------
     optimizer = Minimizer(
         bounds,
-        n_initial_points=5, sig=sig,
+        n_initial_points=10, sig=sig,
         abs_bounds=[(piezo_limits["min"], piezo_limits["max"])])
 
     #--- Setup OSA --------------------------------------------------------
@@ -796,7 +796,7 @@ def optimize_z_coupling(sig=3, max_iter=None, stage="in"):
         #--- Get new point
         if search:
             if not (optimizer.n_obs % 5):
-                print(" {:} observations, {:.3g}s".format(optimizer.n_obs, time.time()-start_time))
+                print(" {:} observations, {:.2f} significance, {:.3g}s".format(optimizer.n_obs, diag["significance"], time.time()-start_time))
             #--- Ask for new point
             new_x = optimizer.ask()
             #--- Move to new point
@@ -879,7 +879,7 @@ def optimize_IM_bias(sig=3, max_iter=None):
     #--- Initialize optimizer ---------------------------------------------
     optimizer = Minimizer(
         bounds,
-        n_initial_points=5, sig=sig,
+        n_initial_points=10, sig=sig,
         abs_bounds=[(IM_bias_limits["min"], IM_bias_limits["max"])])
 
     #--- Setup OSA --------------------------------------------------------
@@ -976,7 +976,7 @@ def optimize_IM_bias(sig=3, max_iter=None):
         #--- Get new point
         if search:
             if not (optimizer.n_obs % 5):
-                print(" {:} observations, {:.3g}s".format(optimizer.n_obs, time.time()-start_time))
+                print(" {:} observations, {:.2f} significance, {:.3g}s".format(optimizer.n_obs, diag["significance"], time.time()-start_time))
             #--- Ask for new point
             new_x = optimizer.ask()
             #--- Move to new point
@@ -1042,21 +1042,26 @@ def optimize_optical_phase(sig=3, max_iter=None):
     sm.dev[ws_db]['queue'].queue_and_wait()
 
     #--- Setup  Optimizer -------------------------------------------------
-    opt_orders = 6
+    opt_orders = 7
     current_phase = sm.dev[ws_db]['driver'].phase_profile()
     freqs = sm.dev[ws_db]['driver'].freq
-    frq_smp = (freqs > 1070/WaveShaper.SPEED_OF_LIGHT_NM_THZ) & (freqs < 1058/WaveShaper.SPEED_OF_LIGHT_NM_THZ)
+    frq_smp = (freqs > WaveShaper.SPEED_OF_LIGHT_NM_THZ/1070) & (freqs < WaveShaper.SPEED_OF_LIGHT_NM_THZ/1058)
     current_polyfit = np.polynomial.Legendre.fit(freqs[frq_smp], current_phase[frq_smp], 1+opt_orders)
     current_coefs = current_polyfit.coef[2:].tolist()
-    coefs_scan_range = 0.1 * (2*np.pi)
+    coefs_scan_range = 0.05 * (2*np.pi)
     bounds = []
-    for coef in current_coefs:
-        bounds.append((coef - coefs_scan_range/2, coef + coefs_scan_range/2))
+    for idx, coef in enumerate(current_coefs):
+        bounds.append((coef - coefs_scan_range/(2+idx/2), coef + coefs_scan_range/(2+idx/2)))
+    abs_bounds = []
+    for bound in bounds:
+        c_scan_range = bound[1] - bound[0]
+        # Limit total scan range for faster model convergence
+        abs_bounds.append((bound[0]-c_scan_range, bound[1]+c_scan_range))
 
     #--- Initialize optimizer ---------------------------------------------
     optimizer = Minimizer(
-        bounds,
-        n_initial_points=5, sig=sig)
+        bounds, abs_bounds=abs_bounds,
+        n_initial_points=10, sig=sig)
 
     #--- Setup OSA --------------------------------------------------------
     settings_list = STATES['spectral_shaper/state_optimizer']['optimal']['settings']['DW']
@@ -1065,7 +1070,7 @@ def optimize_optical_phase(sig=3, max_iter=None):
     #--- Optimize Phase Profile -------------------------------------------
     converged = False
     search = True
-    new_x = [current_coefs]
+    new_x = current_coefs
     while search:
         #--- Ensure queues
         sm.dev[osa_db]['queue'].touch()
@@ -1101,12 +1106,6 @@ def optimize_optical_phase(sig=3, max_iter=None):
         with sm.lock[mon_db]:
             sm.mon[mon_db]['new'] = True
             sm.mon[mon_db]['data'] = {
-                'filter profile':{
-                    'freq':sm.dev[ws_db]['driver'].freq.tolist(),
-                    'attn':sm.dev[ws_db]['driver'].attn.tolist(),
-                    'phase':sm.dev[ws_db]['driver'].phase.tolist(),
-                    'port':sm.dev[ws_db]['driver'].port.tolist(),
-                    },
                 'coefs':optimizer.x,
                 'domain':current_polyfit.domain.tolist(),
                 'dBm':(-np.array(optimizer.y)).tolist(),
@@ -1138,7 +1137,7 @@ def optimize_optical_phase(sig=3, max_iter=None):
             if optimizer.n_obs >= max_iter:
                 converged = False
                 search = False
-                opt_x = [current_coefs]
+                opt_x = current_coefs
                 log_str = ' Model did not converge to {:} sig after {:} samples, returning to initial point'.format(
                     optimizer.sig,
                     optimizer.n_obs)
@@ -1154,12 +1153,12 @@ def optimize_optical_phase(sig=3, max_iter=None):
             log.log_info(mod_name, func_name, log_str)
             converged = False
             search = False
-            opt_x = [current_coefs]
+            opt_x = current_coefs
 
         #--- Get new point
         if search:
             if not (optimizer.n_obs % 5):
-                print(" {:} observations, {:.3g}s".format(optimizer.n_obs, time.time()-start_time))
+                print(" {:} observations, {:.2f} significance, {:.3g}s".format(optimizer.n_obs, diag["significance"], time.time()-start_time))
             #--- Ask for new coefs
             new_x = optimizer.ask()
             #--- Calculate phase profile
@@ -1413,6 +1412,10 @@ def adjust_quick(state_db):
         # Log
         log_str = ' Spectrum successfully optimized at {:}deg'.format(current_angle)
         log.log_info(mod_name, func_name, log_str)
+        # Update Monitor
+        monitor_db = 'broadening_stage/rot_stg_position'
+        with sm.lock[monitor_db]:
+            sm.mon[monitor_db]['data'].append(current_angle)
 
 
 # %% Maintain Routines ========================================================
@@ -1530,7 +1533,7 @@ def adjust_slow(state_db):
 '''This section is for defining the methods called only when the system is in
     its defined states.'''
 optimizer_functions = [
-    "optimize_DW_setpoint"
+    "optimize_DW_setpoint",
     "optimize_z_in_coupling",
     "optimize_z_out_coupling",
     "optimize_IM_bias",

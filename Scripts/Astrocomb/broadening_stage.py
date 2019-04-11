@@ -555,7 +555,7 @@ def optimize_z_coupling(pz_db, nt_db, mon_db, sig, scan_range=10., max_iter=None
     #--- Initialize optimizer ---------------------------------------------
     optimizer = Minimizer(
         bounds,
-        n_initial_points=5, sig=sig,
+        n_initial_points=10, sig=sig,
         abs_bounds=[(piezo_limits["min"], piezo_limits["max"])])
 
     #--- Optimize ---------------------------------------------------------
@@ -616,7 +616,7 @@ def optimize_z_coupling(pz_db, nt_db, mon_db, sig, scan_range=10., max_iter=None
         #--- Get new point
         if search:
             if not (optimizer.n_obs % 5):
-                print(" {:} observations, {:.3g}s".format(optimizer.n_obs, time.time()-start_time))
+                print(" {:} observations, {:.2f} significance, {:.3g}s".format(optimizer.n_obs, diag["significance"], time.time()-start_time))
             #--- Ask for new point
             new_x = optimizer.ask()
             #--- Move to new point

@@ -7,6 +7,7 @@ Created on Thu Jan 10 12:15:09 2019
 # %% Drivers
 import datetime
 import numpy as np
+import matplotlib.pyplot as plt
 
 from Drivers.VISA.ILXLightwave import LaserModule, TECModule, CombinationModule
 
@@ -193,6 +194,14 @@ new_coefs = [
 new_poly_fit = np.polynomial.Legendre([0,0]+new_coefs, domain=domain)
 # Send new phase profile
 ws.phase_profile(new_poly_fit(ws.freq))
+
+plt.figure(0)
+plt.clf()
+x = np.linspace(domain[0], domain[1], 1000)
+#plt.plot(WaveShaper.SPEED_OF_LIGHT_NM_THZ/x, old_poly_fit(x))
+plt.plot(WaveShaper.SPEED_OF_LIGHT_NM_THZ/x, new_poly_fit(x))
+plt.ylabel('Phase (rad)')
+plt.xlabel('Wavelength (nm)')
 
 # %% APT Testing
 test = APT.APTDevice("COM19", serial_number=82873587)

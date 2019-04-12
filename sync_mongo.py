@@ -18,6 +18,8 @@ records = [
     'ambience/box_temperature_1',
     'ambience/rack_temperature_0',
     # broadening_stage --------------------------------------------------------
+        # Data ----------------------------------
+    'broadening_stage/rot_stg_position',
         # Devices -------------------------------
     'broadening_stage/device_rotation_mount',
         # States --------------------------------

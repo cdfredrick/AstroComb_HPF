@@ -70,50 +70,17 @@ class Minimizer():
 
     def ask(self):
         '''Calculate a new test point
-
-        This method extends the model space (up to the absolute boundaries) if
-        the new point is too close to the current boundary.
         '''
         new_x = self.optimizer.ask()
-        if self.n_obs >= self.n_init:
-            update_model = False
-            lower_edge, upper_edge = self.check_bounds(new_x, fract=.02)
-            for idx in range(self.n_dims):
-                x_min, x_max = self.dims[idx]
-                abs_x_min, abs_x_max = self.abs_bounds[idx]
-                x_range = self.x_range[idx]
-                if upper_edge[idx] or lower_edge[idx]:
-                    if upper_edge[idx]:
-                        new_x_max = x_max + x_range/4
-                        if new_x_max > abs_x_max:
-                            new_x_max = abs_x_max
-                        new_dim = (x_min, new_x_max)
-                    else:
-                        new_x_min = x_min - x_range/4
-                        if new_x_min > abs_x_min:
-                            new_x_min = abs_x_min
-                        new_dim = (new_x_min, x_max)
-                    change_detected = (self.dims[idx] == new_dim)
-                    self.dims[idx] = new_dim
-                    update_model = (update_model or change_detected)
-            if update_model:
-                # Scale the input data
-                self.y_avg = np.average(self.y)
-                self.y_scl = np.std(self.y)
-                x_mdl = self.x
-                y_mdl = ((np.array(self.y) - self.y_avg)/self.y_scl).tolist()
-
-                self.optimizer = skopt.Optimizer(self.dims,
-                                                 n_initial_points=self.n_init)
-                self.model = self.optimizer.tell(x_mdl,
-                                                 y_mdl)
         return new_x
 
     def tell(self, new_x, new_y, diagnostics=False):
         '''Enter a new observations into the model.
 
         This method updates the current model with the input data
-        and gives a measure of the model's convergence.
+        and gives a measure of the model's convergence. This method extends the
+        model space (up to the absolute boundaries) if the new optimum point is
+        too close to the current boundary.
         '''
         assert isinstance(new_x, list)
         if isinstance(new_y, list):
@@ -129,35 +96,69 @@ class Minimizer():
             self.y.append(new_y)
         self.n_obs = len(self.x)
 
+        if ((self.y_avg is np.nan) or (self.y_scl is np.nan)) and (self.n_obs >= self.n_init):
+            # Scale the input data
+            self.y_avg = np.average(self.y)
+            self.y_scl = np.std(self.y)
+            x_mdl = self.x
+            y_mdl = ((np.array(self.y) - self.y_avg)/self.y_scl).tolist()
+
+            # Create a new model
+            self.optimizer = skopt.Optimizer(self.dims,
+                                             n_initial_points=self.n_init)
+            self.model = self.optimizer.tell(x_mdl, y_mdl)
+
         # Expand the model
         if self.n_obs < self.n_init:
             self.model = self.optimizer.tell(new_x, new_y)
             opt_x = self.optimum_x()
         else:
-            if (self.y_avg is np.nan) or (self.y_scl is np.nan):
+            # Scale the input data
+            x_mdl = new_x
+            y_mdl = ((np.array(new_y) - self.y_avg)/self.y_scl).tolist()
+
+            # Update the current model
+            self.model = self.optimizer.tell(x_mdl, y_mdl)
+
+            # Calculate optimum
+            opt_x = self.optimum_x()
+
+            # Update boundaries
+            update_model = False
+            lower_edge, upper_edge = self.check_bounds(opt_x, fract=.02)
+            for idx in range(self.n_dims):
+                x_min, x_max = self.dims[idx]
+                abs_x_min, abs_x_max = self.abs_bounds[idx]
+                x_range = self.x_range[idx]
+                if upper_edge[idx] or lower_edge[idx]:
+                    if upper_edge[idx]:
+                        new_x_max = x_max + x_range/4
+                        if new_x_max > abs_x_max:
+                            new_x_max = abs_x_max
+                        new_dim = (x_min, new_x_max)
+                    else:
+                        new_x_min = x_min - x_range/4
+                        if new_x_min > abs_x_min:
+                            new_x_min = abs_x_min
+                        new_dim = (new_x_min, x_max)
+                    change_detected = (self.dims[idx] != new_dim)
+                    self.dims[idx] = new_dim
+                    update_model = (update_model or change_detected)
+            if update_model:
                 # Scale the input data
                 self.y_avg = np.average(self.y)
                 self.y_scl = np.std(self.y)
                 x_mdl = self.x
                 y_mdl = ((np.array(self.y) - self.y_avg)/self.y_scl).tolist()
-
-                # Create a new model
                 self.optimizer = skopt.Optimizer(self.dims,
                                                  n_initial_points=self.n_init)
-                self.model = self.optimizer.tell(x_mdl, y_mdl)
-            else:
-                # Scale the input data
-                x_mdl = new_x
-                y_mdl = ((np.array(new_y) - self.y_avg)/self.y_scl).tolist()
-
-                # Update the current model
-                self.model = self.optimizer.tell(x_mdl, y_mdl)
-
-            # Calculate optimum
-            opt_x = self.optimum_x()
+                self.model = self.optimizer.tell(x_mdl,
+                                                 y_mdl)
+                # Calculate optimum
+                opt_x = self.optimum_x()
 
         # Calculate fitness diagnostics
-        fit = self.fitness()
+        fit = self.fitness(test_x=opt_x)
         opt_y_std = fit["optimum y std"]
         resid_std = fit["residuals std"]
 
@@ -210,9 +211,9 @@ class Minimizer():
                             x[samp_idx][idx] = x_max
                         else:
                             x[samp_idx][idx] = x_min
-    
+
             x_samp_model = self.model.space.transform(x)
-    
+
             if return_std:
                 y_pred, y_pred_std = self.model.models[-1].predict(
                     x_samp_model,
@@ -221,11 +222,11 @@ class Minimizer():
                 y_pred = self.model.models[-1].predict(
                     x_samp_model,
                     return_std=False)
-    
+
             y_pred = y_pred*self.y_scl + self.y_avg
             if len(x)==1:
                 y_pred = y_pred[0]
-    
+
             if return_std:
                 y_pred_std *= self.y_scl
                 if len(x)==1:

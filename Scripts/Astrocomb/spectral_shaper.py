@@ -249,8 +249,8 @@ DEVICE_SETTINGS = {
         },
     'spectral_shaper/device_piezo_z_out':{
         'driver':KPZ101,
-        'queue':'COM17', 
-        '__init__':[['COM17'], 
+        'queue':'COM17',
+        '__init__':[['COM17'],
                     {'timeout':5,
                      'serial_number':29501638}]
         },
@@ -1052,11 +1052,11 @@ def optimize_optical_phase(sig=3, max_iter=None):
     bounds = []
     for idx, coef in enumerate(current_coefs):
         bounds.append((coef - coefs_scan_range/(2+idx/2), coef + coefs_scan_range/(2+idx/2)))
-    abs_bounds = []
-    for bound in bounds:
-        c_scan_range = bound[1] - bound[0]
-        # Limit total scan range for faster model convergence
-        abs_bounds.append((bound[0]-c_scan_range, bound[1]+c_scan_range))
+    abs_bounds = None
+#    for bound in bounds:
+#        c_scan_range = bound[1] - bound[0]
+#        # Limit total scan range for faster model convergence
+#        abs_bounds.append((bound[0]-c_scan_range, bound[1]+c_scan_range))
 
     #--- Initialize optimizer ---------------------------------------------
     optimizer = Minimizer(

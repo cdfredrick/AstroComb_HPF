@@ -138,10 +138,11 @@ print(np.mean(n_samps), np.std(n_samps), np.max(n_samps), np.min(n_samps), np.me
 
 
 # %% Stats ND
+from modules.optimizer import Minimizer
 
-n_init = 5
-n_dims = 5
-sig = 1
+n_init = 10
+n_dims = 7
+sig = 3
 sample_size = 10
 
 y_error = []

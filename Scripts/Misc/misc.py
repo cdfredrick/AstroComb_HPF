@@ -191,6 +191,14 @@ new_coefs = [
     0.3111486710709459,
     0.18849527583609194]
 
+
+new_coefs = [13.1542830681408,
+    -1.3832367395245435,
+    -8.436227608887236,
+    -0.06927063677322859,
+    -1.5790805588000139,
+    0.4499070303956333]
+
 new_poly_fit = np.polynomial.Legendre([0,0]+new_coefs, domain=domain)
 # Send new phase profile
 ws.phase_profile(new_poly_fit(ws.freq))
@@ -294,7 +302,7 @@ spec_opt.push(message={'control_parameter':{'run_optimizer':{'target':"optimize_
                                                              'sig':3}}})
 
 spec_opt.push(message={'control_parameter':{'run_optimizer':{'target':"optimize_optical_phase",
-                                                             'sig':1}}})
+                                                             'sig':3}}})
 
 spec_opt.push(message={'control_parameter':{'run_optimizer':{'target':"optimize_DW_setpoint",
                                                              'sig':3}}})

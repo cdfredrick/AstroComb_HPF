@@ -23,7 +23,7 @@ class Minimizer():
         assert isinstance(n_initial_points, int)
         self.n_init = n_initial_points
         if abs_bounds is None:
-            self.abs_bounds = dimensions
+            self.abs_bounds = [(np.nan, np.nan) for bound in dimensions]
         else:
             assert len(dimensions) == len(abs_bounds)
             self.abs_bounds = abs_bounds
@@ -38,6 +38,7 @@ class Minimizer():
         self.n_obs = len(self.x)
         self.optimizer = skopt.Optimizer(self.dims,
                                          n_initial_points=self.n_init)
+        self.convergence_count = 0
 
     @classmethod
     def new_model(cls, new_x, new_y, dimensions, n_initial_points=5, abs_bounds=None, sig=1.):
@@ -96,7 +97,17 @@ class Minimizer():
             self.y.append(new_y)
         self.n_obs = len(self.x)
 
-        if ((self.y_avg is np.nan) or (self.y_scl is np.nan)) and (self.n_obs >= self.n_init):
+        
+
+        # Expand the model
+        if self.n_obs < self.n_init:
+            # Update the current model
+            self.model = self.optimizer.tell(new_x, new_y)
+            
+            # Calculate optimum
+            opt_x = self.optimum_x()
+            
+        elif ((self.y_avg is np.nan) or (self.y_scl is np.nan)) and (self.n_obs >= self.n_init):
             # Scale the input data
             self.y_avg = np.average(self.y)
             self.y_scl = np.std(self.y)
@@ -107,11 +118,10 @@ class Minimizer():
             self.optimizer = skopt.Optimizer(self.dims,
                                              n_initial_points=self.n_init)
             self.model = self.optimizer.tell(x_mdl, y_mdl)
-
-        # Expand the model
-        if self.n_obs < self.n_init:
-            self.model = self.optimizer.tell(new_x, new_y)
+            
+            # Calculate optimum
             opt_x = self.optimum_x()
+            
         else:
             # Scale the input data
             x_mdl = new_x
@@ -125,7 +135,7 @@ class Minimizer():
 
             # Update boundaries
             update_model = False
-            lower_edge, upper_edge = self.check_bounds(opt_x, fract=.02)
+            lower_edge, upper_edge = self.check_bounds(opt_x, fract=.1)
             for idx in range(self.n_dims):
                 x_min, x_max = self.dims[idx]
                 abs_x_min, abs_x_max = self.abs_bounds[idx]
@@ -138,11 +148,12 @@ class Minimizer():
                         new_dim = (x_min, new_x_max)
                     else:
                         new_x_min = x_min - x_range/4
-                        if new_x_min > abs_x_min:
+                        if new_x_min < abs_x_min:
                             new_x_min = abs_x_min
                         new_dim = (new_x_min, x_max)
                     change_detected = (self.dims[idx] != new_dim)
                     self.dims[idx] = new_dim
+                    self.x_range[idx] = new_dim[1] - new_dim[0]
                     update_model = (update_model or change_detected)
             if update_model:
                 # Scale the input data
@@ -175,9 +186,9 @@ class Minimizer():
 
     def optimum_x(self):
         '''Calculate the optimal x value from the current model.'''
-        coarse_x = self.x[np.argmin(self.y)]
+        opt_x = self.x[np.argmin(self.y)]
         if self.n_obs < self.n_init:
-            return coarse_x
+            return opt_x
         else:
             opt_y = np.inf
             for x in self.x:
@@ -256,7 +267,8 @@ class Minimizer():
                        "residuals std": np.nan,
                        "predicted std": np.array([np.nan]*self.n_obs).tolist(),
                        "significance":np.nan,
-                       "domains":self.dims}
+                       "domains":self.dims,
+                       "abs domains":self.abs_bounds}
         else:
             if test_x is not None:
                 assert isinstance(test_x, list)
@@ -281,6 +293,7 @@ class Minimizer():
                 "residuals std": resid_std,
                 "predicted std": y_pred_std.tolist(),
                 "significance":resid_std/opt_y_std,
-                "domains":self.dims}
+                "domains":self.dims,
+                "abs domains":self.abs_bounds}
         return fitness
 

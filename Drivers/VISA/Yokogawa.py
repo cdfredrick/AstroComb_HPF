@@ -43,6 +43,8 @@ with Public Methods:
 
 # %% Modules ------------------------------------------------------------------
 
+import time
+
 #3rd party imports
 import numpy as np
 import pyvisa
@@ -140,10 +142,14 @@ class OSA(vo.VISA):
     # Prepare OSA
         if (self.sweep_mode() != 'SING'):
             self.sweep_mode('SING')
+        time.sleep(.05)
         self.write(':ABORt')
+        time.sleep(.05)
         self.write('*WAI')
+        time.sleep(.05)
         wait_for_setup = True
         while wait_for_setup:
+            time.sleep(.05)
             try:
                 wait_for_setup = not(int(self.query('*OPC?').strip()))
             except pyvisa.VisaIOError as visa_err:
@@ -153,9 +159,11 @@ class OSA(vo.VISA):
                     raise visa_err
     # Initiate Sweep
         self.write(':INITiate:IMMediate')
+        time.sleep(.05)
     # Wait for sweep to finish
         wait_for_sweep = True
         while wait_for_sweep:
+            time.sleep(.05)
             try:
                 wait_for_sweep = not(int(self.query('*OPC?').strip()))
             except pyvisa.VisaIOError as visa_err:

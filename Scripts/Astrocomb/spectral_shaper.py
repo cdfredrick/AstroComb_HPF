@@ -478,47 +478,171 @@ def optimize_DW_setpoint(sig=3, max_iter=None):
     search = True
     new_x = [current_angle]
     DWs = []
-    while search:
-        #--- Ensure queues
-        sm.dev[osa_db]['queue'].touch()
-        sm.dev[rot_db]['queue'].touch()
-
-        #--- Measure new OSA trace
-        thread_name = 'get_new_single_quick'
-        (alive, error) = thread[thread_name].check_thread()
-        if error != None:
-            raise error[1].with_traceback(error[2])
-        if not(alive):
-            # Start new thread
-            thread[thread_name].start()
-        # Check Progress
-        while thread[thread_name].is_alive():
-            time.sleep(0.1)
+    try:
+        while search:
+            #--- Ensure queues
             sm.dev[osa_db]['queue'].touch()
             sm.dev[rot_db]['queue'].touch()
-        # Get Result
-        (alive, error) = thread[thread_name].check_thread()
-        if error != None:
-            raise error[1].with_traceback(error[2])
-        else:
-            osa_trace = thread[thread_name].result
-        # Get DW
-        spectrum = np.array(osa_trace['data']['y'])
-        wavelengths = np.array(osa_trace['data']['x'])
-        current_DW = spectrum[wavelengths<740].max()
-        current_bulk = spectrum[wavelengths>800].max()
-
-        #--- Update Model
-        new_y = -current_bulk # maximize the bulk spectrum (dBm)
-        opt_x, diag = optimizer.tell(new_x, new_y, diagnostics=True)
-        # Save dispersive wave amplitude
-        DWs.append(current_DW)
-
-        #--- Calculate Optimal DW Amplitude
-        dw_model = Minimizer.new_model(optimizer.x, DWs, optimizer.dims)
-        opt_DW, opt_DW_std = dw_model.predict(opt_x, return_std=True)
-
-        #--- Write Intermediate Result to Buffer
+    
+            #--- Measure new OSA trace
+            thread_name = 'get_new_single_quick'
+            (alive, error) = thread[thread_name].check_thread()
+            if error != None:
+                raise error[1].with_traceback(error[2])
+            if not(alive):
+                # Start new thread
+                thread[thread_name].start()
+            # Check Progress
+            while thread[thread_name].is_alive():
+                time.sleep(0.1)
+                sm.dev[osa_db]['queue'].touch()
+                sm.dev[rot_db]['queue'].touch()
+            # Get Result
+            (alive, error) = thread[thread_name].check_thread()
+            if error != None:
+                raise error[1].with_traceback(error[2])
+            else:
+                osa_trace = thread[thread_name].result
+            # Get DW
+            spectrum = np.array(osa_trace['data']['y'])
+            wavelengths = np.array(osa_trace['data']['x'])
+            current_DW = spectrum[wavelengths<740].max()
+            current_bulk = spectrum[wavelengths>800].max()
+    
+            #--- Update Model
+            new_y = -current_bulk # maximize the bulk spectrum (dBm)
+            opt_x, diag = optimizer.tell(new_x, new_y, diagnostics=True)
+            # Save dispersive wave amplitude
+            DWs.append(current_DW)
+    
+            #--- Calculate Optimal DW Amplitude
+            dw_model = Minimizer.new_model(optimizer.x, DWs, optimizer.dims)
+            opt_DW, opt_DW_std = dw_model.predict(opt_x, return_std=True)
+    
+            #--- Write Intermediate Result to Buffer
+            with sm.lock[mon_db]:
+                sm.mon[mon_db]['new'] = True
+                sm.mon[mon_db]['data'] = {
+                    'deg':np.array(optimizer.x).flatten().tolist(),
+                    'bulk_dBm':(-np.array(optimizer.y)).tolist(),
+                    'DW_dBm':DWs,
+                    "bulk_model":{
+                        "opt x":opt_x,
+                        "x":optimizer.x, # deg
+                        "y":optimizer.y, # -dBm
+                        "diagnostics":diag,
+                        "n obs":optimizer.n_obs,
+                        "target sig":optimizer.sig,
+                        "time":time.time() - start_time
+                        },
+                    "DW_model":{
+                        "opt x":opt_x,
+                        "x":dw_model.x, # Volts
+                        "y":dw_model.y, # dBm
+                        "diagnostics":dw_model.fitness(test_x=opt_x),
+                        "n obs":dw_model.n_obs,
+                        "target sig":dw_model.sig,
+                        "time":time.time() - start_time
+                        }
+                    }
+                sm.db[mon_db].write_buffer(sm.mon[mon_db]['data'])
+    
+            #--- Check abort flag
+            with sm.lock[CONTROL_DB]:
+                abort_optimization = sm.local_settings[CONTROL_DB]['abort_optimizer']['value']
+                if abort_optimization:
+                    sm.local_settings[CONTROL_DB]['abort_optimizer']['value'] = False
+                    sm.db[CONTROL_DB].write_record_and_buffer(sm.local_settings[CONTROL_DB])
+    
+            #--- Check convergence or end search
+            if optimizer.convergence_count >= 3:
+                converged = True
+                search = False
+            elif max_iter:
+                if optimizer.n_obs >= max_iter:
+                    converged = False
+                    search = False
+                    opt_x = [current_angle]
+                    log_str = ' Model did not converge to {:} sig after {:} samples. Returning to initial point.'.format(
+                        optimizer.sig,
+                        optimizer.n_obs)
+                    warning_id = 'DW optimization'
+                    if (warning_id in warning):
+                        if (time.time() - warning[warning_id]) > warning_interval:
+                            log.log_warning(mod_name, func_name, log_str)
+                    else:
+                        warning[warning_id] = time.time()
+                        log.log_warning(mod_name, func_name, log_str)
+            elif abort_optimization:
+                log_str = ' Optimization aborted, returning to initial point.'
+                log.log_info(mod_name, func_name, log_str)
+                converged = False
+                search = False
+                opt_x = [current_angle]
+    
+            #--- Get new point
+            if search:
+                if not (optimizer.n_obs % 5):
+                    print(" {:} observations, {:.2f} significance, {:.3g}s".format(optimizer.n_obs, diag["significance"], time.time()-start_time))
+                #--- Ask for new point
+                new_x = optimizer.ask()
+                #--- Move to new point
+                sm.dev[rot_db]['driver'].position(new_x[0])
+                #--- Settle time
+                time.sleep(.1)
+                moving = True
+                while moving:
+                    #--- Ensure queues
+                    sm.dev[osa_db]['queue'].touch()
+                    sm.dev[rot_db]['queue'].touch()
+                    # Check if moving
+                    flags = sm.dev[rot_db]['driver'].status()['flags']
+                    if (not flags["moving forward"]) or (not flags["moving reverse"]):
+                        moving = False
+    except:
+        log_str = ' Error encountered optimization aborted, returning to initial point.'
+        log.log_info(mod_name, func_name, log_str)
+        converged = False
+        search = False
+        opt_x = [current_angle]
+    finally:
+    
+        # Optimum output
+        new_angle = opt_x[0]
+        stop_time = time.time()
+    
+        #--- Implement result -------------------------------------------------
+        sm.dev[rot_db]['driver'].position(new_angle)
+        # Update Monitor
+        rot_mon_db = 'broadening_stage/rot_stg_position'
+        with sm.lock[rot_mon_db]:
+            sm.mon[rot_mon_db]['new'] = True
+            sm.mon[rot_mon_db]['data'].append(new_angle)
+    
+        #--- Remove from queue ------------------------------------------------
+        sm.dev[osa_db]['queue'].remove()
+        sm.dev[rot_db]['queue'].remove()
+    
+        #--- Log Result -------------------------------------------------------
+        if converged:
+            log_str = ' Bulk spectrum optimized at {:.2f} deg'.format(new_angle)
+            log.log_info(mod_name, func_name, log_str)
+    
+        #--- Update DW Setpoint -----------------------------------------------
+        if converged:
+            with sm.lock[CONTROL_DB]:
+                log_str = ' Optimal DW = {:.3g}+-{:.2g} dBm'.format(opt_DW, opt_DW_std)
+                log.log_info(mod_name, func_name, log_str)
+                log_str = ' >{:} sig after {:.3g}s and {:} observations'.format(
+                    optimizer.sig,
+                    stop_time - start_time,
+                    optimizer.n_obs)
+                log.log_info(mod_name, func_name, log_str)
+                sm.local_settings[CONTROL_DB]['DW_setpoint']['value'] = opt_DW
+                sm.db[CONTROL_DB].write_record_and_buffer(sm.local_settings[CONTROL_DB])
+    
+    
+        #--- Record result ----------------------------------------------------
         with sm.lock[mon_db]:
             sm.mon[mon_db]['new'] = True
             sm.mon[mon_db]['data'] = {
@@ -532,7 +656,8 @@ def optimize_DW_setpoint(sig=3, max_iter=None):
                     "diagnostics":diag,
                     "n obs":optimizer.n_obs,
                     "target sig":optimizer.sig,
-                    "time":time.time() - start_time
+                    "time":stop_time - start_time,
+                    "converged":converged,
                     },
                 "DW_model":{
                     "opt x":opt_x,
@@ -541,124 +666,12 @@ def optimize_DW_setpoint(sig=3, max_iter=None):
                     "diagnostics":dw_model.fitness(test_x=opt_x),
                     "n obs":dw_model.n_obs,
                     "target sig":dw_model.sig,
-                    "time":time.time() - start_time
+                    "time":stop_time - start_time,
+                    "converged":converged,
                     }
                 }
-            sm.db[mon_db].write_buffer(sm.mon[mon_db]['data'])
-
-        #--- Check abort flag
-        with sm.lock[CONTROL_DB]:
-            abort_optimization = sm.local_settings[CONTROL_DB]['abort_optimizer']['value']
-            if abort_optimization:
-                sm.local_settings[CONTROL_DB]['abort_optimizer']['value'] = False
-                sm.db[CONTROL_DB].write_record_and_buffer(sm.local_settings[CONTROL_DB])
-
-        #--- Check convergence or end search
-        if optimizer.convergence_count >= 3:
-            converged = True
-            search = False
-        elif max_iter:
-            if optimizer.n_obs >= max_iter:
-                converged = False
-                search = False
-                opt_x = [current_angle]
-                log_str = ' Model did not converge to {:} sig after {:} samples. Returning to initial point.'.format(
-                    optimizer.sig,
-                    optimizer.n_obs)
-                warning_id = 'DW optimization'
-                if (warning_id in warning):
-                    if (time.time() - warning[warning_id]) > warning_interval:
-                        log.log_warning(mod_name, func_name, log_str)
-                else:
-                    warning[warning_id] = time.time()
-                    log.log_warning(mod_name, func_name, log_str)
-        elif abort_optimization:
-            log_str = ' Optimization aborted, returning to initial point.'
-            log.log_info(mod_name, func_name, log_str)
-            converged = False
-            search = False
-            opt_x = [current_angle]
-
-        #--- Get new point
-        if search:
-            if not (optimizer.n_obs % 5):
-                print(" {:} observations, {:.2f} significance, {:.3g}s".format(optimizer.n_obs, diag["significance"], time.time()-start_time))
-            #--- Ask for new point
-            new_x = optimizer.ask()
-            #--- Move to new point
-            sm.dev[rot_db]['driver'].position(new_x[0])
-            #--- Settle time
-            time.sleep(.1)
-            moving = True
-            while moving:
-                #--- Ensure queues
-                sm.dev[osa_db]['queue'].touch()
-                sm.dev[rot_db]['queue'].touch()
-                # Check if moving
-                flags = sm.dev[rot_db]['driver'].status()['flags']
-                if (not flags["moving forward"]) or (not flags["moving reverse"]):
-                    moving = False
-
-    # Optimum output
-    new_angle = opt_x[0]
-    stop_time = time.time()
-
-    #--- Implement result -------------------------------------------------
-    sm.dev[rot_db]['driver'].position(new_angle)
-
-    #--- Remove from queue ------------------------------------------------
-    sm.dev[osa_db]['queue'].remove()
-    sm.dev[rot_db]['queue'].remove()
-
-    #--- Log Result -------------------------------------------------------
-    if converged:
-        log_str = ' Bulk spectrum optimized at {:.2f} deg'.format(new_angle)
-        log.log_info(mod_name, func_name, log_str)
-
-    #--- Update DW Setpoint -----------------------------------------------
-    if converged:
-        with sm.lock[CONTROL_DB]:
-            log_str = ' Optimal DW = {:.3g}+-{:.2g} dBm'.format(opt_DW, opt_DW_std)
-            log.log_info(mod_name, func_name, log_str)
-            log_str = ' >{:} sig after {:.3g}s and {:} observations'.format(
-                optimizer.sig,
-                stop_time - start_time,
-                optimizer.n_obs)
-            log.log_info(mod_name, func_name, log_str)
-            sm.local_settings[CONTROL_DB]['DW_setpoint']['value'] = opt_DW
-            sm.db[CONTROL_DB].write_record_and_buffer(sm.local_settings[CONTROL_DB])
-
-
-    #--- Record result ----------------------------------------------------
-    with sm.lock[mon_db]:
-        sm.mon[mon_db]['new'] = True
-        sm.mon[mon_db]['data'] = {
-            'deg':np.array(optimizer.x).flatten().tolist(),
-            'bulk_dBm':(-np.array(optimizer.y)).tolist(),
-            'DW_dBm':DWs,
-            "bulk_model":{
-                "opt x":opt_x,
-                "x":optimizer.x, # deg
-                "y":optimizer.y, # -dBm
-                "diagnostics":diag,
-                "n obs":optimizer.n_obs,
-                "target sig":optimizer.sig,
-                "time":stop_time - start_time,
-                "converged":converged,
-                },
-            "DW_model":{
-                "opt x":opt_x,
-                "x":dw_model.x, # Volts
-                "y":dw_model.y, # dBm
-                "diagnostics":dw_model.fitness(test_x=opt_x),
-                "n obs":dw_model.n_obs,
-                "target sig":dw_model.sig,
-                "time":stop_time - start_time,
-                "converged":converged,
-                }
-            }
-        sm.db[mon_db].write_record_and_buffer(sm.mon[mon_db]['data'])
-    return new_angle, opt_DW, opt_DW_std
+            sm.db[mon_db].write_record_and_buffer(sm.mon[mon_db]['data'])
+        return new_angle, opt_DW, opt_DW_std
 
 
 # Optimize 2nd Stage Z Coupling -----------------------------------------------
@@ -710,38 +723,129 @@ def optimize_z_coupling(sig=3, max_iter=None, stage="in", scan_range=5):
     converged = False
     search = True
     new_x = [current_position]
-    while search:
-        #--- Ensure queues
-        sm.dev[osa_db]['queue'].touch()
-        sm.dev[pz_db]['queue'].touch()
-
-        #--- Measure new OSA trace
-        thread_name = 'get_new_single_quick'
-        (alive, error) = thread[thread_name].check_thread()
-        if error != None:
-            raise error[1].with_traceback(error[2])
-        if not(alive):
-            # Start new thread
-            thread[thread_name].start()
-        # Check Progress
-        while thread[thread_name].is_alive():
-            time.sleep(0.1)
+    try:
+        while search:
+            #--- Ensure queues
             sm.dev[osa_db]['queue'].touch()
             sm.dev[pz_db]['queue'].touch()
-        # Get Result
-        (alive, error) = thread[thread_name].check_thread()
-        if error != None:
-            raise error[1].with_traceback(error[2])
-        else:
-            osa_trace = thread[thread_name].result
-        # Get DW
-        current_DW = np.max(osa_trace['data']['y'])
-
-        #--- Update Model
-        new_y = -current_DW # maximize the DW (dBm)
-        opt_x, diag = optimizer.tell(new_x, new_y, diagnostics=True)
-
-        #--- Write Intermediate Result to Buffer
+    
+            #--- Measure new OSA trace
+            thread_name = 'get_new_single_quick'
+            (alive, error) = thread[thread_name].check_thread()
+            if error != None:
+                raise error[1].with_traceback(error[2])
+            if not(alive):
+                # Start new thread
+                thread[thread_name].start()
+            # Check Progress
+            while thread[thread_name].is_alive():
+                time.sleep(0.1)
+                sm.dev[osa_db]['queue'].touch()
+                sm.dev[pz_db]['queue'].touch()
+            # Get Result
+            (alive, error) = thread[thread_name].check_thread()
+            if error != None:
+                raise error[1].with_traceback(error[2])
+            else:
+                osa_trace = thread[thread_name].result
+            # Get DW
+            current_DW = np.max(osa_trace['data']['y'])
+    
+            #--- Update Model
+            new_y = -current_DW # maximize the DW (dBm)
+            opt_x, diag = optimizer.tell(new_x, new_y, diagnostics=True)
+    
+            #--- Write Intermediate Result to Buffer
+            with sm.lock[mon_db]:
+                sm.mon[mon_db]['new'] = True
+                sm.mon[mon_db]['data'] = {
+                    "V":np.array(optimizer.x).flatten().tolist(), # Volts
+                    "dBm":(-np.array(optimizer.y)).tolist(), # dBm
+                    "model":{
+                        "opt x":opt_x,
+                        "x":optimizer.x, # Volts
+                        "y":optimizer.y, # -dBm
+                        "diagnostics":diag,
+                        "n obs":optimizer.n_obs,
+                        "target sig":optimizer.sig,
+                        "time":time.time() - start_time
+                        }
+                    }
+                sm.db[mon_db].write_buffer(sm.mon[mon_db]['data'])
+    
+            #--- Check abort flag
+            with sm.lock[CONTROL_DB]:
+                abort_optimization = sm.local_settings[CONTROL_DB]['abort_optimizer']['value']
+                if abort_optimization:
+                    sm.local_settings[CONTROL_DB]['abort_optimizer']['value'] = False
+                    sm.db[CONTROL_DB].write_record_and_buffer(sm.local_settings[CONTROL_DB])
+    
+            #--- Check convergence
+            if optimizer.convergence_count >= 3:
+                #--- End the search
+                converged = True
+                search = False
+            elif max_iter:
+                if optimizer.n_obs >= max_iter:
+                    converged = False
+                    search = False
+                    opt_x = [current_position]
+                    log_str = ' Model did not converge to {:} sig after {:} samples, returning to initial point.'.format(
+                        optimizer.sig,
+                        optimizer.n_obs)
+                    warning_id = 'piezo z optimization'
+                    if (warning_id in warning):
+                        if (time.time() - warning[warning_id]) > sm.warning_interval:
+                            log.log_warning(mod_name, func_name, log_str)
+                    else:
+                        warning[warning_id] = time.time()
+                        log.log_warning(mod_name, func_name, log_str)
+            elif abort_optimization:
+                log_str = ' Optimization aborted, returning to initial point.'
+                log.log_info(mod_name, func_name, log_str)
+                converged = False
+                search = False
+                opt_x = [current_position]
+    
+            #--- Get new point
+            if search:
+                if not (optimizer.n_obs % 5):
+                    print(" {:} observations, {:.2f} significance, {:.3g}s".format(optimizer.n_obs, diag["significance"], time.time()-start_time))
+                #--- Ask for new point
+                new_x = optimizer.ask()
+                #--- Move to new point
+                sm.dev[pz_db]['driver'].voltage(new_x[0])
+                # System settle time
+                time.sleep(1)
+    except:
+        log_str = ' Error encountered optimization aborted, returning to initial point.'
+        log.log_info(mod_name, func_name, log_str)
+        converged = False
+        search = False
+        opt_x = [current_position]
+    finally:
+        # Optimum output
+        new_position = opt_x[0]
+        stop_time = time.time()
+    
+        #--- Implement result -------------------------------------------------
+        sm.dev[pz_db]['driver'].voltage(new_position)
+    
+        #--- Remove from queue ------------------------------------------------
+        sm.dev[osa_db]['queue'].remove()
+        sm.dev[pz_db]['queue'].remove()
+    
+        #--- Log Result -------------------------------------------------------
+        if converged:
+            log_str = ' Z '+stage+' piezo optimized at {:.3f}V'.format(new_position)
+            log.log_info(mod_name, func_name, log_str)
+            log_str = ' {:} sig after {:.3g}s and {:} observations'.format(
+                optimizer.sig,
+                stop_time - start_time,
+                optimizer.n_obs)
+            log.log_info(mod_name, func_name, log_str)
+    
+        #--- Record result ----------------------------------------------------
         with sm.lock[mon_db]:
             sm.mon[mon_db]['new'] = True
             sm.mon[mon_db]['data'] = {
@@ -754,95 +858,12 @@ def optimize_z_coupling(sig=3, max_iter=None, stage="in", scan_range=5):
                     "diagnostics":diag,
                     "n obs":optimizer.n_obs,
                     "target sig":optimizer.sig,
-                    "time":time.time() - start_time
+                    "time":stop_time - start_time,
+                    "converged":converged
                     }
                 }
-            sm.db[mon_db].write_buffer(sm.mon[mon_db]['data'])
-
-        #--- Check abort flag
-        with sm.lock[CONTROL_DB]:
-            abort_optimization = sm.local_settings[CONTROL_DB]['abort_optimizer']['value']
-            if abort_optimization:
-                sm.local_settings[CONTROL_DB]['abort_optimizer']['value'] = False
-                sm.db[CONTROL_DB].write_record_and_buffer(sm.local_settings[CONTROL_DB])
-
-        #--- Check convergence
-        if optimizer.convergence_count >= 3:
-            #--- End the search
-            converged = True
-            search = False
-        elif max_iter:
-            if optimizer.n_obs >= max_iter:
-                converged = False
-                search = False
-                opt_x = [current_position]
-                log_str = ' Model did not converge to {:} sig after {:} samples, returning to initial point.'.format(
-                    optimizer.sig,
-                    optimizer.n_obs)
-                warning_id = 'piezo z optimization'
-                if (warning_id in warning):
-                    if (time.time() - warning[warning_id]) > sm.warning_interval:
-                        log.log_warning(mod_name, func_name, log_str)
-                else:
-                    warning[warning_id] = time.time()
-                    log.log_warning(mod_name, func_name, log_str)
-        elif abort_optimization:
-            log_str = ' Optimization aborted, returning to initial point.'
-            log.log_info(mod_name, func_name, log_str)
-            converged = False
-            search = False
-            opt_x = [current_position]
-
-        #--- Get new point
-        if search:
-            if not (optimizer.n_obs % 5):
-                print(" {:} observations, {:.2f} significance, {:.3g}s".format(optimizer.n_obs, diag["significance"], time.time()-start_time))
-            #--- Ask for new point
-            new_x = optimizer.ask()
-            #--- Move to new point
-            sm.dev[pz_db]['driver'].voltage(new_x[0])
-            # System settle time
-            time.sleep(1)
-    # Optimum output
-    new_position = opt_x[0]
-    stop_time = time.time()
-
-    #--- Implement result -------------------------------------------------
-    sm.dev[pz_db]['driver'].voltage(new_position)
-
-    #--- Remove from queue ------------------------------------------------
-    sm.dev[osa_db]['queue'].remove()
-    sm.dev[pz_db]['queue'].remove()
-
-    #--- Log Result -------------------------------------------------------
-    if converged:
-        log_str = ' Z '+stage+' piezo optimized at {:.3f}V'.format(new_position)
-        log.log_info(mod_name, func_name, log_str)
-        log_str = ' {:} sig after {:.3g}s and {:} observations'.format(
-            optimizer.sig,
-            stop_time - start_time,
-            optimizer.n_obs)
-        log.log_info(mod_name, func_name, log_str)
-
-    #--- Record result ----------------------------------------------------
-    with sm.lock[mon_db]:
-        sm.mon[mon_db]['new'] = True
-        sm.mon[mon_db]['data'] = {
-            "V":np.array(optimizer.x).flatten().tolist(), # Volts
-            "dBm":(-np.array(optimizer.y)).tolist(), # dBm
-            "model":{
-                "opt x":opt_x,
-                "x":optimizer.x, # Volts
-                "y":optimizer.y, # -dBm
-                "diagnostics":diag,
-                "n obs":optimizer.n_obs,
-                "target sig":optimizer.sig,
-                "time":stop_time - start_time,
-                "converged":converged
-                }
-            }
-        sm.db[mon_db].write_record_and_buffer(sm.mon[mon_db]['data'])
-    return new_position
+            sm.db[mon_db].write_record_and_buffer(sm.mon[mon_db]['data'])
+        return new_position
 
 
 # Optimize IM Bias ------------------------------------------------------------
@@ -890,38 +911,127 @@ def optimize_IM_bias(sig=3, max_iter=None):
     converged = False
     search = True
     new_x = [current_bias]
-    while search:
-        #--- Ensure queues
-        sm.dev[osa_db]['queue'].touch()
-        sm.dev[IM_db]['queue'].touch()
-
-        #--- Measure new OSA trace
-        thread_name = 'get_new_single_quick'
-        (alive, error) = thread[thread_name].check_thread()
-        if error != None:
-            raise error[1].with_traceback(error[2])
-        if not(alive):
-            # Start new thread
-            thread[thread_name].start()
-        # Check Progress
-        while thread[thread_name].is_alive():
-            time.sleep(0.1)
+    try:
+        while search:
+            #--- Ensure queues
             sm.dev[osa_db]['queue'].touch()
             sm.dev[IM_db]['queue'].touch()
-        # Get Result
-        (alive, error) = thread[thread_name].check_thread()
-        if error != None:
-            raise error[1].with_traceback(error[2])
-        else:
-            osa_trace = thread[thread_name].result
-        # Get DW
-        current_DW = np.max(osa_trace['data']['y'])
-
-        #--- Update Model
-        new_y = -current_DW # maximize the DW (dBm)
-        opt_x, diag = optimizer.tell(new_x, new_y, diagnostics=True)
-
-        #--- Write Intermediate Result to Buffer
+    
+            #--- Measure new OSA trace
+            thread_name = 'get_new_single_quick'
+            (alive, error) = thread[thread_name].check_thread()
+            if error != None:
+                raise error[1].with_traceback(error[2])
+            if not(alive):
+                # Start new thread
+                thread[thread_name].start()
+            # Check Progress
+            while thread[thread_name].is_alive():
+                time.sleep(0.1)
+                sm.dev[osa_db]['queue'].touch()
+                sm.dev[IM_db]['queue'].touch()
+            # Get Result
+            (alive, error) = thread[thread_name].check_thread()
+            if error != None:
+                raise error[1].with_traceback(error[2])
+            else:
+                osa_trace = thread[thread_name].result
+            # Get DW
+            current_DW = np.max(osa_trace['data']['y'])
+    
+            #--- Update Model
+            new_y = -current_DW # maximize the DW (dBm)
+            opt_x, diag = optimizer.tell(new_x, new_y, diagnostics=True)
+    
+            #--- Write Intermediate Result to Buffer
+            with sm.lock[mon_db]:
+                sm.mon[mon_db]['new'] = True
+                sm.mon[mon_db]['data'] = {
+                    'V':np.array(optimizer.x).flatten().tolist(),
+                    'dBm':(-np.array(optimizer.y)).tolist(),
+                    "model":{
+                        "opt x":opt_x,
+                        "x":optimizer.x, # Volts
+                        "y":optimizer.y, # -dBm
+                        "diagnostics":diag,
+                        "n obs":optimizer.n_obs,
+                        "target sig":optimizer.sig,
+                        "time":time.time() - start_time
+                        }
+                    }
+                sm.db[mon_db].write_buffer(sm.mon[mon_db]['data'])
+    
+            #--- Check abort flag
+            with sm.lock[CONTROL_DB]:
+                abort_optimization = sm.local_settings[CONTROL_DB]['abort_optimizer']['value']
+                if abort_optimization:
+                    sm.local_settings[CONTROL_DB]['abort_optimizer']['value'] = False
+                    sm.db[CONTROL_DB].write_record_and_buffer(sm.local_settings[CONTROL_DB])
+    
+            #--- Check convergence
+            if optimizer.convergence_count >= 3:
+                #--- End the search
+                converged = True
+                search = False
+            elif max_iter:
+                if optimizer.n_obs >= max_iter:
+                    converged = False
+                    search = False
+                    opt_x = [current_bias]
+                    log_str = ' Model did not converge to {:} sig after {:} samples, returning to initial point.'.format(
+                        optimizer.sig,
+                        optimizer.n_obs)
+                    warning_id = 'bias optimization'
+                    if (warning_id in warning):
+                        if (time.time() - warning[warning_id]) > warning_interval:
+                            log.log_warning(mod_name, func_name, log_str)
+                    else:
+                        warning[warning_id] = time.time()
+                        log.log_warning(mod_name, func_name, log_str)
+            elif abort_optimization:
+                log_str = ' Optimization aborted, returning to initial point.'
+                log.log_info(mod_name, func_name, log_str)
+                converged = False
+                search = False
+                opt_x = [current_bias]
+    
+            #--- Get new point
+            if search:
+                if not (optimizer.n_obs % 5):
+                    print(" {:} observations, {:.2f} significance, {:.3g}s".format(optimizer.n_obs, diag["significance"], time.time()-start_time))
+                #--- Ask for new point
+                new_x = optimizer.ask()
+                #--- Move to new point
+                sm.dev[IM_db]['driver'].voltage_setpoint(new_x[0])
+    except:
+        log_str = ' Error encountered optimization aborted, returning to initial point.'
+        log.log_info(mod_name, func_name, log_str)
+        converged = False
+        search = False
+        opt_x = [current_bias]
+    finally:
+        # Optimum output
+        new_bias = opt_x[0]
+        stop_time = time.time()
+    
+        #--- Implement result -------------------------------------------------
+        sm.dev[IM_db]['driver'].voltage_setpoint(new_bias)
+    
+        #--- Remove from queue ------------------------------------------------
+        sm.dev[osa_db]['queue'].remove()
+        sm.dev[IM_db]['queue'].remove()
+    
+        #--- Log Result -------------------------------------------------------
+        if converged:
+            log_str = ' IM bias optimized at {:.3f}V'.format(new_bias)
+            log.log_info(mod_name, func_name, log_str)
+            log_str = ' {:} sig after {:.3g}s and {:} observations'.format(
+                optimizer.sig,
+                stop_time - start_time,
+                optimizer.n_obs)
+            log.log_info(mod_name, func_name, log_str)
+    
+        #--- Record result ----------------------------------------------------
         with sm.lock[mon_db]:
             sm.mon[mon_db]['new'] = True
             sm.mon[mon_db]['data'] = {
@@ -934,93 +1044,12 @@ def optimize_IM_bias(sig=3, max_iter=None):
                     "diagnostics":diag,
                     "n obs":optimizer.n_obs,
                     "target sig":optimizer.sig,
-                    "time":time.time() - start_time
+                    "time":stop_time - start_time,
+                    "converged":converged
                     }
                 }
-            sm.db[mon_db].write_buffer(sm.mon[mon_db]['data'])
-
-        #--- Check abort flag
-        with sm.lock[CONTROL_DB]:
-            abort_optimization = sm.local_settings[CONTROL_DB]['abort_optimizer']['value']
-            if abort_optimization:
-                sm.local_settings[CONTROL_DB]['abort_optimizer']['value'] = False
-                sm.db[CONTROL_DB].write_record_and_buffer(sm.local_settings[CONTROL_DB])
-
-        #--- Check convergence
-        if optimizer.convergence_count >= 3:
-            #--- End the search
-            converged = True
-            search = False
-        elif max_iter:
-            if optimizer.n_obs >= max_iter:
-                converged = False
-                search = False
-                opt_x = [current_bias]
-                log_str = ' Model did not converge to {:} sig after {:} samples, returning to initial point.'.format(
-                    optimizer.sig,
-                    optimizer.n_obs)
-                warning_id = 'bias optimization'
-                if (warning_id in warning):
-                    if (time.time() - warning[warning_id]) > warning_interval:
-                        log.log_warning(mod_name, func_name, log_str)
-                else:
-                    warning[warning_id] = time.time()
-                    log.log_warning(mod_name, func_name, log_str)
-        elif abort_optimization:
-            log_str = ' Optimization aborted, returning to initial point.'
-            log.log_info(mod_name, func_name, log_str)
-            converged = False
-            search = False
-            opt_x = [current_bias]
-
-        #--- Get new point
-        if search:
-            if not (optimizer.n_obs % 5):
-                print(" {:} observations, {:.2f} significance, {:.3g}s".format(optimizer.n_obs, diag["significance"], time.time()-start_time))
-            #--- Ask for new point
-            new_x = optimizer.ask()
-            #--- Move to new point
-            sm.dev[IM_db]['driver'].voltage_setpoint(new_x[0])
-    # Optimum output
-    new_bias = opt_x[0]
-    stop_time = time.time()
-
-    #--- Implement result -------------------------------------------------
-    sm.dev[IM_db]['driver'].voltage_setpoint(new_bias)
-
-    #--- Remove from queue ------------------------------------------------
-    sm.dev[osa_db]['queue'].remove()
-    sm.dev[IM_db]['queue'].remove()
-
-    #--- Log Result -------------------------------------------------------
-    if converged:
-        log_str = ' IM bias optimized at {:.3f}V'.format(new_bias)
-        log.log_info(mod_name, func_name, log_str)
-        log_str = ' {:} sig after {:.3g}s and {:} observations'.format(
-            optimizer.sig,
-            stop_time - start_time,
-            optimizer.n_obs)
-        log.log_info(mod_name, func_name, log_str)
-
-    #--- Record result ----------------------------------------------------
-    with sm.lock[mon_db]:
-        sm.mon[mon_db]['new'] = True
-        sm.mon[mon_db]['data'] = {
-            'V':np.array(optimizer.x).flatten().tolist(),
-            'dBm':(-np.array(optimizer.y)).tolist(),
-            "model":{
-                "opt x":opt_x,
-                "x":optimizer.x, # Volts
-                "y":optimizer.y, # -dBm
-                "diagnostics":diag,
-                "n obs":optimizer.n_obs,
-                "target sig":optimizer.sig,
-                "time":stop_time - start_time,
-                "converged":converged
-                }
-            }
-        sm.db[mon_db].write_record_and_buffer(sm.mon[mon_db]['data'])
-    return new_bias
+            sm.db[mon_db].write_record_and_buffer(sm.mon[mon_db]['data'])
+        return new_bias
 
 
 # Optimize Finisar Waveshaper Phase -------------------------------------------
@@ -1071,41 +1100,143 @@ def optimize_optical_phase(sig=3, max_iter=None):
     converged = False
     search = True
     new_x = current_coefs
-    while search:
-        #--- Ensure queues
-        sm.dev[osa_db]['queue'].touch()
-        sm.dev[ws_db]['queue'].touch()
-
-        #--- Measure new OSA trace
-        thread_name = 'get_new_single_quick'
-        (alive, error) = thread[thread_name].check_thread()
-        if error != None:
-            raise error[1].with_traceback(error[2])
-        if not(alive):
-            # Start new thread
-            thread[thread_name].start()
-        # Check Progress
-        while thread[thread_name].is_alive():
-            time.sleep(0.1)
+    try:
+        while search:
+            #--- Ensure queues
             sm.dev[osa_db]['queue'].touch()
             sm.dev[ws_db]['queue'].touch()
-        # Get Result
-        (alive, error) = thread[thread_name].check_thread()
-        if error != None:
-            raise error[1].with_traceback(error[2])
-        else:
-            osa_trace = thread[thread_name].result
-        # Get DW
-        current_DW = np.max(osa_trace['data']['y'])
-
-        #--- Update Model
-        new_y = -current_DW # maximize the DW (dBm)
-        opt_x, diag = optimizer.tell(new_x, new_y, diagnostics=True)
-
-        #--- Write Intermediate Result to Buffer
+    
+            #--- Measure new OSA trace
+            thread_name = 'get_new_single_quick'
+            (alive, error) = thread[thread_name].check_thread()
+            if error != None:
+                raise error[1].with_traceback(error[2])
+            if not(alive):
+                # Start new thread
+                thread[thread_name].start()
+            # Check Progress
+            while thread[thread_name].is_alive():
+                time.sleep(0.1)
+                sm.dev[osa_db]['queue'].touch()
+                sm.dev[ws_db]['queue'].touch()
+            # Get Result
+            (alive, error) = thread[thread_name].check_thread()
+            if error != None:
+                raise error[1].with_traceback(error[2])
+            else:
+                osa_trace = thread[thread_name].result
+            # Get DW
+            current_DW = np.max(osa_trace['data']['y'])
+    
+            #--- Update Model
+            new_y = -current_DW # maximize the DW (dBm)
+            opt_x, diag = optimizer.tell(new_x, new_y, diagnostics=True)
+    
+            #--- Write Intermediate Result to Buffer
+            with sm.lock[mon_db]:
+                sm.mon[mon_db]['new'] = True
+                sm.mon[mon_db]['data'] = {
+                    'coefs':optimizer.x,
+                    'domain':current_polyfit.domain.tolist(),
+                    'dBm':(-np.array(optimizer.y)).tolist(),
+                    "model":{
+                        "opt x":opt_x,
+                        "x":optimizer.x, # 2nd order and above coefs
+                        "y":optimizer.y, # -dBm
+                        "diagnostics":diag,
+                        "n obs":optimizer.n_obs,
+                        "target sig":optimizer.sig,
+                        "time":time.time() - start_time
+                        }
+                    }
+                sm.db[mon_db].write_buffer(sm.mon[mon_db]['data'])
+    
+            #--- Check abort flag
+            with sm.lock[CONTROL_DB]:
+                abort_optimization = sm.local_settings[CONTROL_DB]['abort_optimizer']['value']
+                if abort_optimization:
+                    sm.local_settings[CONTROL_DB]['abort_optimizer']['value'] = False
+                    sm.db[CONTROL_DB].write_record_and_buffer(sm.local_settings[CONTROL_DB])
+    
+            #--- Check convergence
+            if optimizer.convergence_count >= 3:
+                #--- End the search
+                converged = True
+                search = False
+            elif max_iter:
+                if optimizer.n_obs >= max_iter:
+                    converged = False
+                    search = False
+                    opt_x = current_coefs
+                    log_str = ' Model did not converge to {:} sig after {:} samples, returning to initial point'.format(
+                        optimizer.sig,
+                        optimizer.n_obs)
+                    warning_id = 'optical phase optimization'
+                    if (warning_id in warning):
+                        if (time.time() - warning[warning_id]) > warning_interval:
+                            log.log_warning(mod_name, func_name, log_str)
+                    else:
+                        warning[warning_id] = time.time()
+                        log.log_warning(mod_name, func_name, log_str)
+            elif abort_optimization:
+                log_str = ' Optimization aborted, returning to initial point.'
+                log.log_info(mod_name, func_name, log_str)
+                converged = False
+                search = False
+                opt_x = current_coefs
+    
+            #--- Get new point
+            if search:
+                if not (optimizer.n_obs % 5):
+                    print(" {:} observations, {:.2f} significance, {:.3g}s".format(optimizer.n_obs, diag["significance"], time.time()-start_time))
+                #--- Ask for new coefs
+                new_x = optimizer.ask()
+                #--- Calculate phase profile
+                new_poly_fit = np.polynomial.Legendre([0,0]+new_x, domain=current_polyfit.domain)
+                #--- Send new phase profile
+                sm.dev[ws_db]['driver'].phase_profile(new_poly_fit(freqs)) # send phase for the entire waveshaper range
+    except:
+        log_str = ' Error encountered optimization aborted, returning to initial point.'
+        log.log_info(mod_name, func_name, log_str)
+        converged = False
+        search = False
+        opt_x = current_coefs
+    finally:
+        # Optimum output
+        new_coefs = opt_x
+        stop_time = time.time()
+    
+        #--- Implement result -------------------------------------------------
+        # Calculate phase profile
+        new_poly_fit = np.polynomial.Legendre([0,0]+new_coefs, domain=current_polyfit.domain)
+        # Send new phase profile
+        sm.dev[ws_db]['driver'].phase_profile(new_poly_fit(freqs)) # send phase for the entire waveshaper range
+        new_phase = sm.dev[ws_db]['driver'].phase_profile()
+    
+        #--- Remove from queue ------------------------------------------------
+        sm.dev[osa_db]['queue'].remove()
+        sm.dev[ws_db]['queue'].remove()
+    
+        #--- Log Result -------------------------------------------------------
+        if converged:
+            log_str = ' Optical phase optimized with {:}'.format(new_poly_fit)
+            log.log_info(mod_name, func_name, log_str)
+            log_str = ' {:} sig after {:.3g}s and {:} observations'.format(
+                optimizer.sig,
+                stop_time - start_time,
+                optimizer.n_obs)
+            log.log_info(mod_name, func_name, log_str)
+    
+        #--- Record result ----------------------------------------------------
         with sm.lock[mon_db]:
             sm.mon[mon_db]['new'] = True
             sm.mon[mon_db]['data'] = {
+                'filter profile':{
+                    'freq':sm.dev[ws_db]['driver'].freq.tolist(),
+                    'attn':sm.dev[ws_db]['driver'].attn.tolist(),
+                    'phase':sm.dev[ws_db]['driver'].phase.tolist(),
+                    'port':sm.dev[ws_db]['driver'].port.tolist(),
+                    },
                 'coefs':optimizer.x,
                 'domain':current_polyfit.domain.tolist(),
                 'dBm':(-np.array(optimizer.y)).tolist(),
@@ -1116,106 +1247,12 @@ def optimize_optical_phase(sig=3, max_iter=None):
                     "diagnostics":diag,
                     "n obs":optimizer.n_obs,
                     "target sig":optimizer.sig,
-                    "time":time.time() - start_time
+                    "time":stop_time - start_time,
+                    "converged":converged
                     }
                 }
-            sm.db[mon_db].write_buffer(sm.mon[mon_db]['data'])
-
-        #--- Check abort flag
-        with sm.lock[CONTROL_DB]:
-            abort_optimization = sm.local_settings[CONTROL_DB]['abort_optimizer']['value']
-            if abort_optimization:
-                sm.local_settings[CONTROL_DB]['abort_optimizer']['value'] = False
-                sm.db[CONTROL_DB].write_record_and_buffer(sm.local_settings[CONTROL_DB])
-
-        #--- Check convergence
-        if optimizer.convergence_count >= 3:
-            #--- End the search
-            converged = True
-            search = False
-        elif max_iter:
-            if optimizer.n_obs >= max_iter:
-                converged = False
-                search = False
-                opt_x = current_coefs
-                log_str = ' Model did not converge to {:} sig after {:} samples, returning to initial point'.format(
-                    optimizer.sig,
-                    optimizer.n_obs)
-                warning_id = 'optical phase optimization'
-                if (warning_id in warning):
-                    if (time.time() - warning[warning_id]) > warning_interval:
-                        log.log_warning(mod_name, func_name, log_str)
-                else:
-                    warning[warning_id] = time.time()
-                    log.log_warning(mod_name, func_name, log_str)
-        elif abort_optimization:
-            log_str = ' Optimization aborted, returning to initial point.'
-            log.log_info(mod_name, func_name, log_str)
-            converged = False
-            search = False
-            opt_x = current_coefs
-
-        #--- Get new point
-        if search:
-            if not (optimizer.n_obs % 5):
-                print(" {:} observations, {:.2f} significance, {:.3g}s".format(optimizer.n_obs, diag["significance"], time.time()-start_time))
-            #--- Ask for new coefs
-            new_x = optimizer.ask()
-            #--- Calculate phase profile
-            new_poly_fit = np.polynomial.Legendre([0,0]+new_x, domain=current_polyfit.domain)
-            #--- Send new phase profile
-            sm.dev[ws_db]['driver'].phase_profile(new_poly_fit(freqs)) # send phase for the entire waveshaper range
-    # Optimum output
-    new_coefs = opt_x
-    stop_time = time.time()
-
-    #--- Implement result -------------------------------------------------
-    # Calculate phase profile
-    new_poly_fit = np.polynomial.Legendre([0,0]+new_coefs, domain=current_polyfit.domain)
-    # Send new phase profile
-    sm.dev[ws_db]['driver'].phase_profile(new_poly_fit(freqs)) # send phase for the entire waveshaper range
-    new_phase = sm.dev[ws_db]['driver'].phase_profile()
-
-    #--- Remove from queue ------------------------------------------------
-    sm.dev[osa_db]['queue'].remove()
-    sm.dev[ws_db]['queue'].remove()
-
-    #--- Log Result -------------------------------------------------------
-    if converged:
-        log_str = ' Optical phase optimized with {:}'.format(new_poly_fit)
-        log.log_info(mod_name, func_name, log_str)
-        log_str = ' {:} sig after {:.3g}s and {:} observations'.format(
-            optimizer.sig,
-            stop_time - start_time,
-            optimizer.n_obs)
-        log.log_info(mod_name, func_name, log_str)
-
-    #--- Record result ----------------------------------------------------
-    with sm.lock[mon_db]:
-        sm.mon[mon_db]['new'] = True
-        sm.mon[mon_db]['data'] = {
-            'filter profile':{
-                'freq':sm.dev[ws_db]['driver'].freq.tolist(),
-                'attn':sm.dev[ws_db]['driver'].attn.tolist(),
-                'phase':sm.dev[ws_db]['driver'].phase.tolist(),
-                'port':sm.dev[ws_db]['driver'].port.tolist(),
-                },
-            'coefs':optimizer.x,
-            'domain':current_polyfit.domain.tolist(),
-            'dBm':(-np.array(optimizer.y)).tolist(),
-            "model":{
-                "opt x":opt_x,
-                "x":optimizer.x, # 2nd order and above coefs
-                "y":optimizer.y, # -dBm
-                "diagnostics":diag,
-                "n obs":optimizer.n_obs,
-                "target sig":optimizer.sig,
-                "time":stop_time - start_time,
-                "converged":converged
-                }
-            }
-        sm.db[mon_db].write_record_and_buffer(sm.mon[mon_db]['data'])
-    return new_phase
+            sm.db[mon_db].write_record_and_buffer(sm.mon[mon_db]['data'])
+        return new_phase
 
 
 # %% Monitor Routines =========================================================
@@ -1415,6 +1452,7 @@ def adjust_quick(state_db):
         # Update Monitor
         monitor_db = 'broadening_stage/rot_stg_position'
         with sm.lock[monitor_db]:
+            sm.mon[monitor_db]['new'] = True
             sm.mon[monitor_db]['data'].append(current_angle)
 
 

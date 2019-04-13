@@ -1282,7 +1282,7 @@ def monitor_spectrum(state_db):
     # Rotation Mount
         new_data = []
         monitor_db = 'broadening_stage/rot_stg_position'
-        for doc in sm.mon[monitor_db]['cursor']:
+        for doc in sm.mon[monitor_db]['cursor'].read():
             new_data.append(doc['deg'])
         # Update buffers -----------------------
         if len(new_data) > 0:
@@ -1294,7 +1294,7 @@ def monitor_spectrum(state_db):
     # Intensity Modulator Bias
         new_data = []
         monitor_db = 'comb_generator/device_IM_bias'
-        for doc in sm.mon[monitor_db]['cursor']:
+        for doc in sm.mon[monitor_db]['cursor'].read():
             new_data.append(doc['voltage_setpoint'])
         # Update buffers -----------------------
         if len(new_data) > 0:

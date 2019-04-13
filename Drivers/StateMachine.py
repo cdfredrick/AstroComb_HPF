@@ -597,10 +597,10 @@ class Machine():
                     'new':False}
         # External Read Databases------------------------
         for database in self.R_MONITOR_DBs:
-            cursor = self.db[database].read_buffer(tailable_cursor=True, no_cursor_timeout=True)
+            cursor = MongoDB.Cursor(self.db[database])
             self.mon[database] = {
                     'data':[],
-                    'cursor':self.exhaust_cursor(cursor),
+                    'cursor':cursor,
                     'new':False}
 
     # Initialize States -------------------------------------------------------
@@ -1480,16 +1480,6 @@ class Machine():
         result = func(*args, **kwargs)
         return result
 
-    # Exhaust a MongoDB Cursor to Queue up the Most Recent Values -------------
-    @staticmethod
-    def exhaust_cursor(cursor):
-        '''A helper fuction to queue new values from a MongoDB capped
-        collection.
-        '''
-        for doc in cursor:
-            pass
-        return cursor
-
     # Get Values from Nested Dictionary ---------------------------------------
     @staticmethod
     def from_keys(nested_dict, key_list):
@@ -1531,3 +1521,4 @@ class Machine():
         system clock.
         '''
         return int(time.time() // time_interval)
+

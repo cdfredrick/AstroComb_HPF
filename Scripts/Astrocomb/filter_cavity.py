@@ -314,7 +314,7 @@ def monitor(state_db):
     # Pull data from external databases -------------------
         monitor_db = 'filter_cavity/DAQ_error_signal'
         new_data = []
-        for doc in sm.mon[monitor_db]['cursor']:
+        for doc in sm.mon[monitor_db]['cursor'].read():
             new_data.append(doc['V'])
          # Update buffers -----------------------
         if len(new_data) > 0:
@@ -337,7 +337,7 @@ def monitor(state_db):
     # Pull data from external databases -------------------
         monitor_db = 'filter_cavity/TEC_temperature'
         new_data = []
-        for doc in sm.mon[monitor_db]['cursor']:
+        for doc in sm.mon[monitor_db]['cursor'].read():
             new_data.append(doc['V'])
          # Update buffers -----------------------
         if len(new_data) > 0:

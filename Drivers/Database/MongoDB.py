@@ -48,7 +48,33 @@ def sync_to_local_log(local_client, remote_client, database, sync_stop_time=None
     cursor = remote.read_log(start=sync_start_time, stop=sync_stop_time, log_level=logging.DEBUG)
     for doc in cursor:
         local.write_document_to_log(doc)
+
+
+# %% Renewable Cursor =========================================================
+class Cursor():
+    def __init__(self, database):
+        self.database = database
+        self._cursor = self.database.read_buffer(tailable_cursor=True,
+                                                 no_cursor_timeout=True)
+        self.exhaust_cursor()
     
+    def read(self):
+        '''Returns cursor object that automatically renews itself when it dies.'''
+        if not self._cursor.alive:
+            self._cursor = self.database.read_buffer(tailable_cursor=True,
+                                                     no_cursor_timeout=True)
+            self.exhaust_cursor()
+        return self._cursor
+            
+    
+    # Exhaust a MongoDB Cursor to Queue up the Most Recent Values -------------
+    def exhaust_cursor(self):
+        '''A helper fuction to queue new values from a MongoDB capped
+        collection.
+        '''
+        for doc in self._cursor:
+            pass    
+
 
 # %% MongoClient ==============================================================
 
@@ -594,7 +620,7 @@ class LogReadWrite(LogRead):
 # %% DatabaseMaster ===========================================================
 
 class DatabaseMaster(DatabaseReadWrite):
-    def __init__(self, mongo_client, database, capped_collection_size=int(10e6)):
+    def __init__(self, mongo_client, database, capped_collection_size=int(2e6)):
         '''
         The "master" handler for the database. This class enforces the database
             settings as given in the kwargs and ensures that the record and log

@@ -390,7 +390,7 @@ def monitor(state_db):
     # Pull data from external databases -------------------
         monitor_db = 'mll_fR/DAQ_error_signal'
         new_data = []
-        for doc in sm.mon[monitor_db]['cursor']:
+        for doc in sm.mon[monitor_db]['cursor'].read():
             new_data.append(doc['std'])
          # Update buffers -----------------------
         if len(new_data) > 0:

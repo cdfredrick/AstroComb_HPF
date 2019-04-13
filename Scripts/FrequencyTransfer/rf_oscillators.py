@@ -737,7 +737,7 @@ def monitor_PLOs(state_db):
         for monitor_db in ['rf_oscillators/1GHz_phase_lock','rf_oscillators/100MHz_phase_lock']:
             new_bits = []
             new_flips = []
-            for doc in sm.mon[monitor_db]['cursor']:
+            for doc in sm.mon[monitor_db]['cursor'].read():
                 new_bits.append(doc['bit'])
                 new_flips.append(doc['flips'])
              # Update buffers -----------------------

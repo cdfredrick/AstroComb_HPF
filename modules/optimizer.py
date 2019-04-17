@@ -97,16 +97,16 @@ class Minimizer():
             self.y.append(new_y)
         self.n_obs = len(self.x)
 
-        
+
 
         # Expand the model
         if self.n_obs < self.n_init:
             # Update the current model
             self.model = self.optimizer.tell(new_x, new_y)
-            
+
             # Calculate optimum
             opt_x = self.optimum_x()
-            
+
         elif ((self.y_avg is np.nan) or (self.y_scl is np.nan)) and (self.n_obs >= self.n_init):
             # Scale the input data
             self.y_avg = np.average(self.y)
@@ -118,10 +118,10 @@ class Minimizer():
             self.optimizer = skopt.Optimizer(self.dims,
                                              n_initial_points=self.n_init)
             self.model = self.optimizer.tell(x_mdl, y_mdl)
-            
+
             # Calculate optimum
             opt_x = self.optimum_x()
-            
+
         else:
             # Scale the input data
             x_mdl = new_x
@@ -165,6 +165,8 @@ class Minimizer():
                                                  n_initial_points=self.n_init)
                 self.model = self.optimizer.tell(x_mdl,
                                                  y_mdl)
+                # Reset convergenc count
+                self.convergence_count = 0
                 # Calculate optimum
                 opt_x = self.optimum_x()
 

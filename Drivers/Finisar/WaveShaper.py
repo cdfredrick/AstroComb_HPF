@@ -479,9 +479,9 @@ class WS1000S(WaveShaperUSB):
 # %% WaveShaper HTTP API (Ethernet)
 class WaveShaperHTTP():
     def __init__(self):
-        pass
+        self.timeout = 1 # seconds
 
-    def load_profile(self, ip_address, filter_profile, timeout=10):
+    def load_profile(self, ip_address, filter_profile):
         '''Upload filter profile to the WaveShaper.
 
         HTTP method: POST
@@ -507,7 +507,14 @@ class WaveShaperHTTP():
         rctext          Result in text format
         sno             WaveShaper serial number
         '''
-        result = requests.post('http://'+ip_address+'/waveshaper/loadprofile', json.dumps(filter_profile), timeout=timeout)
+        count = 0
+        while count < 3:
+            try:
+                result = requests.post('http://'+ip_address+'/waveshaper/loadprofile', json.dumps(filter_profile), timeout=self.timeout)
+            except requests.exceptions.Timeout:
+                count += 1
+            else:
+                count = 3
         return result
 
     def get_profile(self, ip_address):
@@ -517,7 +524,14 @@ class WaveShaperHTTP():
         URL: http://<_ip_>/waveshaper/getprofile
         Response: Currently loaded WaveShaper filter profile encoded in WSP formatted string.
         '''
-        result = requests.get('http://'+ip_address+'/waveshaper/getprofile').text #.json() or .text?
+        count = 0
+        while count < 3:
+            try:
+                result = requests.get('http://'+ip_address+'/waveshaper/getprofile', timeout=self.timeout).text #.json() or .text?
+            except requests.exceptions.Timeout:
+                count += 1
+            else:
+                count = 3
         return result
 
     def dev_info(self, ip_address):
@@ -537,7 +551,14 @@ class WaveShaperHTTP():
         portcount       Number of output port(s) (number)
         rctext          Result in text format
         '''
-        result = requests.get('http://'+ip_address+'/waveshaper/devinfo').json()
+        count = 0
+        while count < 3:
+            try:
+                result = requests.get('http://'+ip_address+'/waveshaper/devinfo', timeout=self.timeout).json()
+            except requests.exceptions.Timeout:
+                count += 1
+            else:
+                count = 3
         return result
 
 

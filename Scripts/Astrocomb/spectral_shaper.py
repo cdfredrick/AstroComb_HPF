@@ -1079,7 +1079,7 @@ def optimize_optical_phase(sig=3, max_iter=None):
     frq_smp = (freqs > WaveShaper.SPEED_OF_LIGHT_NM_THZ/1070) & (freqs < WaveShaper.SPEED_OF_LIGHT_NM_THZ/1058)
     current_polyfit = np.polynomial.Legendre.fit(freqs[frq_smp], current_phase[frq_smp], 1+opt_orders)
     current_coefs = current_polyfit.coef[2:].tolist()
-    coefs_scan_range = 0.05 * (2*np.pi)
+    coefs_scan_range = 0.5 * (2*np.pi)
     bounds = []
     for idx, coef in enumerate(current_coefs):
         bounds.append((coef - coefs_scan_range/(2), coef + coefs_scan_range/(2)))
@@ -1099,6 +1099,7 @@ def optimize_optical_phase(sig=3, max_iter=None):
     opt_x = copy.copy(new_x)
     try:
         for idx in range(opt_orders):
+            start_time_i = time.time()
             order = idx + 2
             converged = False
             search = True
@@ -1155,7 +1156,7 @@ def optimize_optical_phase(sig=3, max_iter=None):
                             "diagnostics":diag,
                             "n obs":optimizer.n_obs,
                             "target sig":optimizer.sig,
-                            "time":time.time() - start_time
+                            "time":time.time() - start_time_i
                             }
                         }
                     sm.db[mon_db].write_buffer(sm.mon[mon_db]['data'])
@@ -1204,7 +1205,8 @@ def optimize_optical_phase(sig=3, max_iter=None):
                     #--- Send new phase profile
                     sm.dev[ws_db]['driver'].phase_profile(new_poly_fit(freqs)) # send phase for the entire waveshaper range
             #--- Calculate phase profile
-            new_poly_fit = np.polynomial.Legendre([0,0]+opt_x, domain=current_polyfit.domain)
+            new_x[idx] = opt_x[idx]
+            new_poly_fit = np.polynomial.Legendre([0,0]+new_x, domain=current_polyfit.domain)
             #--- Send new phase profile
             sm.dev[ws_db]['driver'].phase_profile(new_poly_fit(freqs)) # send phase for the entire waveshaper range
             #--- Save order's data
@@ -1218,7 +1220,7 @@ def optimize_optical_phase(sig=3, max_iter=None):
                     "diagnostics":diag,
                     "n obs":optimizer.n_obs,
                     "target sig":optimizer.sig,
-                    "time":time.time() - start_time,
+                    "time":time.time() - start_time_i,
                     "converged":converged
                     }
                 }
@@ -1267,6 +1269,9 @@ def optimize_optical_phase(sig=3, max_iter=None):
                 'coefs':new_coefs,
                 'domain':current_polyfit.domain.tolist(),
                 'orders':opt_data,
+                'model':{
+                    "n obs":total_obs,
+                    'time':stop_time - start_time}
                 }
             sm.db[mon_db].write_record_and_buffer(sm.mon[mon_db]['data'])
         return new_phase
@@ -1379,9 +1384,6 @@ def adjust_quick(state_db):
     DW_low = sm.local_settings[CONTROL_DB]['DW_setpoint']['value']-DW_range_threshold # (1-DW_range_threshold)*DW_limits['min'] + DW_range_threshold*DW_limits['max']
 # Wait for OSA queue
     sm.dev[osa_db]['queue'].queue_and_wait()
-# Setup OSA
-    settings_list = STATES['spectral_shaper/state_optimizer']['optimal']['settings']['DW']
-    sm.update_device_settings(osa_db, settings_list, write_log=False)
 # Adjust 2nd Stage Power
     sm.dev[rot_db]['queue'].queue_and_wait()
     continue_adjusting_angle = True
@@ -1391,6 +1393,9 @@ def adjust_quick(state_db):
     # Ensure Queues
         sm.dev[osa_db]['queue'].queue_and_wait()
         sm.dev[rot_db]['queue'].queue_and_wait()
+    # Setup OSA
+        settings_list = STATES['spectral_shaper/state_optimizer']['optimal']['settings']['DW']
+        sm.update_device_settings(osa_db, settings_list, write_log=False)
     # Get New Trace
         thread_name = 'get_new_single_quick'
         (alive, error) = thread[thread_name].check_thread()

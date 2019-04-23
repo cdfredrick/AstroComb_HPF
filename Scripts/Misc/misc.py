@@ -203,13 +203,13 @@ new_poly_fit = np.polynomial.Legendre([0,0]+new_coefs, domain=domain)
 # Send new phase profile
 ws.phase_profile(new_poly_fit(ws.freq))
 
-plt.figure(0)
-plt.clf()
-x = np.linspace(domain[0], domain[1], 1000)
-#plt.plot(WaveShaper.SPEED_OF_LIGHT_NM_THZ/x, old_poly_fit(x))
-plt.plot(WaveShaper.SPEED_OF_LIGHT_NM_THZ/x, new_poly_fit(x))
-plt.ylabel('Phase (rad)')
-plt.xlabel('Wavelength (nm)')
+#plt.figure(0)
+#plt.clf()
+#x = np.linspace(domain[0], domain[1], 1000)
+##plt.plot(WaveShaper.SPEED_OF_LIGHT_NM_THZ/x, old_poly_fit(x))
+#plt.plot(WaveShaper.SPEED_OF_LIGHT_NM_THZ/x, new_poly_fit(x))
+#plt.ylabel('Phase (rad)')
+#plt.xlabel('Wavelength (nm)')
 
 # %% APT Testing
 test = APT.APTDevice("COM19", serial_number=82873587)
@@ -291,6 +291,8 @@ spec_opt.push(message={'control_parameter':{'abort_optimizer':True}})
 
 spec_opt.push(message={'control_parameter':{'setpoint_optimization':0}})
 spec_opt.push(message={'control_parameter':{'setpoint_optimization':tomorrow_at_noon()}})
+
+spec_opt.push(message={'control_parameter':{'DW_setpoint':-40}})
 
 spec_opt.push(message={'control_parameter':{'run_optimizer':{'target':"optimize_z_in_coupling",
                                                              'sig':3}}})

@@ -8,20 +8,28 @@ Created on Fri Apr 12 16:10:41 2019
 # %% Imports
 import math
 import numpy as np
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 from cycler import cycler
+import datetime
+import pytz
 
 from scipy.ndimage.filters import gaussian_filter, median_filter
+from scipy.signal import fftconvolve
+
+# %% Matplotlib Parameters
+
+mpl.rcParams['agg.path.chunksize'] = int(1e9)
 
 # %% Constants
 class Constants():
     pass
-
 constants = Constants()
 
 constants.c = 299792458 #m/s
 constants.c_nm_ps = constants.c*1e-3 # nm/ps, or nm THz
 constants.h = 6.62607e-34 #J s
+
 
 # %% Unit Conversion
 
@@ -36,6 +44,17 @@ def dB(x):
 
 def dBm_to_W(x):
     return 1e-3*10**(x/10)
+
+# %% Time Zones
+utc_tz = pytz.utc
+central_tz = pytz.timezone('US/Central')
+
+def utc_to_ct(dt):
+    return (utc_tz.localize(dt.replace(tzinfo=None))).astimezone(central_tz)
+
+def ct_to_utc_conv(dt):
+    return (central_tz.localize(dt.replace(tzinfo=None))).astimezone(utc_tz)
+
 
 # %% Filtering
 

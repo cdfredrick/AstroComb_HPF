@@ -45,7 +45,7 @@ ct_to_utc_conv = lambda dt: (central_tz.localize(dt.replace(tzinfo=None))).astim
 #start_time = ct_to_utc_conv(datetime.datetime(2018, 5, 1, 0, 0))
 #stop_time = ct_to_utc_conv(datetime.datetime(2018, 10, 15, 0, 0))
 stop_time = datetime.datetime.utcnow()
-start_time = stop_time - datetime.timedelta(days=4)
+start_time = stop_time - datetime.timedelta(days=5)
 #start_time = stop_time - datetime.timedelta(hours=5)
 DBs = {
 #    # ambience ----------------------------------------------------------------
@@ -68,20 +68,20 @@ DBs = {
 #                    'V':lambda v: v*100,
 #                    'std':lambda v: v*100}},
 #    # broadening_stage --------------------------------------------------------
-    'broadening_stage/device_rotation_mount':{
-            'start':start_time, 'stop':stop_time,
-            'keys':{
-                    'position':lambda p: p}},
+#    'broadening_stage/device_rotation_mount':{
+#            'start':start_time, 'stop':stop_time,
+#            'keys':{
+#                    'position':lambda p: p}},
     'broadening_stage/rot_stg_position':{
             'start':start_time, 'stop':stop_time,
             'keys':{
                     'deg':lambda p: p}},
 #    # comb_generator ----------------------------------------------------------
-    'comb_generator/IM_bias':{
-            'start':start_time, 'stop':stop_time,
-            'keys':{
-                   'V':lambda v: v,
-                   'std':lambda v: v}},
+#    'comb_generator/IM_bias':{
+#            'start':start_time, 'stop':stop_time,
+#            'keys':{
+#                   'V':lambda v: v,
+#                   'std':lambda v: v}},
 ##    # cw_laser ----------------------------------------------------------------
 #    'cw_laser/dac_limits':{
 #            'start':start_time, 'stop':stop_time,
@@ -226,11 +226,11 @@ DBs = {
 #                    'ns':lambda s: s,
 #                    'std':lambda s: s}},
 #    # spectral_shaper ---------------------------------------------------------
-##    'spectral_shaper/DW':{
-##            'start':start_time, 'stop':stop_time,
-##            'keys':{
-##                    'dBm':lambda dw: dw,
-##                    'std':lambda dw: dw}},
+    'spectral_shaper/DW':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'dBm':lambda dw: dw,
+                    'std':lambda dw: dw}},
     'spectral_shaper/DW_vs_IM_bias':{
             'start':start_time, 'stop':stop_time,
             'keys':{
@@ -359,7 +359,7 @@ for ind, database in enumerate(DBs):
                 for mask_ind, mask_switch_time in enumerate(mask_data[0]):
                     mask = mask_data[1][mask_ind]
                     start_index = next(iter(idx for idx, timestamp in enumerate(data[database]['data'][0]) if timestamp >= mask_switch_time ))
-    #                start_index += 1 # drop data from the transition period
+                    start_index += 1 # drop data from the transition period
                     stop_index = next(iter(idx for idx, timestamp in enumerate(data[database]['data'][0]) if timestamp >= next(iter(mask_data[0][mask_ind+1:]), data[database]['data'][0][-1])))
                     for spectrum_index in range(start_index, stop_index):
                         if mask:
@@ -521,21 +521,41 @@ for ind, database in enumerate(DBs):
         ax1 = plt.subplot2grid((7,1),(0,0), rowspan=3)
         ax2 = plt.subplot2grid((7,1),(3,0), rowspan=3, sharex=ax1)
         ax3 = plt.subplot2grid((7,1),(6,0))
-        colormap = plt.cm.nipy_spectral
+        colormap = plt.cm.Greys
         ax1.set_prop_cycle(cycler('color',[colormap(i) for i in np.linspace(0, 0.95, len(data_temp))]))
         ax2.set_prop_cycle(cycler('color',[colormap(i) for i in np.linspace(0, 0.95, len(data_temp))]))
         ax3.set_prop_cycle(cycler('color',[colormap(i) for i in np.linspace(0, 0.95, len(data_temp))]))
         for ind2, data_list in enumerate(data_temp):
-            ax1.plot(data_list[0], data_list[1], 'o')#, label=data[database]['deg'][0][ind2])
-            ax2.plot(data_list[0], data_list[2], 'o')#, label=data[database]['deg'][0][ind2])
+            transmission = np.sin(np.pi/180*2*(58-np.array(data_list[0])))**2
+            ax1.plot(transmission, data_list[1], 'o')#, label=data[database]['deg'][0][ind2])
+            ax2.plot(transmission, data_list[2], 'o')#, label=data[database]['deg'][0][ind2])
             ax3.plot(data_list[3], 0, 'o')
+        ax1.set_title('DW Setpoint Optimization')
         ax1.set_ylabel('Bulk')
         ax2.set_ylabel('DW')
         ax3.yaxis.set_visible(False)
         plt.setp(ax3.get_xticklabels(), rotation=30, ha='right')
         #plt.gcf().autofmt_xdate()
         plt.tight_layout()
-
+#    elif database == 'spectral_shaper/DW':
+#        f, axarr = plt.subplots(1, sharex=True)
+#        f.autofmt_xdate()
+#        key = 'dBm'
+#        axe = axarr
+#        axe.plot(data[database][key][0], data[database][key][1],
+#             '.',  markersize=1, label=database+':'+key)
+#        #axe.plot(data[database][key][0], data[database][key][1],
+#        #     'gray',  markersize=1, label=database+':'+key)
+#        axe.set_xlim((start,stop))
+#        #axe.yaxis.set_major_formatter(ticker.EngFormatter(unit='Hz'))
+#        #axe.legend()
+#        axe.set_ylabel('dBm')
+#        axe.set_ylim([-55, -35])
+#        axe.set_title('DW Amplitude')
+#        axe.grid(b=True)
+#        plt.tight_layout()
+#        print(np.diff(data[database][key][0]).max().total_seconds())
+#        print((data[database][key][0][-1] - data[database][key][0][0]).total_seconds())
     else: # All other data
         f, axarr = plt.subplots(len(keys), sharex=True)
         f.autofmt_xdate()

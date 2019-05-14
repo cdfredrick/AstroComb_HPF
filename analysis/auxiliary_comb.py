@@ -238,7 +238,8 @@ fR_z_order = fR_z.argsort()[::-1]
 ax0.scatter(fR_dt[fR_z_order], fR_err[fR_z_order], c=fR_z[fR_z_order], edgecolor='', cmap=plt.cm.Blues_r, s=1, vmax=np.nanmax(fR_z), vmin=np.nanmin(fR_z))
 ax2.scatter(fR_dt, np.abs(fR_err), s=1, c=plt.cm.Blues_r(0), edgecolor='')
 
-ax3.fill_between(data[2][0], data[2][1].astype(np.float), data[2][2].astype(np.float), alpha=.25, step='post')
+if len(data[2]):
+    ax3.fill_between(data[2][0], data[2][1].astype(np.float), data[2][2].astype(np.float), alpha=.25, step='post')
 ax3.plot(data[1][0], data[1][1], '.', markersize=1)
 
 ax0.yaxis.set_major_formatter(ticker.EngFormatter('Hz'))

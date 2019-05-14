@@ -21,7 +21,7 @@ import datetime
 #--- Start
 start_time = None
 #start_time = datetime.datetime(2018, 5, 1)
-#start_time = datetime.datetime.utcnow() - datetime.timedelta(days=10)
+start_time = datetime.datetime.utcnow() - datetime.timedelta(days=3)
 
 #--- Stop
 stop_time = None

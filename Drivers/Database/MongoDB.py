@@ -185,7 +185,7 @@ class DatabaseRead():
     # Set constants
         self.COLLECTION_KEYS = [self.collection_name+key for key in self.COLLECTION_KEYS]
 
-    def read_buffer(self, number_of_documents=1, sort_ascending=False, tailable_cursor=False, no_cursor_timeout=False):
+    def read_buffer(self, number_of_documents=1, sort_ascending=False, tailable_cursor=False, no_cursor_timeout=False, return_single_timestamp=False):
         '''
         Returns an iterable cursor object containing documents from the buffer.
         A tailable cursor remains open after the client exhausts the results in
@@ -211,6 +211,8 @@ class DatabaseRead():
             descending order.
         tailable_cursor: bool, selects whether or not to return a tailable cursor
         no_cursor_timeout: bool, sets action of the cursor timeout
+        return_single_timestamp: bool, selects to keep or remove the internal
+            `_timestamp` key when only one document is returned.
         '''
     # Tailable cursor
         if tailable_cursor:
@@ -233,7 +235,8 @@ class DatabaseRead():
             if len(cursor) == 1:
                 cursor = cursor[0]
                 cursor.pop('_id')
-                cursor.pop('_timestamp')
+                if not return_single_timestamp:
+                    cursor.pop('_timestamp')
                 return cursor
             else:
                 return
@@ -241,7 +244,7 @@ class DatabaseRead():
         # Return the cursor in full
             return cursor
 
-    def read_record(self, start=None, stop=None, number_of_documents=0, sort_ascending=True):
+    def read_record(self, start=None, stop=None, number_of_documents=0, sort_ascending=True, return_single_timestamp=False):
         '''
         Returns an iterable cursor object containing documents from the record.
         The start and stop times are given as datetime.datetime objects. These
@@ -265,6 +268,8 @@ class DatabaseRead():
             cursor. A maximum number of "0" is equivalent to an unlimited amount.
         sort_ascending: bool, selects to sort the cursor either by ascending or
             descending order.
+        return_single_timestamp: bool, selects to keep or remove the internal
+            `_timestamp` key when only one document is returned.
         '''
     # Sort order
         if sort_ascending:
@@ -288,7 +293,8 @@ class DatabaseRead():
             if len(cursor) == 1:
                 cursor = cursor[0]
                 cursor.pop('_id')
-                cursor.pop('_timestamp')
+                if not return_single_timestamp:
+                    cursor.pop('_timestamp')
                 return cursor
             else:
                 return

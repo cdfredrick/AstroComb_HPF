@@ -867,10 +867,13 @@ class Machine():
             self.current_state[state_db] = self.db[state_db].read_buffer()
             with self.lock[state_db]:
                 if len(self.current_state[state_db]):
-                    # Transfer the last know state into the record
-                    self.db[state_db].write_record(
-                        self.current_state[state_db],
-                        timestamp=self.current_state[state_db]['heartbeat'])
+                    # Check for gaps in the last recorded state and the buffer
+                    last_state = self.db[state_db].read_record(number_of_documents=1, sort_ascending=False, return_single_timestamp=True)
+                    if last_state['_timestamp'] < self.current_state[state_db]['heartbeat']:
+                        # Transfer the last know state into the record
+                        self.db[state_db].write_record(
+                            self.current_state[state_db],
+                            timestamp=self.current_state[state_db]['heartbeat'])
                 if self.current_state[state_db]['initialized'] != False:
                     # The current state is not initialized
                     self.current_state[state_db]['initialized'] = False
@@ -941,6 +944,14 @@ class Machine():
             # Update the state variables
                 for state_db in self.STATE_DBs:
                     with self.lock[state_db]:
+                        # Check for gaps in the last recorded state and the buffer
+                        last_state = self.db[state_db].read_record(number_of_documents=1, sort_ascending=False, return_single_timestamp=True)
+                        if last_state['_timestamp'] < self.current_state[state_db]['heartbeat']:
+                            # Transfer the last know state into the record
+                            self.db[state_db].write_record(
+                                self.current_state[state_db],
+                                timestamp=self.current_state[state_db]['heartbeat'])
+                        # Update to uninitialized state
                         if self.current_state[state_db]['initialized'] != False:
                             self.current_state[state_db]['initialized'] = False
                             self.db[state_db].write_record_and_buffer(self.current_state[state_db])

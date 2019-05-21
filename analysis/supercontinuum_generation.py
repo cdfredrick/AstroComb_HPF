@@ -492,7 +492,7 @@ ax1 = plt.subplot2grid((9,1),(2,0), rowspan=2)
 #ax2 = plt.subplot2grid((9,1),(4,0), sharex=ax1)
 
 #fig_1 = plt.figure("Spc.Shp. - DW Setpoint Optimizer:DW")
-ax3 = plt.subplot2grid((9,1),(4,0), rowspan=2)
+ax3 = plt.subplot2grid((9,1),(4,0), rowspan=2, sharex=ax0)
 ax4 = plt.subplot2grid((9,1),(6,0), rowspan=2, sharex=ax1)
 ax5 = plt.subplot2grid((9,1),(8,0), sharex=ax4)
 

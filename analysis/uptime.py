@@ -219,6 +219,107 @@ def uptime(time, compliant, initialized, actual_state, desired_state,
         result["state"][state]["time"] = np.sum(time_delta[is_state]).total_seconds() if len(time_delta[is_state]) else 0.
     return result
 
+# %% RF Osc. - State ==========================================================
+data = [[],[]]
+ut_data = [[],[]]
+try:
+    mongo_client = MongoDB.MongoClient()
+    db_PLO = MongoDB.DatabaseRead(mongo_client,
+                                 'rf_oscillators/state_PLOs')
+    db_Rb = MongoDB.DatabaseRead(mongo_client,
+                                 'rf_oscillators/state_Rb_clock')
+    cursor = db_PLO.read_record(start=start_time, stop=stop_time)
+    for doc in cursor:
+        data[0].append(
+            [doc['_timestamp'],
+             doc['compliance'],
+             doc['initialized'],
+             doc['state'],
+             doc['desired_state'],
+             ])
+    cursor = db_Rb.read_record(start=start_time, stop=stop_time)
+    for doc in cursor:
+        data[1].append(
+            [doc['_timestamp'],
+             doc['compliance'],
+             doc['initialized'],
+             doc['state'],
+             doc['desired_state'],
+             ])
+finally:
+    mongo_client.close()
+for idx in range(len(data)):
+    data[idx] = list(zip(*data[idx]))
+    for idx2 in range(len(data[idx])):
+        data[idx][idx2] = np.array(data[idx][idx2])
+    ut_data[idx] = uptime(*data[idx])
+
+# Plot
+fig_0 = plt.figure("RF Osc. - State")
+plt.clf()
+ax0 = plt.subplot2grid((2,1),(0,0))
+ax1 = plt.subplot2grid((2,1),(1,0), sharex=ax0)
+
+n_0d = len(ut_data[0]['total']['downtime']['start'])
+line_x0 = np.array(
+    [ut_data[0]['total']['downtime']['start'],
+     ut_data[0]['total']['downtime']['start'],
+     ut_data[0]['total']['downtime']['stop'],
+     ut_data[0]['total']['downtime']['stop']]).T.flatten().tolist()
+line_y0 = np.array(
+    [np.nan * np.ones(n_0d),
+     0 * np.ones(n_0d),
+     0 * np.ones(n_0d),
+     np.nan * np.ones(n_0d)]).T.flatten().tolist()
+
+n_0u = len(ut_data[0]['total']['uptime']['start'])
+line_x0.extend(np.array(
+    [ut_data[0]['total']['uptime']['start'],
+     ut_data[0]['total']['uptime']['start'],
+     ut_data[0]['total']['uptime']['stop'],
+     ut_data[0]['total']['uptime']['stop']]).T.flatten().tolist())
+line_y0.extend(np.array(
+    [np.nan * np.ones(n_0u),
+     1 * np.ones(n_0u),
+     1 * np.ones(n_0u),
+     np.nan * np.ones(n_0u)]).T.flatten().tolist())
+
+n_1d = len(ut_data[1]['total']['downtime']['start'])
+line_x1 = np.array(
+    [ut_data[1]['total']['downtime']['start'],
+     ut_data[1]['total']['downtime']['start'],
+     ut_data[1]['total']['downtime']['stop'],
+     ut_data[1]['total']['downtime']['stop']]).T.flatten().tolist()
+line_y1 = np.array(
+    [np.nan * np.ones(n_1d),
+     0 * np.ones(n_1d),
+     0 * np.ones(n_1d),
+     np.nan * np.ones(n_1d)]).T.flatten().tolist()
+
+n_1u = len(ut_data[1]['total']['uptime']['start'])
+line_x1.extend(np.array(
+    [ut_data[1]['total']['uptime']['start'],
+     ut_data[1]['total']['uptime']['start'],
+     ut_data[1]['total']['uptime']['stop'],
+     ut_data[1]['total']['uptime']['stop']]).T.flatten().tolist())
+line_y1.extend(np.array(
+    [np.nan * np.ones(n_1u),
+     1 * np.ones(n_1u),
+     1 * np.ones(n_1u),
+     np.nan * np.ones(n_1u)]).T.flatten().tolist())
+
+ax0.plot(line_x0, line_y0, '.-', markersize=2)
+ax1.plot(line_x1, line_y1, '.-', markersize=2)
+
+ax0.set_title(r"PLOs State ({:.2g}% downtime)".format(100 * ut_data[0]['total']['downtime']['time']/ut_data[0]['total']['time']))
+ax0.set_yticks([0,1])
+
+ax1.set_title(r"Rb Clock State ({:.2g}% downtime)".format(100 * ut_data[1]['total']['downtime']['time']/ut_data[1]['total']['time']))
+ax1.set_yticks([0,1])
+
+fig_0.autofmt_xdate()
+fig_0.tight_layout()
+
 
 # %% Aux. Comb - State ========================================================
 data = [[],[]]
@@ -543,7 +644,7 @@ for idx in range(len(data)):
     data[idx] = list(zip(*data[idx]))
     for idx2 in range(len(data[idx])):
         data[idx][idx2] = np.array(data[idx][idx2])
-    ut_data[idx] = uptime(*data[idx])
+    ut_data[idx] = uptime(*data[idx])#, strict_initialization=True if idx==1 else False)
 
 # Plot
 fig_0 = plt.figure("SC Gen. - State")

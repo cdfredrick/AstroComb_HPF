@@ -87,7 +87,7 @@ n_2 = len(data[2][0])
 
 # Plot
 fig_0 = plt.figure("Env. - Temperature")
-fig_0.set_size_inches([6.4 , 4.78*1.25])
+fig_0.set_size_inches([6.4 , 4.78*1.25], forward=True)
 plt.clf()
 ax0 = plt.subplot2grid((3,1),(0,0))
 ax1 = plt.subplot2grid((3,1),(1,0), sharex=ax0)

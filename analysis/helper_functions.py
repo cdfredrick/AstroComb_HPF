@@ -9,17 +9,21 @@ Created on Fri Apr 12 16:10:41 2019
 import math
 import numpy as np
 import matplotlib as mpl
+#mpl.rcParams['agg.path.chunksize'] = int(1000)
+mpl.rcParams['savefig.dpi'] = 200
+mpl.rcParams["savefig.format"] = 'pdf'
 import matplotlib.pyplot as plt
+
 from cycler import cycler
 import datetime
 import pytz
 
-from scipy.ndimage.filters import gaussian_filter, median_filter
+from scipy.ndimage.filters import gaussian_filter as _gaussian_filter
+from scipy.ndimage.filters import median_filter as _median_filter
 from scipy.signal import fftconvolve
 
-# %% Matplotlib Parameters
+from analysis import adev
 
-mpl.rcParams['agg.path.chunksize'] = int(1e9)
 
 # %% Constants
 class Constants():
@@ -58,14 +62,18 @@ def ct_to_utc_conv(dt):
 
 # %% Filtering
 
+def gaus_avg(x, sig, offsets):
+    np_iter = (np.sum(x * (1/(np.sqrt(2*np.pi)*sig))*np.exp(-np.power(x-center, 2)/(2*sig**2))) for center in offsets)
+    return np.fromiter(np_iter, np.float, count=len(offsets))
+
 def med_filt(array, filt_size, num=1):
     for itteration in range(num):
-        array = median_filter(array, filt_size)
+        array = _median_filter(array, filt_size)
     return array
 
 def gaus_filt(array, filt_size, num=1):
     for itteration in range(num):
-        array = gaussian_filter(array, filt_size)
+        array = _gaussian_filter(array, filt_size)
     return array
 
 

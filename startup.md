@@ -1,3 +1,5 @@
+The following lists the procedure for turning on the astrocomb system. The one-off commands needed to enact these instructions remotely are contained within "Scripts/Misc/misc.py".
+
 1. Check that the liquid chiller is on
 2. Set the IM bias to the last known level
 3. Enable ILX 1's outputs
@@ -65,3 +67,4 @@ If the RIO freqeuncy (optical lock) needs to be adjusted,
 6. Lock the "Optical" signal
 7. Confirm that the filter cavity is still locked
 8. Follow the startup instructions starting at "17"
+

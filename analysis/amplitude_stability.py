@@ -21,9 +21,9 @@ Created on Thu Jul 26 16:09:31 2018
 
 
 # %% Modules
-import datetime
-import pytz
+from analysis import helper_functions as hf
 
+import datetime
 import numpy as np
 import pandas as pd
 
@@ -31,34 +31,32 @@ import matplotlib.pyplot as plt
 from matplotlib import ticker
 from matplotlib.dates import MonthLocator
 
-from analysis import helper_functions as hf
+
 
 from Drivers.Database import MongoDB
 
-central_tz = pytz.timezone('US/Central')
-utc_tz = pytz.utc
+# %% Start/Stop Time
+#--- Start
+start_time = None
+#start_time = datetime.datetime(2018, 5, 1)
+#start_time = datetime.datetime.utcnow() - datetime.timedelta(days=10)
 
-utc_to_ct_conv = lambda dt: (utc_tz.localize(dt.replace(tzinfo=None))).astimezone(central_tz)
-ct_to_utc_conv = lambda dt: (central_tz.localize(dt.replace(tzinfo=None))).astimezone(utc_tz)
+#--- Stop
+stop_time = None
+#stop_time = datetime.datetime(2019, 5, 1)
+#stop_time = datetime.datetime.utcnow()
+
 
 # %% Constants
 
 lens_loss = {'LMH-50X-1064':.39, 'M-60x':1.25, 'LMH-20x-1064':0.03}
 
-import matplotlib as mpl
-mpl.rcParams['savefig.dpi'] = 200
-
-
-# %% Functions
-
-
-
 
 # %% Data
 header = []
 
-start_time = ct_to_utc_conv(datetime.datetime(2018, 5, 1, 0, 0))
-stop_time = utc_tz.localize(datetime.datetime.utcnow())
+start_time = hf.ct_to_utc_conv(datetime.datetime(2018, 5, 1, 0, 0))
+stop_time = hf.utc_tz.localize(datetime.datetime.utcnow())
 #start_time = stop_time - datetime.timedelta(days=2*7)
 
 mongo_client = MongoDB.MongoClient()
@@ -85,7 +83,7 @@ try:
         data['y_std'].append(doc['data']['y_std'] if isinstance(doc['data']['y_std'],list) else [np.nan])
         header.append({'time':doc['_timestamp']})
     data['x'] = pd.DataFrame(data['x']).transpose(copy=True) # each column is a OSA trace
-    data['y'] = pd.DataFrame(data['y']).apply(dBm_to_W, result_type='broadcast').transpose(copy=True) # linear scale, each column is a OSA trace
+    data['y'] = pd.DataFrame(data['y']).apply(hf.dBm_to_W, result_type='broadcast').transpose(copy=True) # linear scale, each column is a OSA trace
     data['y_std'] = pd.DataFrame(data['y_std']).transpose(copy=True) # keep in dB, each column is a OSA trace
     # Dispersive Wave -----------------------------------------------
     data['DW'] = []
@@ -123,18 +121,18 @@ header.loc[mask_index, 'mask'] = np.nan
 
 
 # %% Preliminary Plots
-fig, ax0 = plot_setup(0, len(header.index))
+fig, ax0 = hf.plot_setup(0, len(header.index))
 
 #for spectrum in trace:
 #    plt.plot(spectrum['data']['x'], spectrum['data']['y'])
 #ylim = plt.ylim()
 #plt.ylim((ylim[-1]-100, ylim[-1]))
 idxs = header['time'][header['mask']==0].sort_values().index
-ax0.plot(data['x'].loc[:,idxs], data['y'].loc[:,idxs].apply(dB, result_type='broadcast'))
+ax0.plot(data['x'].loc[:,idxs], data['y'].loc[:,idxs].apply(hf.dB, result_type='broadcast'))
 #ylim = plt.ylim()
 #plt.ylim((ylim[-1]-80, ylim[-1]))
 
-ax1 = complementary_x_ticks(ax0, nm_to_THz, nbins=7)
+ax1 = hf.complementary_x_ticks(ax0, hf.nm_to_THz, nbins=7)
 
 # %% Normalize
 def nantrapz(y, x=None, axis=0):
@@ -189,13 +187,13 @@ output_power = header['adj_output_power'].where(header['adj_output_power'].notna
 output_energy = header['adj_output_energy'].where(header['adj_output_energy'].notna(), other=header['output_energy'])
 ## Frequency Axis
 data['x_nm'] = data['x']
-data['x_THz'] = nm_to_THz(data['x_nm'])
+data['x_THz'] = hf.nm_to_THz(data['x_nm'])
 data['x_mode'] = data['x_THz']*1e12/header['repetition_rate'] # THz * (1e12 Hz)/THz * mode/rep rate(Hz)
 # Power -------------------------------------------------------------
 # Power/nm
 data['y_P/nm'] = data['y'] # P/nm
 # Power/THz
-data['y_P/THz'] = normalize(data['x_THz'], data['y'], output_power, jacobian=c_nm_ps/data['x_THz']**2) # P/THz = P/nm * c/fr**2
+data['y_P/THz'] = normalize(data['x_THz'], data['y'], output_power, jacobian=hf.constants.c_nm_ps/data['x_THz']**2) # P/THz = P/nm * c/fr**2
 # Power/mode
 data['y_P/mode'] = data['y_P/THz'].mul(header['repetition_rate']*1e-12, axis='columns')  # P/mode = P/THz * THz/(1e12 Hz) * rep rate(Hz)/mode
 # Energy ------------------------------------------------------------
@@ -207,22 +205,22 @@ data['y_E/THz'] = data['y_P/THz'].div(header['repetition_rate'], axis='columns')
 data['y_E/mode'] = data['y_P/mode'].div(header['repetition_rate'], axis='columns') # E/(mode*pulse) = (power/mode)*rep_rate(pulses/s)
 # Photons per pulse -------------------------------------------------
 # Photons/nm
-data['y_Ph/nm'] = data['y_E/nm']/(h*c/(data['x_nm']*1e-9)) # N/(nm*pulse) = E/(nm*pulse)/(h c / wl)
+data['y_Ph/nm'] = data['y_E/nm']/(hf.constants.h*hf.constants.c/(data['x_nm']*1e-9)) # N/(nm*pulse) = E/(nm*pulse)/(h c / wl)
 # Photons/THz
-data['y_Ph/THz'] = data['y_E/THz']/(h*data['x_THz']*1e12) # N/(THz*pulse) = E/(THz*pulse)/(h fr)
+data['y_Ph/THz'] = data['y_E/THz']/(hf.constants.h*data['x_THz']*1e12) # N/(THz*pulse) = E/(THz*pulse)/(h fr)
 # Photons/mode
-data['y_Ph/mode'] = data['y_E/mode']/(h*data['x_THz']*1e12) # N/(mode*pulse) = E/(mode*pulse)/(h fr)
+data['y_Ph/mode'] = data['y_E/mode']/(hf.constants.h*data['x_THz']*1e12) # N/(mode*pulse) = E/(mode*pulse)/(h fr)
 # Photons flux ------------------------------------------------------
 # Photons/mode/s
 data['y_Ph/mode/s'] = data['y_Ph/mode'].mul(header['repetition_rate'], axis='columns') # N/s = N/(mode*pulse) * rep_rate(pulses/s)
 
 
 # %% Preliminary Plots
-fig, ax0 = plot_setup(1, len(header.index), size=(6.4*1.5, 4.8))
+fig, ax0 = hf.plot_setup(1, len(header.index), size=(6.4*1.5, 4.8))
 
 idxs = header['time'][header['mask']==0].sort_values().index
 
-ax0.plot(data['x_THz'].loc[:,idxs]*1e12, data['y_Ph/mode/s'].loc[:,idxs].apply(dB, result_type='broadcast'))
+ax0.plot(data['x_THz'].loc[:,idxs]*1e12, data['y_Ph/mode/s'].loc[:,idxs].apply(hf.dB, result_type='broadcast'))
 
 
 #for idx in header['time'][header['mask']==0].sort_values().index:
@@ -246,11 +244,11 @@ ax0.plot(data['x_THz'].loc[:,idxs]*1e12, data['y_Ph/mode/s'].loc[:,idxs].apply(d
 #plt.ylim((ylim[-1]-100, ylim[-1]))
 ax0.xaxis.set_major_formatter(ticker.EngFormatter(unit='Hz'))
 
-ax1 = complementary_x_ticks(ax0, m_to_Hz, formatter=ticker.EngFormatter(unit='m'))
+ax1 = hf.complementary_x_ticks(ax0, hf.m_to_Hz, formatter=ticker.EngFormatter(unit='m'))
 plt.tight_layout()
 
 # %% Output Power
-fig, ax0 = plot_setup(1, 1, size=(6.4*1.5, 4.8))
+fig, ax0 = hf.plot_setup(1, 1, size=(6.4*1.5, 4.8))
 ax0.plot(header['time'][header['mask']==0], header['output_power'][header['mask']==0], '.')
 ax0.yaxis.set_major_formatter(ticker.EngFormatter(unit='W'))
 plt.tight_layout()
@@ -267,12 +265,12 @@ flat = header['time'][header['mask']==0].sort_values().index
 #flat = header['time'][header['mask']==0][header['time']<utc_tz.localize(datetime.datetime(2018, 7, 24))].sort_values().index
 #flat = header['time'][header['mask']==0][header['time']>utc_tz.localize(datetime.datetime(2018, 7, 24))].sort_values().index
 
-ax0.plot(data['x_nm'].loc[:,flat], data['y_P/nm'].loc[:,flat].apply(dB, result_type='broadcast'), color=[31/255, 119/255, 180/255], markersize=1, alpha=0.01)
-ax0.plot(data['x_nm'].loc[:,flat].mean(axis='columns'), data['y_P/nm'].loc[:,flat].apply(dB, result_type='broadcast').mean(axis='columns'), color='0', markersize=0.5, alpha=1)
+ax0.plot(data['x_nm'].loc[:,flat], data['y_P/nm'].loc[:,flat].apply(hf.dB, result_type='broadcast'), color=[31/255, 119/255, 180/255], markersize=1, alpha=0.01)
+ax0.plot(data['x_nm'].loc[:,flat].mean(axis='columns'), data['y_P/nm'].loc[:,flat].apply(hf.dB, result_type='broadcast').mean(axis='columns'), color='0', markersize=0.5, alpha=1)
 
 ax1.plot(data['x_nm'].loc[:,flat], data['y_std'].loc[:,flat], color=[31/255, 119/255, 180/255], markersize=1, alpha=0.01)
 ax1.plot(data['x_nm'].loc[:,flat].mean(axis='columns'), data['y_std'].loc[:,flat].mean(axis='columns'), color=[31/255, 119/255, 180/255], markersize=1, alpha=1, label='1000s Avg')
-ax1.plot(data['x_nm'].loc[:,flat].mean(axis='columns'), data['y_P/nm'].loc[:,flat].apply(dB, result_type='broadcast').std(axis='columns'), color='0', markersize=1, alpha=1, label='Total Avg')
+ax1.plot(data['x_nm'].loc[:,flat].mean(axis='columns'), data['y_P/nm'].loc[:,flat].apply(hf.dB, result_type='broadcast').std(axis='columns'), color='0', markersize=1, alpha=1, label='Total Avg')
 
 ax1.legend()
 
@@ -295,7 +293,7 @@ plt.clf()
 fig.set_size_inches(6.35*1.5, 4.8, forward=True)
 plt.pcolormesh(header['time'].loc[flat],
                data['x_nm'].loc[:,flat].mean(axis='columns'),
-               data['y_P/nm'].loc[:,flat].apply(dB, result_type='broadcast').sub(data['y_P/nm'].loc[:,flat].mean(axis='columns').apply(dB), axis='index'),
+               data['y_P/nm'].loc[:,flat].apply(hf.dB, result_type='broadcast').sub(data['y_P/nm'].loc[:,flat].mean(axis='columns').apply(dB), axis='index'),
                cmap=plt.cm.seismic)
 plt.clim(-2,2)
 c_bar = plt.colorbar()
@@ -313,7 +311,7 @@ plt.clf()
 fig.set_size_inches(6.35*1.5, 4.8, forward=True)
 plt.pcolormesh(header['time'].loc[flat],
                data['x_nm'].loc[:,flat].mean(axis='columns'),
-               (data['y_P/nm'].loc[:,flat].apply(dB, result_type='broadcast').sub(data['y_P/nm'].loc[:,flat].mean(axis='columns').apply(dB), axis='index')).apply(np.abs, result_type='broadcast'),
+               (data['y_P/nm'].loc[:,flat].apply(hf.dB, result_type='broadcast').sub(data['y_P/nm'].loc[:,flat].mean(axis='columns').apply(dB), axis='index')).apply(np.abs, result_type='broadcast'),
                cmap=plt.cm.nipy_spectral)
 plt.clim(0,2)
 c_bar = plt.colorbar()

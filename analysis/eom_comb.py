@@ -141,11 +141,11 @@ fig_0 = plt.figure("EOM Comb - fCW PLL")
 plt.clf()
 
 gs0 = gridspec.GridSpec(2, 1)
-gs00 = gridspec.GridSpecFromSubplotSpec(3, 5, subplot_spec=gs0[0,0], wspace=0, hspace=0)
-gs10 = gridspec.GridSpecFromSubplotSpec(1, 5, subplot_spec=gs0[1,0], wspace=0, hspace=0)
+gs00 = gridspec.GridSpecFromSubplotSpec(3, 10, subplot_spec=gs0[0,0], wspace=0, hspace=0)
+gs10 = gridspec.GridSpecFromSubplotSpec(1, 10, subplot_spec=gs0[1,0], wspace=0, hspace=0)
 
 ax0 = plt.subplot(gs00[1:2+1,0:-1])
-ax1 = plt.subplot(gs00[1:2+1,4:], sharey=ax0)
+ax1 = plt.subplot(gs00[1:2+1,-1], sharey=ax0)
 ax2 = plt.subplot(gs00[0,0:-1], sharex=ax0)
 
 ax3 = plt.subplot(gs10[:,0:-1], sharex=ax0)

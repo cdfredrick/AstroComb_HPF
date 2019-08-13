@@ -84,7 +84,7 @@ def a_dev_ls(t, f, gate=None, sampling='octave', error=False, samples_per_peak=5
     elif isinstance(sampling, int) or isinstance(sampling, float):
         samples = np.unique(np.power(max_n,np.linspace(0, 1, int(sampling))).astype(np.int))
         taus = gate*samples
-        
+
     # Considerations on the Measurement of the Stability of Oscillators with Frequency Counters, Samuel T. Dawkins
     # Calculate Periodigram
     freq, power = LombScargle(t, f).autopower(maximum_frequency=max_freq, samples_per_peak=samples_per_peak)
@@ -104,7 +104,7 @@ def deglitch(dataX, dataY, sig=10, bins=100, plot=False, const=False, detrend=Fa
     # numpy as np,
     # matplotlib.pyplot as plt
     # scipy.interpolate.InterpolatedUnivariateSpline as interpolate
-    
+
     # Format Data -------------------------------------------------------------
     dataX = np.array(dataX)
     dataY = np.array(dataY)
@@ -112,7 +112,7 @@ def deglitch(dataX, dataY, sig=10, bins=100, plot=False, const=False, detrend=Fa
     dataX = dataX[sort_ind]
     dataY = dataY[sort_ind]
     size = dataY.size
-    
+
     # Detrend -----------------------------------------------------------------
     window = int(size/bins) # points
     roll_med = np.empty((2, bins), np.float64)
@@ -126,14 +126,14 @@ def deglitch(dataX, dataY, sig=10, bins=100, plot=False, const=False, detrend=Fa
         roll_med_dev[:, ind] = np.array([np.mean(temp_X), np.sqrt(np.median(np.square(temp_Y - np.median(temp_Y))))])
     trend_Y = interpolate(roll_med[0], roll_med[1], w=1./roll_med_dev[1], k=3)
     detrend_Y = dataY - trend_Y(dataX)
-    
+
     # Deglitch ----------------------------------------------------------------
     med_dev = np.sqrt(np.median(np.square(detrend_Y - np.median(detrend_Y))))
     if const:
         sig_mask = (np.abs(dataY - np.median(dataY)) < sig*med_dev)
     else:
         sig_mask = (np.abs(detrend_Y) < sig*med_dev)
-        
+
     # Plot Results ------------------------------------------------------------
     if plot:
         dataX_0 = dataX[0]

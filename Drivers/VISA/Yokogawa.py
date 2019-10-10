@@ -123,7 +123,7 @@ class OSA(vo.VISA):
     @log.log_this()
     @vo._auto_connect
     def spectrum(self, active_trace=None):
-        """Sweepss OSA's spectrum"""
+        """Retrieves OSA's spectrum"""
         if (active_trace!=None):
             self.active_trace(set_trace=active_trace)
         y_trace = self.query_list(':TRAC:DATA:Y? {:}'.format(self.act_trace))

@@ -433,7 +433,7 @@ thread['get_new_single_quick'] = ThreadFactory(target=sm.dev['spectral_shaper/de
 #--- Optimization Functions ---------------------------------------------------
 
 # Optimize DW Setpoint --------------------------------------------------------
-def optimize_DW_setpoint(sig=3, max_iter=None):
+def optimize_DW_setpoint(sig=3, max_iter=None, n_avg=5):
     # Info
     mod_name = __name__
     func_name = optimize_DW_setpoint.__name__
@@ -486,28 +486,31 @@ def optimize_DW_setpoint(sig=3, max_iter=None):
 
             #--- Measure new OSA trace
             thread_name = 'get_new_single_quick'
-            (alive, error) = thread[thread_name].check_thread()
-            if error != None:
-                raise error[1].with_traceback(error[2])
-            if not(alive):
-                # Start new thread
-                thread[thread_name].start()
-            # Check Progress
-            while thread[thread_name].is_alive():
-                time.sleep(0.1)
-                sm.dev[osa_db]['queue'].touch()
-                sm.dev[rot_db]['queue'].touch()
-            # Get Result
-            (alive, error) = thread[thread_name].check_thread()
-            if error != None:
-                raise error[1].with_traceback(error[2])
-            else:
-                osa_trace = thread[thread_name].result
-            # Get DW
-            spectrum = np.array(osa_trace['data']['y'])
-            wavelengths = np.array(osa_trace['data']['x'])
-            current_DW = spectrum[wavelengths<740].max()
-            current_bulk = spectrum[wavelengths>800].max()
+            current_DW = 0
+            current_bulk = 0
+            for _ in range(n_avg):
+                (alive, error) = thread[thread_name].check_thread()
+                if error != None:
+                    raise error[1].with_traceback(error[2])
+                if not(alive):
+                    # Start new thread
+                    thread[thread_name].start()
+                # Check Progress
+                while thread[thread_name].is_alive():
+                    time.sleep(0.1)
+                    sm.dev[osa_db]['queue'].touch()
+                    sm.dev[rot_db]['queue'].touch()
+                # Get Result
+                (alive, error) = thread[thread_name].check_thread()
+                if error != None:
+                    raise error[1].with_traceback(error[2])
+                else:
+                    osa_trace = thread[thread_name].result
+                # Get DW
+                spectrum = np.array(osa_trace['data']['y'])
+                wavelengths = np.array(osa_trace['data']['x'])
+                current_DW += spectrum[wavelengths<740].max()/n_avg
+                current_bulk += spectrum[wavelengths>800].max()/n_avg
 
             #--- Update Model
             new_y = -current_bulk # maximize the bulk spectrum (dBm)
@@ -599,7 +602,9 @@ def optimize_DW_setpoint(sig=3, max_iter=None):
                     flags = sm.dev[rot_db]['driver'].status()['flags']
                     if (not flags["moving forward"]) or (not flags["moving reverse"]):
                         moving = False
-    except:
+        error = None
+    except Exception as err:
+        error = err
         log_str = ' Error encountered optimization aborted, returning to initial point.'
         log.log_info(mod_name, func_name, log_str)
         converged = False
@@ -640,7 +645,8 @@ def optimize_DW_setpoint(sig=3, max_iter=None):
                 log.log_info(mod_name, func_name, log_str)
                 sm.local_settings[CONTROL_DB]['DW_setpoint']['value'] = opt_DW
                 sm.db[CONTROL_DB].write_record_and_buffer(sm.local_settings[CONTROL_DB])
-
+        if error is not None:
+            raise error
 
         #--- Record result ----------------------------------------------------
         with sm.lock[mon_db]:
@@ -675,7 +681,7 @@ def optimize_DW_setpoint(sig=3, max_iter=None):
 
 
 # Optimize 2nd Stage Z Coupling -----------------------------------------------
-def optimize_z_coupling(sig=3, max_iter=None, stage="in", scan_range=5):
+def optimize_z_coupling(sig=3, max_iter=None, stage="in", scan_range=10, n_avg=5):
     # Info
     mod_name = __name__
     func_name = optimize_z_coupling.__name__
@@ -731,25 +737,27 @@ def optimize_z_coupling(sig=3, max_iter=None, stage="in", scan_range=5):
 
             #--- Measure new OSA trace
             thread_name = 'get_new_single_quick'
-            (alive, error) = thread[thread_name].check_thread()
-            if error != None:
-                raise error[1].with_traceback(error[2])
-            if not(alive):
-                # Start new thread
-                thread[thread_name].start()
-            # Check Progress
-            while thread[thread_name].is_alive():
-                time.sleep(0.1)
-                sm.dev[osa_db]['queue'].touch()
-                sm.dev[pz_db]['queue'].touch()
-            # Get Result
-            (alive, error) = thread[thread_name].check_thread()
-            if error != None:
-                raise error[1].with_traceback(error[2])
-            else:
-                osa_trace = thread[thread_name].result
-            # Get DW
-            current_DW = np.max(osa_trace['data']['y'])
+            current_DW = 0
+            for _ in range(n_avg):
+                (alive, error) = thread[thread_name].check_thread()
+                if error != None:
+                    raise error[1].with_traceback(error[2])
+                if not(alive):
+                    # Start new thread
+                    thread[thread_name].start()
+                # Check Progress
+                while thread[thread_name].is_alive():
+                    time.sleep(0.1)
+                    sm.dev[osa_db]['queue'].touch()
+                    sm.dev[pz_db]['queue'].touch()
+                # Get Result
+                (alive, error) = thread[thread_name].check_thread()
+                if error != None:
+                    raise error[1].with_traceback(error[2])
+                else:
+                    osa_trace = thread[thread_name].result
+                # Get DW
+                current_DW += np.max(osa_trace['data']['y'])/n_avg
 
             #--- Update Model
             new_y = -current_DW # maximize the DW (dBm)
@@ -817,7 +825,9 @@ def optimize_z_coupling(sig=3, max_iter=None, stage="in", scan_range=5):
                 sm.dev[pz_db]['driver'].voltage(new_x[0])
                 # System settle time
                 time.sleep(1)
-    except:
+        error = None
+    except Exception as err:
+        error = err
         log_str = ' Error encountered optimization aborted, returning to initial point.'
         log.log_info(mod_name, func_name, log_str)
         converged = False
@@ -863,11 +873,13 @@ def optimize_z_coupling(sig=3, max_iter=None, stage="in", scan_range=5):
                     }
                 }
             sm.db[mon_db].write_record_and_buffer(sm.mon[mon_db]['data'])
+        if error is not None:
+            raise error
         return new_position
 
 
 # Optimize IM Bias ------------------------------------------------------------
-def optimize_IM_bias(sig=3, max_iter=None):
+def optimize_IM_bias(sig=3, max_iter=None, n_avg=5):
     # Info
     mod_name = __name__
     func_name = optimize_IM_bias.__name__
@@ -919,25 +931,27 @@ def optimize_IM_bias(sig=3, max_iter=None):
 
             #--- Measure new OSA trace
             thread_name = 'get_new_single_quick'
-            (alive, error) = thread[thread_name].check_thread()
-            if error != None:
-                raise error[1].with_traceback(error[2])
-            if not(alive):
-                # Start new thread
-                thread[thread_name].start()
-            # Check Progress
-            while thread[thread_name].is_alive():
-                time.sleep(0.1)
-                sm.dev[osa_db]['queue'].touch()
-                sm.dev[IM_db]['queue'].touch()
-            # Get Result
-            (alive, error) = thread[thread_name].check_thread()
-            if error != None:
-                raise error[1].with_traceback(error[2])
-            else:
-                osa_trace = thread[thread_name].result
-            # Get DW
-            current_DW = np.max(osa_trace['data']['y'])
+            current_DW = 0
+            for _ in range(n_avg):
+                (alive, error) = thread[thread_name].check_thread()
+                if error != None:
+                    raise error[1].with_traceback(error[2])
+                if not(alive):
+                    # Start new thread
+                    thread[thread_name].start()
+                # Check Progress
+                while thread[thread_name].is_alive():
+                    time.sleep(0.1)
+                    sm.dev[osa_db]['queue'].touch()
+                    sm.dev[IM_db]['queue'].touch()
+                # Get Result
+                (alive, error) = thread[thread_name].check_thread()
+                if error != None:
+                    raise error[1].with_traceback(error[2])
+                else:
+                    osa_trace = thread[thread_name].result
+                # Get DW
+                current_DW += np.max(osa_trace['data']['y'])/n_avg
 
             #--- Update Model
             new_y = -current_DW # maximize the DW (dBm)
@@ -1003,7 +1017,9 @@ def optimize_IM_bias(sig=3, max_iter=None):
                 new_x = optimizer.ask()
                 #--- Move to new point
                 sm.dev[IM_db]['driver'].voltage_setpoint(new_x[0])
-    except:
+        error = None
+    except Exception as err:
+        error = err
         log_str = ' Error encountered optimization aborted, returning to initial point.'
         log.log_info(mod_name, func_name, log_str)
         converged = False
@@ -1049,11 +1065,13 @@ def optimize_IM_bias(sig=3, max_iter=None):
                     }
                 }
             sm.db[mon_db].write_record_and_buffer(sm.mon[mon_db]['data'])
+        if error is not None:
+            raise error
         return new_bias
 
 
 # Optimize Finisar Waveshaper Phase -------------------------------------------
-def optimize_optical_phase(sig=3, max_iter=None):
+def optimize_optical_phase(sig=3, max_iter=None, n_avg=5):
     # Info
     mod_name = __name__
     func_name = optimize_optical_phase.__name__
@@ -1115,25 +1133,27 @@ def optimize_optical_phase(sig=3, max_iter=None):
 
                 #--- Measure new OSA trace
                 thread_name = 'get_new_single_quick'
-                (alive, error) = thread[thread_name].check_thread()
-                if error != None:
-                    raise error[1].with_traceback(error[2])
-                if not(alive):
-                    # Start new thread
-                    thread[thread_name].start()
-                # Check Progress
-                while thread[thread_name].is_alive():
-                    time.sleep(0.1)
-                    sm.dev[osa_db]['queue'].touch()
-                    sm.dev[ws_db]['queue'].touch()
-                # Get Result
-                (alive, error) = thread[thread_name].check_thread()
-                if error != None:
-                    raise error[1].with_traceback(error[2])
-                else:
-                    osa_trace = thread[thread_name].result
-                # Get DW
-                current_DW = np.max(osa_trace['data']['y'])
+                current_DW = 0
+                for _ in range(n_avg):
+                    (alive, error) = thread[thread_name].check_thread()
+                    if error != None:
+                        raise error[1].with_traceback(error[2])
+                    if not(alive):
+                        # Start new thread
+                        thread[thread_name].start()
+                    # Check Progress
+                    while thread[thread_name].is_alive():
+                        time.sleep(0.1)
+                        sm.dev[osa_db]['queue'].touch()
+                        sm.dev[ws_db]['queue'].touch()
+                    # Get Result
+                    (alive, error) = thread[thread_name].check_thread()
+                    if error != None:
+                        raise error[1].with_traceback(error[2])
+                    else:
+                        osa_trace = thread[thread_name].result
+                    # Get DW
+                    current_DW += np.max(osa_trace['data']['y'])/n_avg
 
                 #--- Update Model
                 new_y = -current_DW # maximize the DW (dBm)
@@ -1224,12 +1244,15 @@ def optimize_optical_phase(sig=3, max_iter=None):
                     "converged":converged
                     }
                 }
-    except:
+        error = None
+    except Exception as err:
+        error = err
         log_str = ' Error encountered optimization aborted, returning to initial point.'
         log.log_info(mod_name, func_name, log_str)
         converged = False
         search = False
         opt_x = current_coefs
+        raise
     finally:
         # Optimum output
         new_coefs = opt_x
@@ -1274,6 +1297,8 @@ def optimize_optical_phase(sig=3, max_iter=None):
                     'time':stop_time - start_time}
                 }
             sm.db[mon_db].write_record_and_buffer(sm.mon[mon_db]['data'])
+        if error is not None:
+            raise error
         return new_phase
 
 
@@ -1597,8 +1622,8 @@ def optimize_setpoints(state_db):
             sm.local_settings[CONTROL_DB]['setpoint_optimization']['value'] = tomorrow_at_noon()
             sm.db[CONTROL_DB].write_record_and_buffer(sm.local_settings[CONTROL_DB])
         # Run Optimizers
-        optimize_z_coupling(sig=3, stage="in", scan_range=10)
-        optimize_z_coupling(sig=3, stage="out", scan_range=10)
+        optimize_z_coupling(sig=3, stage="in", scan_range=20)
+        optimize_z_coupling(sig=3, stage="out", scan_range=20)
         optimize_IM_bias(sig=3)
         optimize_optical_phase(sig=3)
         optimize_DW_setpoint(sig=3)
@@ -1615,18 +1640,22 @@ def optimize_setpoints(state_db):
             sig = run_optimizer['sig']
         else:
             sig = 3
+        if 'n_avg' in run_optimizer:
+            n_avg = run_optimizer['n_avg']
+        else:
+            n_avg = 5
         target = run_optimizer['target']
         if target in optimizer_functions:
             if target == "optimize_DW_setpoint":
-                optimize_DW_setpoint(sig=sig)
+                optimize_DW_setpoint(sig=sig, n_avg=n_avg)
             elif target == "optimize_z_in_coupling":
-                optimize_z_coupling(sig=sig, stage="in", scan_range=10)
+                optimize_z_coupling(sig=sig, stage="in", scan_range=20, n_avg=n_avg)
             elif target == "optimize_z_out_coupling":
-                optimize_z_coupling(sig=sig, stage="out", scan_range=10)
+                optimize_z_coupling(sig=sig, stage="out", scan_range=20, n_avg=n_avg)
             elif target == "optimize_IM_bias":
-                optimize_IM_bias(sig=sig)
+                optimize_IM_bias(sig=sig, n_avg=n_avg)
             elif target == "optimize_optical_phase":
-                optimize_optical_phase(sig=sig)
+                optimize_optical_phase(sig=sig, n_avg=n_avg)
 
 
 # %% States ===================================================================

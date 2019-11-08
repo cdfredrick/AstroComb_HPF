@@ -8,7 +8,6 @@ Created on Fri Apr 12 17:11:55 2019
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import ticker
-from matplotlib import gridspec
 
 from Drivers.Database import MongoDB
 
@@ -21,6 +20,7 @@ import datetime
 start_time = None
 #start_time = datetime.datetime(2018, 5, 1)
 #start_time = datetime.datetime.utcnow() - datetime.timedelta(days=10)
+start_time = datetime.datetime.utcnow() - datetime.timedelta(weeks=4)
 
 #--- Stop
 stop_time = None
@@ -101,9 +101,9 @@ n_1 = len(data[2][0])
 fig_0 = plt.figure("Aux. Comb - f0 PLL")
 plt.clf()
 
-gs0 = gridspec.GridSpec(2, 1)
-gs00 = gridspec.GridSpecFromSubplotSpec(3, 10, subplot_spec=gs0[0,0], wspace=0, hspace=0)
-gs10 = gridspec.GridSpecFromSubplotSpec(1, 10, subplot_spec=gs0[1,0], wspace=0, hspace=0)
+gs0 = plt.matplotlib.gridspec.GridSpec(2, 1)
+gs00 = plt.matplotlib.gridspec.GridSpecFromSubplotSpec(3, 10, subplot_spec=gs0[0,0], wspace=0, hspace=0)
+gs10 = plt.matplotlib.gridspec.GridSpecFromSubplotSpec(1, 10, subplot_spec=gs0[1,0], wspace=0, hspace=0)
 
 ax0 = plt.subplot(gs00[1:2+1,0:-1])
 ax1 = plt.subplot(gs00[1:2+1,-1], sharey=ax0)
@@ -128,7 +128,6 @@ ax3.fill_between(data[2][0], data[2][1].astype(np.float), data[2][2].astype(np.f
 ax3.plot(data[1][0], data[1][1].astype(np.float), '.', markersize=1)
 
 ax0.yaxis.set_major_formatter(ticker.EngFormatter('Hz'))
-ax0.autoscale(axis='x', tight=True)
 f0_std = np.sqrt(np.median((data[0][1] - np.median(data[0][1]))**2))
 ax0.set_ylim([-10*f0_std, 10*f0_std])
 
@@ -140,6 +139,7 @@ ax2.yaxis.set_major_formatter(ticker.EngFormatter('Hz'))
 ax2.yaxis.set_minor_formatter(ticker.NullFormatter())
 ax2.set_ylim([ax0.get_ylim()[1], ax2.get_ylim()[1]])
 ax2.autoscale(axis='x', tight=True)
+
 
 ax1.hist(data[0][1].astype(np.float), bins=10000, density=True, orientation="horizontal", range=(-1000*f0_std, 1000*f0_std))
 
@@ -163,6 +163,11 @@ for label in ax3.xaxis.get_ticklabels():
     label.set_ha('right')
     label.set_rotation(30)
 
+ax0.grid(True, alpha=0.25)
+ax1.grid(True, alpha=0.25)
+ax2.grid(True, alpha=0.25)
+ax3.grid(True, alpha=0.25)
+ax0.autoscale(axis='x', tight=True)
 fig_0.tight_layout()
 
 
@@ -209,9 +214,9 @@ n_2 = len(data[1][0])
 fig_0 = plt.figure("Aux. Comb - fR PLL")
 plt.clf()
 
-gs0 = gridspec.GridSpec(2, 1)
-gs00 = gridspec.GridSpecFromSubplotSpec(3, 10, subplot_spec=gs0[0,0], wspace=0, hspace=0)
-gs10 = gridspec.GridSpecFromSubplotSpec(1, 10, subplot_spec=gs0[1,0], wspace=0, hspace=0)
+gs0 = plt.matplotlib.gridspec.GridSpec(2, 1)
+gs00 = plt.matplotlib.gridspec.GridSpecFromSubplotSpec(3, 10, subplot_spec=gs0[0,0], wspace=0, hspace=0)
+gs10 = plt.matplotlib.gridspec.GridSpecFromSubplotSpec(1, 10, subplot_spec=gs0[1,0], wspace=0, hspace=0)
 
 ax0 = plt.subplot(gs00[1:2+1,0:-1])
 ax1 = plt.subplot(gs00[1:2+1,-1], sharey=ax0)
@@ -243,7 +248,6 @@ if len(data[2]):
 ax3.plot(data[1][0], data[1][1], '.', markersize=1)
 
 ax0.yaxis.set_major_formatter(ticker.EngFormatter('Hz'))
-ax0.autoscale(axis='x', tight=True)
 fR_std = np.sqrt(np.median((fR_err - np.median(fR_err))**2))
 ax0.set_ylim([-10*fR_std, 10*fR_std])
 
@@ -279,6 +283,11 @@ for label in ax3.xaxis.get_ticklabels():
     label.set_ha('right')
     label.set_rotation(30)
 
+ax0.grid(True, alpha=0.25)
+ax1.grid(True, alpha=0.25)
+ax2.grid(True, alpha=0.25)
+ax3.grid(True, alpha=0.25)
+ax0.autoscale(axis='x', tight=True)
 fig_0.tight_layout()
 
 
@@ -334,15 +343,18 @@ ax2.plot(data[2][0], data[2][1], '.', markersize=1)
 
 ax0.set_title(r"f$_R$ Piezo Voltage")
 ax0.yaxis.set_major_formatter(ticker.EngFormatter('V'))
-ax0.autoscale(axis='x', tight=True)
+
 
 ax1.set_title(r"TEC Current")
 ax1.yaxis.set_major_formatter(ticker.EngFormatter('A'))
-ax1.autoscale(axis='x', tight=True)
 
 ax2.set_title(r"Thermistor Resistance")
 ax2.yaxis.set_major_formatter(ticker.EngFormatter(r'$\Omega$'))
-ax2.autoscale(axis='x', tight=True)
+
+ax0.autoscale(axis='x', tight=True)
+ax0.grid(True, alpha=0.25)
+ax1.grid(True, alpha=0.25)
+ax2.grid(True, alpha=0.25)
 
 fig_0.autofmt_xdate()
 fig_0.tight_layout()

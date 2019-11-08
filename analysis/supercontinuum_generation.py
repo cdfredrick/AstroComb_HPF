@@ -20,9 +20,11 @@ import datetime
 
 # %% Start/Stop Time
 #--- Start
-start_time = None
-#start_time = datetime.datetime(2018, 5, 1)
-#start_time = datetime.datetime.utcnow() - datetime.timedelta(days=10)
+#start_time = None
+start_time = datetime.datetime(2018, 5, 1)
+#start_time = datetime.datetime.utcnow() - datetime.timedelta(days=14)
+#start_time = datetime.datetime.utcnow() - datetime.timedelta(weeks=4)
+#start_time = datetime.datetime.utcnow() - datetime.timedelta(days=4)
 
 #--- Stop
 stop_time = None
@@ -113,14 +115,15 @@ ax1 = plt.subplot2grid((2,1), (1,0), sharex=ax0)
 ax0.plot(data[0], data[1], '.', markersize=1)
 ax0.set_ylabel("Angle (deg)")
 ax0.set_title("Position")
-ax0.grid()
+ax0.grid(True, alpha=0.25)
 
 ax1.plot(data[0], deg_to_pwr(data[1].astype(np.float)), '.', markersize=1)
 ax1.set_title("Transmission")
 ax1.set_ylabel("Power (arb. unit)")
-ax1.grid()
+ax1.grid(True, alpha=0.25)
 
 fig.autofmt_xdate()
+ax0.autoscale(axis='x', tight=True)
 plt.tight_layout()
 
 
@@ -183,6 +186,9 @@ ax1.set_title("NT-In Position")
 ax1.set_ylabel("arb. units")
 
 fig_0.autofmt_xdate()
+ax0.grid(True, alpha=0.25)
+ax1.grid(True, alpha=0.25)
+ax0.autoscale(axis='x', tight=True)
 fig_0.tight_layout()
 
 
@@ -245,116 +251,119 @@ ax1.set_title("NT-Out Position")
 ax1.set_ylabel("arb. units")
 
 fig_0.autofmt_xdate()
+ax0.grid(True, alpha=0.25)
+ax1.grid(True, alpha=0.25)
+ax0.autoscale(axis='x', tight=True)
 fig_0.tight_layout()
 
 
 # %% Brd.Stg. - 2nd Stage Input Optimizer =====================================
-data = []
-try:
-    mongo_client = MongoDB.MongoClient()
-    db = MongoDB.DatabaseRead(mongo_client,
-                              'broadening_stage/2nd_stage_z_in_optimizer')
-    cursor = db.read_record(start=start_time, stop=stop_time)
-    for doc in cursor:
-        data.append(
-            [doc['_timestamp'],
-             doc['V'],
-             doc['A'],
-             doc['model']])
-finally:
-    mongo_client.close()
-data = np.array(data).T
-n = len(data[0])
-
-# Plot
-fig = plt.figure("Brd.Stg. - 2nd Stage Input Optimizer")
-plt.clf()
-ax0 = plt.subplot2grid((5,1),(0,0), rowspan=2)
-ax1 = plt.subplot2grid((5,1),(2,0), rowspan=2)
-ax2 = plt.subplot2grid((5,1),(4,0), sharex=ax1)
-
-colormap = plt.cm.nipy_spectral
-ax0.set_prop_cycle(color=colormap(np.linspace(0, 0.95, n)))
-ax1.set_prop_cycle(color=colormap(np.linspace(0, 0.95, n)))
-ax2.set_prop_cycle(color=colormap(np.linspace(0, 0.95, n)))
-
-for idx in range(n):
-    ax0.plot(data[1, idx], data[2, idx], 'o')
-    ax1.plot(data[0, idx], data[3, idx]['opt x'][0], 'o')
-    ax2.plot(data[0, idx], 0, 'o')
-
-ax0.set_title("2nd Stage Input Optimization")
-ax0.set_ylabel("TIA Current")
-ax0.set_xlabel("HV Output")
-ax0.xaxis.set_major_formatter(ticker.EngFormatter('V'))
-ax0.yaxis.set_major_formatter(ticker.EngFormatter('A'))
-
-ax1.set_title("Optimum Voltage")
-ax1.set_ylabel("Voltage")
-for label in ax1.xaxis.get_ticklabels():
-    label.set_ha('right')
-    label.set_rotation(30)
-
-ax2.xaxis.tick_top()
-for label in ax2.xaxis.get_ticklabels():
-    label.set_visible(False)
-ax2.yaxis.set_ticks([])
-
-plt.tight_layout()
+#data = []
+#try:
+#    mongo_client = MongoDB.MongoClient()
+#    db = MongoDB.DatabaseRead(mongo_client,
+#                              'broadening_stage/2nd_stage_z_in_optimizer')
+#    cursor = db.read_record(start=start_time, stop=stop_time)
+#    for doc in cursor:
+#        data.append(
+#            [doc['_timestamp'],
+#             doc['V'],
+#             doc['A'],
+#             doc['model']])
+#finally:
+#    mongo_client.close()
+#data = np.array(data).T
+#n = len(data[0])
+#
+## Plot
+#fig = plt.figure("Brd.Stg. - 2nd Stage Input Optimizer")
+#plt.clf()
+#ax0 = plt.subplot2grid((5,1),(0,0), rowspan=2)
+#ax1 = plt.subplot2grid((5,1),(2,0), rowspan=2)
+#ax2 = plt.subplot2grid((5,1),(4,0), sharex=ax1)
+#
+#colormap = plt.cm.nipy_spectral
+#ax0.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
+#ax1.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
+#ax2.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
+#
+#for idx in range(n):
+#    ax0.plot(data[1, idx], data[2, idx], 'o')
+#    ax1.plot(data[0, idx], data[3, idx]['opt x'][0], 'o')
+#    ax2.plot(data[0, idx], 0, 'o')
+#
+#ax0.set_title("2nd Stage Input Optimization")
+#ax0.set_ylabel("TIA Current")
+#ax0.set_xlabel("HV Output")
+#ax0.xaxis.set_major_formatter(ticker.EngFormatter('V'))
+#ax0.yaxis.set_major_formatter(ticker.EngFormatter('A'))
+#
+#ax1.set_title("Optimum Voltage")
+#ax1.set_ylabel("Voltage")
+#for label in ax1.xaxis.get_ticklabels():
+#    label.set_ha('right')
+#    label.set_rotation(30)
+#
+#ax2.xaxis.tick_top()
+#for label in ax2.xaxis.get_ticklabels():
+#    label.set_visible(False)
+#ax2.yaxis.set_ticks([])
+#
+#plt.tight_layout()
 
 
 # %% Brd.Stg. - 2nd Stage Output Optimizer ====================================
-data = []
-try:
-    mongo_client = MongoDB.MongoClient()
-    db = MongoDB.DatabaseRead(mongo_client,
-                              'broadening_stage/2nd_stage_z_out_optimizer')
-    cursor = db.read_record(start=start_time, stop=stop_time)
-    for doc in cursor:
-        data.append(
-            [doc['_timestamp'],
-             doc['V'],
-             doc['A'],
-             doc['model']])
-finally:
-    mongo_client.close()
-data = np.array(data).T
-n = len(data[0])
-
-# Plot
-fig = plt.figure("Brd.Stg. - 2nd Stage Output Optimizer")
-plt.clf()
-ax0 = plt.subplot2grid((5,1),(0,0), rowspan=2)
-ax1 = plt.subplot2grid((5,1),(2,0), rowspan=2)
-ax2 = plt.subplot2grid((5,1),(4,0), sharex=ax1)
-
-colormap = plt.cm.nipy_spectral
-ax0.set_prop_cycle(color=colormap(np.linspace(0, 0.95, n)))
-ax1.set_prop_cycle(color=colormap(np.linspace(0, 0.95, n)))
-ax2.set_prop_cycle(color=colormap(np.linspace(0, 0.95, n)))
-
-for idx in range(n):
-    ax0.plot(data[1, idx], data[2, idx], 'o')
-    ax1.plot(data[0, idx], data[3, idx]['opt x'][0], 'o')
-    ax2.plot(data[0, idx], 0, 'o')
-
-ax0.set_title("2nd Stage Output Optimization")
-ax0.set_ylabel("TIA Current")
-ax0.set_xlabel("Voltage")
-ax0.yaxis.set_major_formatter(ticker.EngFormatter('A'))
-
-ax1.set_title("Optimum Voltage")
-ax1.set_ylabel("Voltage")
-for label in ax1.xaxis.get_ticklabels():
-    label.set_ha('right')
-    label.set_rotation(30)
-
-ax2.xaxis.tick_top()
-for label in ax2.xaxis.get_ticklabels():
-    label.set_visible(False)
-ax2.yaxis.set_ticks([])
-
-plt.tight_layout()
+#data = []
+#try:
+#    mongo_client = MongoDB.MongoClient()
+#    db = MongoDB.DatabaseRead(mongo_client,
+#                              'broadening_stage/2nd_stage_z_out_optimizer')
+#    cursor = db.read_record(start=start_time, stop=stop_time)
+#    for doc in cursor:
+#        data.append(
+#            [doc['_timestamp'],
+#             doc['V'],
+#             doc['A'],
+#             doc['model']])
+#finally:
+#    mongo_client.close()
+#data = np.array(data).T
+#n = len(data[0])
+#
+## Plot
+#fig = plt.figure("Brd.Stg. - 2nd Stage Output Optimizer")
+#plt.clf()
+#ax0 = plt.subplot2grid((5,1),(0,0), rowspan=2)
+#ax1 = plt.subplot2grid((5,1),(2,0), rowspan=2)
+#ax2 = plt.subplot2grid((5,1),(4,0), sharex=ax1)
+#
+#colormap = plt.cm.nipy_spectral
+#ax0.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
+#ax1.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
+#ax2.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
+#
+#for idx in range(n):
+#    ax0.plot(data[1, idx], data[2, idx], 'o')
+#    ax1.plot(data[0, idx], data[3, idx]['opt x'][0], 'o')
+#    ax2.plot(data[0, idx], 0, 'o')
+#
+#ax0.set_title("2nd Stage Output Optimization")
+#ax0.set_ylabel("TIA Current")
+#ax0.set_xlabel("Voltage")
+#ax0.yaxis.set_major_formatter(ticker.EngFormatter('A'))
+#
+#ax1.set_title("Optimum Voltage")
+#ax1.set_ylabel("Voltage")
+#for label in ax1.xaxis.get_ticklabels():
+#    label.set_ha('right')
+#    label.set_rotation(30)
+#
+#ax2.xaxis.tick_top()
+#for label in ax2.xaxis.get_ticklabels():
+#    label.set_visible(False)
+#ax2.yaxis.set_ticks([])
+#
+#plt.tight_layout()
 
 
 # %% Spc.Shp. - 2nd Stage Input Optimizer =====================================
@@ -383,9 +392,9 @@ ax1 = plt.subplot2grid((5,1),(2,0), rowspan=2)
 ax2 = plt.subplot2grid((5,1),(4,0), sharex=ax1)
 
 colormap = plt.cm.nipy_spectral
-ax0.set_prop_cycle(color=colormap(np.linspace(0, 0.95, n)))
-ax1.set_prop_cycle(color=colormap(np.linspace(0, 0.95, n)))
-ax2.set_prop_cycle(color=colormap(np.linspace(0, 0.95, n)))
+ax0.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
+ax1.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
+ax2.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
 
 for idx in range(n):
     ax0.plot(data[1, idx], data[2, idx], 'o')
@@ -395,6 +404,8 @@ for idx in range(n):
 ax0.set_title("2nd Stage Input Optimization")
 ax0.set_ylabel("Max DW Power")
 ax0.set_xlabel("Voltage")
+ax0.autoscale(axis="x", tight=True)
+ax0.grid(True, alpha=0.25)
 
 ax1.set_title("Optimum Voltage")
 ax1.set_ylabel("Voltage")
@@ -406,6 +417,9 @@ ax2.xaxis.tick_top()
 for label in ax2.xaxis.get_ticklabels():
     label.set_visible(False)
 ax2.yaxis.set_ticks([])
+
+ax1.autoscale(axis="x", tight=True)
+ax1.grid(True, alpha=0.25)
 
 plt.tight_layout()
 
@@ -436,9 +450,9 @@ ax1 = plt.subplot2grid((5,1),(2,0), rowspan=2)
 ax2 = plt.subplot2grid((5,1),(4,0), sharex=ax1)
 
 colormap = plt.cm.nipy_spectral
-ax0.set_prop_cycle(color=colormap(np.linspace(0, 0.95, n)))
-ax1.set_prop_cycle(color=colormap(np.linspace(0, 0.95, n)))
-ax2.set_prop_cycle(color=colormap(np.linspace(0, 0.95, n)))
+ax0.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
+ax1.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
+ax2.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
 
 for idx in range(n):
     ax0.plot(data[1, idx], data[2, idx], 'o')
@@ -448,6 +462,8 @@ for idx in range(n):
 ax0.set_title("2nd Stage Output Optimization")
 ax0.set_ylabel("Max DW Power")
 ax0.set_xlabel("Voltage")
+ax0.autoscale(axis="x", tight=True)
+ax0.grid(True, alpha=0.25)
 
 ax1.set_title("Optimum Voltage")
 ax1.set_ylabel("Voltage")
@@ -459,6 +475,9 @@ ax2.xaxis.tick_top()
 for label in ax2.xaxis.get_ticklabels():
     label.set_visible(False)
 ax2.yaxis.set_ticks([])
+
+ax1.autoscale(axis="x", tight=True)
+ax1.grid(True, alpha=0.25)
 
 plt.tight_layout()
 
@@ -485,34 +504,34 @@ n = len(data[0])
 
 # Plot
 fig_0 = plt.figure("Spc.Shp. - DW Setpoint Optimizer")
-fig_0.set_size_inches(6.4 , 8.38)
+fig_0.set_size_inches(6.4 , 8.9)
 plt.clf()
 ax0 = plt.subplot2grid((9,1),(0,0), rowspan=2)
-ax1 = plt.subplot2grid((9,1),(2,0), rowspan=2)
+ax1 = plt.subplot2grid((9,1),(2,0), rowspan=2, sharex=ax0)
 #ax2 = plt.subplot2grid((9,1),(4,0), sharex=ax1)
 
 #fig_1 = plt.figure("Spc.Shp. - DW Setpoint Optimizer:DW")
-ax3 = plt.subplot2grid((9,1),(4,0), rowspan=2, sharex=ax0)
-ax4 = plt.subplot2grid((9,1),(6,0), rowspan=2, sharex=ax1)
-ax5 = plt.subplot2grid((9,1),(8,0), sharex=ax4)
+ax3 = plt.subplot2grid((9,1),(4,0), rowspan=2)
+ax4 = plt.subplot2grid((9,1),(6,0), rowspan=2, sharex=ax3)
+ax5 = plt.subplot2grid((9,1),(8,0), sharex=ax3)
 
 colormap = plt.cm.nipy_spectral
-ax0.set_prop_cycle(color=colormap(np.linspace(0, 0.95, n)))
-ax1.set_prop_cycle(color=colormap(np.linspace(0, 0.95, n)))
-#ax2.set_prop_cycle(color=colormap(np.linspace(0, 0.95, n)))
-ax3.set_prop_cycle(color=colormap(np.linspace(0, 0.95, n)))
-ax4.set_prop_cycle(color=colormap(np.linspace(0, 0.95, n)))
-ax5.set_prop_cycle(color=colormap(np.linspace(0, 0.95, n)))
+ax0.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
+ax1.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
+#ax2.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
+ax3.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
+ax4.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
+ax5.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
 
 for idx in range(n):
     ax0.plot(data[1, idx], data[2, idx], 'o')
 #    ax2.plot(data[0, idx], 0, 'o')
-    ax3.plot(data[1, idx], data[3, idx], 'o')
+    ax1.plot(data[1, idx], data[3, idx], 'o')
     ax5.plot(data[0, idx], 0, 'o')
     if data[4, idx] is not None:
-        ax1.plot(data[0, idx], data[4, idx]['opt x'][0], 'o')
+        ax3.plot(data[0, idx], data[4, idx]['opt x'][0], 'o')
     else:
-        ax1.plot(data[0, idx], np.nan, 'o')
+        ax3.plot(data[0, idx], np.nan, 'o')
     if data[5, idx] is not None:
         y = data[5, idx]['diagnostics']['optimum y']
         y_err = data[5, idx]['diagnostics']['optimum y std']
@@ -523,20 +542,25 @@ for idx in range(n):
 ax0.set_title("Bulk Optimization")
 ax0.set_ylabel("dBm")
 ax0.set_xlabel("deg")
+ax0.autoscale(axis="x", tight=True)
+ax0.grid(True, alpha=0.25)
 
-ax1.set_title("Optimum Angle")
-ax1.set_ylabel("deg")
+ax1.set_title("DW vs Angle")
+ax1.set_ylabel("dBm")
+ax1.set_xlabel("deg")
+ax1.grid(True, alpha=0.25)
 
-ax3.set_title("DW vs Angle")
-ax3.set_ylabel("dBm")
-ax3.set_xlabel("deg")
+ax3.set_title("Optimum Angle")
+ax3.set_ylabel("deg")
+ax3.autoscale(axis="x", tight=True)
+ax3.grid(True, alpha=0.25)
 
 ax4.set_title("Optimum DW Amplitude")
 ax4.set_ylabel("dBm")
+ax4.grid(True, alpha=0.25)
 
-for label in ax1.xaxis.get_ticklabels():
-    label.set_ha('right')
-    label.set_rotation(30)
+for label in ax3.xaxis.get_ticklabels():
+    label.set_visible(False)
 
 #ax2.xaxis.tick_top()
 #for label in ax2.xaxis.get_ticklabels():
@@ -582,9 +606,9 @@ ax1 = plt.subplot2grid((5,1),(2,0), rowspan=2)
 ax2 = plt.subplot2grid((5,1),(4,0), sharex=ax1)
 
 colormap = plt.cm.nipy_spectral
-ax0.set_prop_cycle(color=colormap(np.linspace(0, 0.95, n)))
-ax1.set_prop_cycle(color=colormap(np.linspace(0, 0.95, n)))
-ax2.set_prop_cycle(color=colormap(np.linspace(0, 0.95, n)))
+ax0.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
+ax1.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
+ax2.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
 
 for idx in range(n):
     ax0.plot(data[1, idx], data[2, idx], 'o')
@@ -610,6 +634,12 @@ ax2.xaxis.tick_top()
 for label in ax2.xaxis.get_ticklabels():
     label.set_visible(False)
 ax2.yaxis.set_ticks([])
+
+ax0.autoscale(axis="x", tight=True)
+ax0.grid(True, alpha=0.25)
+ax1.autoscale(axis="x", tight=True)
+ax1.grid(True, alpha=0.25)
+
 
 fig_0.tight_layout()
 
@@ -650,9 +680,9 @@ ax0_sp.plot(spectrum[0], spectrum[1]+20, color="0.75")
 ax0_sp.set_ylabel("dB")
 
 colormap = plt.cm.nipy_spectral
-ax0.set_prop_cycle(color=colormap(np.linspace(0, 0.95, n)))
-#ax1.set_prop_cycle(color=colormap(np.linspace(0, 0.95, 6)))
-ax2.set_prop_cycle(color=colormap(np.linspace(0, 0.95, n)))
+ax0.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
+#ax1.set_prop_cycle(color=colormap(np.linspace(0, 0.99, 6)))
+ax2.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
 
 coefs = []
 for idx in range(n):
@@ -677,7 +707,8 @@ ax0_sp.set_ylim([-30, 10])
 
 ax1.set_title("Optimum Coefficients")
 ax1.set_ylabel("arb. units")
-ax1.legend(ncol=2)
+ax1.legend(loc=3, ncol=2)
+
 
 for label in ax1.xaxis.get_ticklabels():
     label.set_ha('right')
@@ -687,6 +718,10 @@ ax2.xaxis.tick_top()
 for label in ax2.xaxis.get_ticklabels():
     label.set_visible(False)
 ax2.yaxis.set_ticks([])
+
+ax0.grid(True, alpha=0.25)
+ax1.autoscale(axis="x", tight=True)
+ax1.grid(True, alpha=0.25)
 
 fig_0.tight_layout()
 

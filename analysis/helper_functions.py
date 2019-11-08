@@ -11,7 +11,7 @@ import numpy as np
 import matplotlib as mpl
 #mpl.rcParams['agg.path.chunksize'] = int(1000)
 mpl.rcParams['savefig.dpi'] = 200
-mpl.rcParams["savefig.format"] = 'pdf'
+mpl.rcParams["savefig.format"] = 'png'
 import matplotlib.pyplot as plt
 
 from cycler import cycler
@@ -156,10 +156,10 @@ def format_eng(num, unit='', places=None, sep=''):
 
 # %% Plotting Helpers ---------------------------------------------------------
 
-def plot_setup(fig_ind, count, start=0, stop=.95, size=None,
+def plot_setup(fig_id, count, start=0, stop=.95, size=None,
                dpi=None, clear_fig=True, r_color=False):
     # Create Figure
-    plt.figure(fig_ind, clear=clear_fig)
+    plt.figure(fig_id, clear=clear_fig)
     fig = plt.gcf()
     ax = plt.gca()
 

@@ -32,6 +32,9 @@ def tomorrow_at_noon():
 # %% RIO TEC
 rio_tec = TECModule('GPIB0::23::INSTR', 1)
 
+rio_tec.tec_gain()
+#Out[15]: 10
+
 rio_tec.tec_resistance_setpoint()
 #Out[16]: 9.51
 
@@ -48,7 +51,7 @@ rio_tec.tec_output()
 rio_las = LaserModule('GPIB0::23::INSTR', 2)
 
 rio_las.laser_current_setpoint()
-#Out[22]: 101.33
+#Out[22]: 99.03
 
 rio_las.laser_output()
 #Out[23]: False
@@ -162,7 +165,7 @@ ws = WaveShaper.WS1000A('192.168.0.5')
 
 domain = [280.18, 283.357]
 
-new_coefs = [
+old_coefs = [
     23.27920156,
     -0.31415927,
     -0.53407075,
@@ -173,23 +176,45 @@ new_coefs = [
     -0.12566371,
     -0.56548668,
     -0.18849556]
+#%%
+new_coefs = [
+2.541886835320573,
+-4.764894713715443,
+-10.402150681294284,
+-1.4642983089296204,
+-0.7423573240999327,
+0.07389741789685643
+    ]
 
 new_coefs = [
-    12.873779823260552,
-    -0.00010805471567221225,
-    -8.382069235254972,
-    0.24959336119687642,
-    -1.5047378684494916,
-    0.19003929512744833]
+1.1
+,-4.8
+,-10.421378100910463
+,-1.3808963467335154
+,-1.0382775086093914
+,0.2499456050377791]
 
-new_coefs = [
-    12.957652700500315,
-    -0.49569232204816693,
-    -8.414189277585605,
-    0.380450128189349,
-    -1.3942859402315253,
-    0.3111486710709459,
-    0.18849527583609194]
+
+#new_coefs = [
+#20.05,
+#    ]
+
+#new_coefs = [
+#    12.873779823260552,
+#    -0.00010805471567221225,
+#    -8.382069235254972,
+#    0.24959336119687642,
+#    -1.5047378684494916,
+#    0.19003929512744833]
+
+#new_coefs = [
+#    12.957652700500315,
+#    -0.49569232204816693,
+#    -8.414189277585605,
+#    0.380450128189349,
+#    -1.3942859402315253,
+#    0.3111486710709459,
+#    0.18849527583609194]
 
 
 #new_coefs = [13.1542830681408,
@@ -199,13 +224,13 @@ new_coefs = [
 #    -1.5790805588000139,
 #    0.4499070303956333]
 
-new_coefs = [
-    10.591856341521305,
-    -3.594328183434416,
-    -8.64367174144833,
-    -1.3639937867675582,
-    -1.1992416114120243,
-    -0.1520067562032628]
+#new_coefs = [
+#    10.591856341521305,
+#    -3.594328183434416,
+#    -8.64367174144833,
+#    -1.3639937867675582,
+#    -1.1992416114120243,
+#    -0.1520067562032628]
 new_poly_fit = np.polynomial.Legendre([0,0]+new_coefs, domain=domain)
 # Send new phase profile
 ws.phase_profile(new_poly_fit(ws.freq))
@@ -299,7 +324,7 @@ spec_opt.push(message={'control_parameter':{'abort_optimizer':True}})
 spec_opt.push(message={'control_parameter':{'setpoint_optimization':0}})
 spec_opt.push(message={'control_parameter':{'setpoint_optimization':tomorrow_at_noon()}})
 
-spec_opt.push(message={'control_parameter':{'DW_setpoint':-40}})
+spec_opt.push(message={'control_parameter':{'DW_setpoint':-45.5}})
 
 spec_opt.push(message={'control_parameter':{'run_optimizer':{'target':"optimize_z_in_coupling",
                                                              'sig':3}}})

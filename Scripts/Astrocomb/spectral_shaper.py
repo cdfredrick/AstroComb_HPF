@@ -48,6 +48,13 @@ sm = Machine()
     this script. These functions are defined by the user and should not
     directly appear in the main loop of the state machine.'''
 
+# 2nd Stage Power -------------------------------------------------------------
+def power_2nd_stg(angle):
+    return np.sin(2*np.pi/180 * (58-angle))**2
+
+def angle_step_2nd_stg(delta_power, power):
+    return -45/np.pi /(power*(1-power))**0.5 * delta_power
+
 # Tomorrow at Noon ------------------------------------------------------------
 def tomorrow_at_noon():
     tomorrow = datetime.date.today()+datetime.timedelta(days=1)
@@ -433,7 +440,7 @@ thread['get_new_single_quick'] = ThreadFactory(target=sm.dev['spectral_shaper/de
 #--- Optimization Functions ---------------------------------------------------
 
 # Optimize DW Setpoint --------------------------------------------------------
-def optimize_DW_setpoint(sig=3, max_iter=None, n_avg=5):
+def optimize_DW_setpoint(sig=3, max_iter=None, n_avg=2):
     # Info
     mod_name = __name__
     func_name = optimize_DW_setpoint.__name__
@@ -1071,7 +1078,7 @@ def optimize_IM_bias(sig=3, max_iter=None, n_avg=5):
 
 
 # Optimize Finisar Waveshaper Phase -------------------------------------------
-def optimize_optical_phase(sig=3, max_iter=None, n_avg=5):
+def optimize_optical_phase(sig=3, max_iter=None, n_avg=2):
     # Info
     mod_name = __name__
     func_name = optimize_optical_phase.__name__
@@ -1301,6 +1308,216 @@ def optimize_optical_phase(sig=3, max_iter=None, n_avg=5):
             raise error
         return new_phase
 
+# Optimize All Finisar Waveshaper Phase ---------------------------------------
+def optimize_all_optical_phase(sig=3, max_iter=None):
+    # Info
+    mod_name = __name__
+    func_name = optimize_optical_phase.__name__
+    log_str = ' Beginning optical phase optimization'
+    log.log_info(mod_name, func_name, log_str)
+    start_time = time.time()
+
+    #--- Databases --------------------------------------------------------
+    mon_db = 'spectral_shaper/optical_phase_optimizer'
+    osa_db = 'spectral_shaper/device_OSA'
+    ws_db = 'spectral_shaper/device_waveshaper'
+
+    #--- Queue and wait ---------------------------------------------------
+    sm.dev[osa_db]['queue'].queue_and_wait()
+    sm.dev[ws_db]['queue'].queue_and_wait()
+
+    #--- Setup  Optimizer -------------------------------------------------
+    coefs_scan_range = []
+    opt_orders = len(coefs_scan_range)
+    total_obs = 0
+    current_phase = sm.dev[ws_db]['driver'].phase_profile()
+    freqs = sm.dev[ws_db]['driver'].freq
+    frq_smp = (freqs > WaveShaper.SPEED_OF_LIGHT_NM_THZ/1070) & (freqs < WaveShaper.SPEED_OF_LIGHT_NM_THZ/1058)
+    current_polyfit = np.polynomial.Legendre.fit(freqs[frq_smp], current_phase[frq_smp], 1+opt_orders)
+    current_coefs = current_polyfit.coef[2:].tolist()
+    bounds = []
+    for idx, coef in enumerate(current_coefs):
+        bounds.append((coef - coefs_scan_range/(2), coef + coefs_scan_range/(2)))
+#    for bound in bounds:
+#        c_scan_range = bound[1] - bound[0]
+#        # Limit total scan range for faster model convergence
+#        abs_bounds.append((bound[0]-c_scan_range, bound[1]+c_scan_range))
+
+    #--- Setup OSA --------------------------------------------------------
+    settings_list = STATES['spectral_shaper/state_optimizer']['optimal']['settings']['DW']
+    sm.update_device_settings(osa_db, settings_list, write_log=False)
+
+    #--- Optimize Phase Profile -------------------------------------------
+    new_x = current_coefs
+    opt_x = copy.copy(new_x)
+    try:
+        start_time_i = time.time()
+        converged = False
+        search = True
+        #--- Initialize optimizer -------------------------------------
+        optimizer = Minimizer(
+                        bounds, abs_bounds=None,
+                        n_initial_points=10, sig=sig)
+        #--- Optimize coefficient -------------------------------------
+        while search:
+            #--- Ensure queues
+            sm.dev[osa_db]['queue'].touch()
+            sm.dev[ws_db]['queue'].touch()
+
+            #--- Measure new OSA trace
+            thread_name = 'get_new_single_quick'
+            current_DW = 0
+            (alive, error) = thread[thread_name].check_thread()
+            if error != None:
+                raise error[1].with_traceback(error[2])
+            if not(alive):
+                # Start new thread
+                thread[thread_name].start()
+            # Check Progress
+            while thread[thread_name].is_alive():
+                time.sleep(0.1)
+                sm.dev[osa_db]['queue'].touch()
+                sm.dev[ws_db]['queue'].touch()
+            # Get Result
+            (alive, error) = thread[thread_name].check_thread()
+            if error != None:
+                raise error[1].with_traceback(error[2])
+            else:
+                osa_trace = thread[thread_name].result
+            # Get DW
+            spectrum = np.array(osa_trace['data']['y'])
+            wavelengths = np.array(osa_trace['data']['x'])
+            dw = np.diff(wavelengths).mean()
+            current_DW = np.max(spectrum[wavelengths<740])
+            current_DW = 10*np.log10(dw*np.sum(10**(spectrum[wavelengths<740]/10)))
+
+            #--- Update Model
+            new_y = -current_DW # maximize the DW (dBm)
+            opt_x_i, diag = optimizer.tell(new_x, new_y, diagnostics=True)
+            total_obs += 1
+
+            #--- Write Intermediate Result to Buffer
+            with sm.lock[mon_db]:
+                sm.mon[mon_db]['new'] = True
+                sm.mon[mon_db]['data'] = {
+                    'coefs':optimizer.x,
+                    'domain':current_polyfit.domain.tolist(),
+                    'dBm':(-np.array(optimizer.y)).tolist(),
+                    "model":{
+                        "opt x":opt_x,
+                        "x":optimizer.x, # 2nd order and above coefs
+                        "y":optimizer.y, # -dBm
+                        "diagnostics":diag,
+                        "n obs":optimizer.n_obs,
+                        "target sig":optimizer.sig,
+                        "time":time.time() - start_time_i
+                        }
+                    }
+                sm.db[mon_db].write_buffer(sm.mon[mon_db]['data'])
+            #--- Check abort flag
+            with sm.lock[CONTROL_DB]:
+                abort_optimization = sm.local_settings[CONTROL_DB]['abort_optimizer']['value']
+                if abort_optimization:
+                    sm.local_settings[CONTROL_DB]['abort_optimizer']['value'] = False
+                    sm.db[CONTROL_DB].write_record_and_buffer(sm.local_settings[CONTROL_DB])
+            #--- Check convergence
+            if optimizer.convergence_count >= 3:
+                #--- End the search
+                converged = True
+                search = False
+            elif max_iter:
+                if optimizer.n_obs >= max_iter:
+                    converged = False
+                    search = False
+                    opt_x = current_coefs
+                    log_str = ' Model did not converge to {:} sig after {:} samples, returning to initial point'.format(
+                        optimizer.sig,
+                        optimizer.n_obs)
+                    warning_id = 'optical phase optimization'
+                    if (warning_id in warning):
+                        if (time.time() - warning[warning_id]) > warning_interval:
+                            log.log_warning(mod_name, func_name, log_str)
+                    else:
+                        warning[warning_id] = time.time()
+                        log.log_warning(mod_name, func_name, log_str)
+            elif abort_optimization:
+                log_str = ' Optimization aborted, returning to initial point.'
+                log.log_info(mod_name, func_name, log_str)
+                converged = False
+                search = False
+                opt_x = current_coefs[idx]
+
+            #--- Get new point
+            if search:
+                if not (optimizer.n_obs % 5):
+                    print(" {:} observations, {:.2f} significance, {:.3g}s".format(optimizer.n_obs, diag["significance"], time.time()-start_time))
+                #--- Ask for new coefs
+                new_x_i = optimizer.ask()
+                new_x = new_x_i
+                #--- Calculate phase profile
+                new_poly_fit = np.polynomial.Legendre([0,0]+new_x, domain=current_polyfit.domain)
+                #--- Send new phase profile
+                sm.dev[ws_db]['driver'].phase_profile(new_poly_fit(freqs)) # send phase for the entire waveshaper range
+        #--- Calculate phase profile
+        new_x = opt_x
+        new_poly_fit = np.polynomial.Legendre([0,0]+new_x, domain=current_polyfit.domain)
+        #--- Send new phase profile
+        sm.dev[ws_db]['driver'].phase_profile(new_poly_fit(freqs)) # send phase for the entire waveshaper range
+        error = None
+    except Exception as err:
+        error = err
+        log_str = ' Error encountered optimization aborted, returning to initial point.'
+        log.log_info(mod_name, func_name, log_str)
+        converged = False
+        search = False
+        opt_x = current_coefs
+        raise
+    finally:
+        # Optimum output
+        new_coefs = opt_x
+        stop_time = time.time()
+
+        #--- Implement result -------------------------------------------------
+        # Calculate phase profile
+        new_poly_fit = np.polynomial.Legendre([0,0]+new_coefs, domain=current_polyfit.domain)
+        # Send new phase profile
+        sm.dev[ws_db]['driver'].phase_profile(new_poly_fit(freqs)) # send phase for the entire waveshaper range
+        new_phase = sm.dev[ws_db]['driver'].phase_profile()
+
+        #--- Remove from queue ------------------------------------------------
+        sm.dev[osa_db]['queue'].remove()
+        sm.dev[ws_db]['queue'].remove()
+
+        #--- Log Result -------------------------------------------------------
+        if converged:
+            log_str = ' Optical phase optimized with {:}'.format(new_poly_fit)
+            log.log_info(mod_name, func_name, log_str)
+            log_str = ' {:} sig after {:.3g}s and {:} observations'.format(
+                optimizer.sig,
+                stop_time - start_time,
+                total_obs)
+            log.log_info(mod_name, func_name, log_str)
+
+        #--- Record result ----------------------------------------------------
+        with sm.lock[mon_db]:
+            sm.mon[mon_db]['new'] = True
+            sm.mon[mon_db]['data'] = {
+                'filter profile':{
+                    'freq':sm.dev[ws_db]['driver'].freq.tolist(),
+                    'attn':sm.dev[ws_db]['driver'].attn.tolist(),
+                    'phase':sm.dev[ws_db]['driver'].phase.tolist(),
+                    'port':sm.dev[ws_db]['driver'].port.tolist(),
+                    },
+                'coefs':new_coefs,
+                'domain':current_polyfit.domain.tolist(),
+                'model':{
+                    "n obs":total_obs,
+                    'time':stop_time - start_time}
+                }
+            sm.db[mon_db].write_record_and_buffer(sm.mon[mon_db]['data'])
+        if error is not None:
+            raise error
+        return new_phase
 
 # %% Monitor Routines =========================================================
 '''This section is for defining the methods needed to monitor the system.'''
@@ -1576,7 +1793,7 @@ def adjust_slow(state_db):
                 with sm.lock[mon_db]:
                     sm.mon[mon_db]['new'] = False
                     current_angle = sm.mon[mon_db]['data'][-1]
-                    lower_angle_condition = (current_angle < minimum_angle)
+                    lower_angle_condition = (current_angle <= minimum_angle)
                 if lower_angle_condition and power_too_low:
                     warning_id = 'low_angle_slow'
                     log_str = ' DW is {:.3f}dB from setpoint {:.3f}dBm, but 2nd stage power is already at maximum'.format(DW_diff, sm.local_settings[CONTROL_DB]['DW_setpoint']['value'])
@@ -1591,6 +1808,8 @@ def adjust_slow(state_db):
                     device_db = 'spectral_shaper/device_rotation_mount'
                     step_size = 0.05 + (0.1-0.05) * abs(DW_diff)/DW_limits
                     if power_too_low:
+                        if (current_angle - step_size) < minimum_angle:
+                            step_size = abs(current_angle - minimum_angle)
                         log_str = ' DW is {:.3f}dB from setpoint {:.3f}dBm, raising the 2nd stage power.\n Current angle {:.3f}deg.'.format(DW_diff, sm.local_settings[CONTROL_DB]['DW_setpoint']['value'], current_angle)
                         log.log_info(mod_name, func_name, log_str)
                     # Raise the 2nd stage power

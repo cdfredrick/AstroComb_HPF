@@ -45,28 +45,28 @@ ct_to_utc_conv = lambda dt: (central_tz.localize(dt.replace(tzinfo=None))).astim
 #start_time = ct_to_utc_conv(datetime.datetime(2018, 5, 1, 0, 0))
 #stop_time = ct_to_utc_conv(datetime.datetime(2018, 10, 15, 0, 0))
 stop_time = datetime.datetime.utcnow()
-start_time = stop_time - datetime.timedelta(days=5)
+start_time = stop_time - datetime.timedelta(days=2)
 #start_time = stop_time - datetime.timedelta(hours=5)
 DBs = {
 #    # ambience ----------------------------------------------------------------
-#    'ambience/box_temperature_0':{
-#            'start':start_time,
-#            'stop':stop_time,
-#            'keys':{
-#                    'V':lambda v: v*100,
-#                    'std':lambda v: v*100}},
-#    'ambience/box_temperature_1':{
-#            'start':start_time,
-#            'stop':stop_time,
-#            'keys':{
-#                    'V':lambda v: v*100,
-#                    'std':lambda v: v*100}},
-#    'ambience/rack_temperature_0':{
-#            'start':start_time,
-#            'stop':stop_time,
-#            'keys':{
-#                    'V':lambda v: v*100,
-#                    'std':lambda v: v*100}},
+    'ambience/box_temperature_0':{
+            'start':start_time,
+            'stop':stop_time,
+            'keys':{
+                    'V':lambda v: v*100,
+                    'std':lambda v: v*100}},
+    'ambience/box_temperature_1':{
+            'start':start_time,
+            'stop':stop_time,
+            'keys':{
+                    'V':lambda v: v*100,
+                    'std':lambda v: v*100}},
+    'ambience/rack_temperature_0':{
+            'start':start_time,
+            'stop':stop_time,
+            'keys':{
+                    'V':lambda v: v*100,
+                    'std':lambda v: v*100}},
 #    # broadening_stage --------------------------------------------------------
 #    'broadening_stage/device_rotation_mount':{
 #            'start':start_time, 'stop':stop_time,
@@ -106,16 +106,16 @@ DBs = {
 #            'keys':{
 #                    'V_out':lambda v: v,
 #                    'V_ref':lambda v: v}},
-#    'filter_cavity/DAQ_error_signal':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'V':lambda v: v,
-#                    'std':lambda v: v}},
-#    'filter_cavity/HV_output':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'V':lambda v: v,
-#                    'std':lambda v: v}},
+    'filter_cavity/DAQ_error_signal':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'V':lambda v: v,
+                    'std':lambda v: v}},
+    'filter_cavity/HV_output':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'V':lambda v: v,
+                    'std':lambda v: v}},
 #    'filter_cavity/PID_output':{
 #            'start':start_time, 'stop':stop_time,
 #            'keys':{
@@ -231,30 +231,30 @@ DBs = {
             'keys':{
                     'dBm':lambda dw: dw,
                     'std':lambda dw: dw}},
-    'spectral_shaper/DW_vs_IM_bias':{
-            'start':start_time, 'stop':stop_time,
-            'keys':{
-                    'V':lambda v: v,
-                    'dBm':lambda dw: dw}},
+#    'spectral_shaper/DW_vs_IM_bias':{
+#            'start':start_time, 'stop':stop_time,
+#            'keys':{
+#                    'V':lambda v: v,
+#                    'dBm':lambda dw: dw}},
 #    'spectral_shaper/DW_vs_waveplate_angle':{
 #            'start':start_time, 'stop':stop_time,
 #            'keys':{
 #                    'deg':lambda d: d,
 #                    'dBm':lambda dw: dw}},
-    'spectral_shaper/mask':{
-            'start':start_time, 'stop':stop_time,
-            'keys':{
-                    'path':lambda p: 'top' in p}},
-    'spectral_shaper/spectrum':{
-            'start':start_time, 'stop':stop_time,
-            'keys':{
-                    'data':lambda d: {'x':d['x'], 'y':d['y'], 'y_std':d['y_std'], 'y_n':d['y_n']}}},
-    'spectral_shaper/DW_bulk_vs_waveplate_angle':{
-            'start':start_time, 'stop':stop_time,
-            'keys':{
-                    'deg':lambda d: d,
-                    'bulk_dBm':lambda d: d,
-                    'DW_dBm':lambda dw: dw}},
+#    'spectral_shaper/mask':{
+#            'start':start_time, 'stop':stop_time,
+#            'keys':{
+#                    'path':lambda p: 'top' in p}},
+#    'spectral_shaper/spectrum':{
+#            'start':start_time, 'stop':stop_time,
+#            'keys':{
+#                    'data':lambda d: {'x':d['x'], 'y':d['y'], 'y_std':d['y_std'], 'y_n':d['y_n']}}},
+#    'spectral_shaper/DW_bulk_vs_waveplate_angle':{
+#            'start':start_time, 'stop':stop_time,
+#            'keys':{
+#                    'deg':lambda d: d,
+#                    'bulk_dBm':lambda d: d,
+#                    'DW_dBm':lambda dw: dw}},
 ##    'spectral_shaper/control':{
 ##            'start':start_time, 'stop':stop_time,
 ##            'keys':{
@@ -553,7 +553,7 @@ for ind, database in enumerate(DBs):
 #        axe.set_ylim([-55, -35])
 #        axe.set_title('DW Amplitude')
 #        axe.grid(b=True)
-#        plt.tight_layout()
+#        plt.tight_layout()☺
 #        print(np.diff(data[database][key][0]).max().total_seconds())
 #        print((data[database][key][0][-1] - data[database][key][0][0]).total_seconds())
     else: # All other data

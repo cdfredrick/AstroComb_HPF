@@ -598,7 +598,7 @@ def keep_lock(state_db):
             log.log_error(mod_name, func_name, log_str)
 # Check DAQ error signal --------------------------------------------
     if new_daq_err_signal_condition:
-        if (current_err_sig > 0.5):
+        if (current_err_sig > 0.55):
         # It is not locked
             locked = False
             log_str = " filter_cavity lock lost, reflection signal too high"
@@ -847,7 +847,7 @@ STATES = {
                                 'filter_cavity/device_PID':{
                                         'proportional_action':True, 'integral_action':True,
                                         'derivative_action':False,
-                                        'proportional_gain':-0.2, 'integral_gain':1.0e2,
+                                        'proportional_gain':-0.2, 'integral_gain':1.0e1,
                                         'upper_output_limit':2.00, 'lower_output_limit':0.00},
                                 'filter_cavity/device_HV':{
                                         'y_min_limit':0.00, 'y_max_limit':150.00, 'y_voltage':94}},

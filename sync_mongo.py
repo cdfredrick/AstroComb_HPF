@@ -17,12 +17,40 @@ records = [
     'ambience/box_temperature_0',
     'ambience/box_temperature_1',
     'ambience/rack_temperature_0',
+
     # broadening_stage --------------------------------------------------------
+        # Data ----------------------------------
+    'broadening_stage/2nd_stage_z_in_optimizer',
+    'broadening_stage/2nd_stage_z_out_optimizer',
+    'broadening_stage/nanotrack_in_TIA',
+    'broadening_stage/nanotrack_in_position',
+    'broadening_stage/nanotrack_in_status',
+    'broadening_stage/nanotrack_out_TIA',
+    'broadening_stage/nanotrack_out_position',
+    'broadening_stage/nanotrack_out_status',
+    'broadening_stage/piezo_x_in_HV_output',
+    'broadening_stage/piezo_x_out_HV_output',
+    'broadening_stage/piezo_y_in_HV_output',
+    'broadening_stage/piezo_y_out_HV_output',
+    'broadening_stage/piezo_z_in_HV_output',
+    'broadening_stage/piezo_z_out_HV_output',
+    'broadening_stage/rot_stg_position',
+    'broadening_stage/rot_stg_status',
+    'broadening_stage/rot_stg_velocity',
         # Devices -------------------------------
+    'broadening_stage/device_nanotrack_in',
+    'broadening_stage/device_nanotrack_out',
+    'broadening_stage/device_piezo_x_in',
+    'broadening_stage/device_piezo_x_out',
+    'broadening_stage/device_piezo_y_in',
+    'broadening_stage/device_piezo_y_out',
+    'broadening_stage/device_piezo_z_in',
+    'broadening_stage/device_piezo_z_out',
     'broadening_stage/device_rotation_mount',
         # States --------------------------------
     'broadening_stage/state_2nd_stage',
     'broadening_stage/control',
+
     # comb_generator ----------------------------------------------------------
         # Data ----------------------------------
     'comb_generator/IM_bias',
@@ -33,6 +61,7 @@ records = [
     'comb_generator/state_12V_supply',
     'comb_generator/state_IM_bias',
     'comb_generator/control',
+
     # cw_laser ----------------------------------------------------------------
         # Data ----------------------------------
     'cw_laser/dac_limits',
@@ -40,6 +69,7 @@ records = [
     'cw_laser/freq_err',
         # States --------------------------------
     'cw_laser/state_frequency',
+
     # filter_cavity -----------------------------------------------------------
         # Data ----------------------------------
     'filter_cavity/DAQ_Vout_vs_reflect',
@@ -55,6 +85,7 @@ records = [
         # States --------------------------------
     'filter_cavity/state',
     'filter_cavity/control',
+
     # mll_f0 ------------------------------------------------------------------
         # Data ----------------------------------
     'mll_f0/dac_limits',
@@ -62,6 +93,7 @@ records = [
     'mll_f0/freq_err',
         # States --------------------------------
     'mll_f0/state',
+
     # mll_fR ------------------------------------------------------------------
         # Data ----------------------------------
     'mll_fR/DAQ_Vout_vs_freq',
@@ -70,8 +102,8 @@ records = [
     'mll_fR/PID_output',
     'mll_fR/PID_output_limits',
     'mll_fR/TEC_current',
-    'mll_fR/TEC_temperature',
     'mll_fR/TEC_event_status',
+    'mll_fR/TEC_temperature',
         # Devices -------------------------------
     'mll_fR/device_DAQ_Vout_vs_freq',
     'mll_fR/device_HV',
@@ -80,6 +112,7 @@ records = [
         # States --------------------------------
     'mll_fR/state',
     'mll_fR/control',
+
     # monitor_DAQ -------------------------------------------------------------
         # Devices -------------------------------
     'monitor_DAQ/device_DAQ_analog_in',
@@ -88,6 +121,7 @@ records = [
     'monitor_DAQ/state_analog',
     'monitor_DAQ/state_digital',
     'monitor_DAQ/control',
+
     # rf_oscillators ----------------------------------------------------------
         # Data ----------------------------------
     'rf_oscillators/100MHz_phase_lock',
@@ -96,7 +130,7 @@ records = [
     'rf_oscillators/Rb_detected_signals',
     'rf_oscillators/Rb_frequency_offset',
     'rf_oscillators/Rb_magnetic_read',
-    'rf_oscillators/status',
+    'rf_oscillators/Rb_status',
     'rf_oscillators/Rb_time_tag',
         # Devices -------------------------------
     'rf_oscillators/device_Rb_clock',
@@ -104,18 +138,25 @@ records = [
     'rf_oscillators/state_PLOs',
     'rf_oscillators/state_Rb_clock',
     'rf_oscillators/control',
+
     # spectral_shaper ---------------------------------------------------------
         # Data ----------------------------------
+    'spectral_shaper/2nd_stage_z_in_optimizer',
+    'spectral_shaper/2nd_stage_z_out_optimizer',
     'spectral_shaper/DW',
+    'spectral_shaper/DW_bulk_vs_waveplate_angle',
     'spectral_shaper/DW_vs_IM_bias',
     'spectral_shaper/DW_vs_waveplate_angle',
-    'spectral_shaper/DW_bulk_vs_waveplate_angle',
     'spectral_shaper/mask',
+    'spectral_shaper/optical_phase_optimizer',
     'spectral_shaper/spectrum',
         # Devices -------------------------------
     'spectral_shaper/device_IM_bias',
     'spectral_shaper/device_OSA',
+    'spectral_shaper/device_piezo_z_in',
+    'spectral_shaper/device_piezo_z_out',
     'spectral_shaper/device_rotation_mount',
+    'spectral_shaper/device_waveshaper',
         # States --------------------------------
     'spectral_shaper/state_SLM',
     'spectral_shaper/state_optimizer',
@@ -148,21 +189,21 @@ logs = [
 
 # %% Connect to database and pull results
 
-start_time = datetime.datetime.utcnow()
+sync_start_time = datetime.datetime.utcnow()
 print('Starting sync', datetime.datetime.now())
 try:
     local_client = MongoDB.MongoClient()
-    remote_client = MongoDB.MongoClient(port=27018)
+    remote_client = MongoDB.MongoClient(port=27018) # this port must point to remote
     for database in records:
-        print('Syncing {:},'.format(database), 'Elapsed Time =',(datetime.datetime.utcnow()-start_time))
-        MongoDB.sync_to_local_record(local_client, remote_client, database, sync_stop_time=start_time)
+        print('Syncing {:},'.format(database), 'Elapsed Time =',(datetime.datetime.utcnow()-sync_start_time))
+        MongoDB.sync_to_local_record(local_client, remote_client, database, sync_stop_time=sync_start_time)
+        #MongoDB.sync_to_local_buffer(local_client, remote_client, database, sync_stop_time=start_time)
     for database in logs:
-        print('Syncing {:},'.format(database), 'Elapsed Time =',(datetime.datetime.utcnow()-start_time))
-        MongoDB.sync_to_local_log(local_client, remote_client, database, sync_stop_time=start_time)
+        print('Syncing {:},'.format(database), 'Elapsed Time =',(datetime.datetime.utcnow()-sync_start_time))
+        MongoDB.sync_to_local_log(local_client, remote_client, database, sync_stop_time=sync_start_time)
 finally:
     try:
         remote_client.close()
     finally:
         local_client.close()
-print('Sync complete!', 'Elapsed Time =',(datetime.datetime.utcnow()-start_time))
-    
+print('Sync complete!', 'Elapsed Time =',(datetime.datetime.utcnow()-sync_start_time))

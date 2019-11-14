@@ -64,6 +64,7 @@ message.
 from functools import wraps
 import struct
 import serial
+import time
 
 
 # %% Private Functions
@@ -114,6 +115,8 @@ class APTDevice():
 
         if serial_number is not None:
             assert serial_number == self.hardware_info()["serial"]
+        
+        self.send_update_messages(update=False)
 
     def open_port(self):
         '''Opens the serial port for read/write access'''
@@ -129,7 +132,7 @@ class APTDevice():
             self.ser.close()
             self.connected = False
 
-    def read(self, msg_id_0, msg_id_1):
+    def read(self, msg_id_0, msg_id_1, req_buffer=None):
         '''Read and discard messages until the requested message ID is found.
         Returns the full buffer of the message or an error if the message is
         not found
@@ -137,17 +140,29 @@ class APTDevice():
         msg_found = False
         while not msg_found:
             read_buffer = self.ser.read(6)
-            header = struct.unpack("<BBBBBB", read_buffer)
-            # Check for data packet
-            if bool(header[4] & 0x80):
-                packet_length = struct.unpack("<H", read_buffer[2:3+1])[0]
-                data_buffer = self.ser.read(packet_length)
-                read_buffer = read_buffer + data_buffer
-            # Check msg_id
-            #print("Message ID {:X},{:X} found.".format(header[0], header[1]))
-            if msg_id_0 == header[0] and msg_id_1 == header[1]:
-                msg_found = True
-                return read_buffer
+            if len(read_buffer)==6:
+                header = struct.unpack("<BBBBBB", read_buffer)
+                # Check for data packet
+                if bool(header[4] & 0x80):
+                    packet_length = struct.unpack("<H", read_buffer[2:3+1])[0]
+                    data_buffer = self.ser.read(packet_length)
+                    read_buffer = read_buffer + data_buffer
+                # Check msg_id
+                #print("Message ID {:X},{:X} found.".format(header[0], header[1]))
+                if msg_id_0 == header[0] and msg_id_1 == header[1]:
+                    msg_found = True
+                    return read_buffer
+                else:
+                    print('Message not found, trying again. {:X},{:X}'.format(header[0], header[1]))
+            elif req_buffer is not None:
+                self.ser.reset_input_buffer()
+                self.ser.reset_output_buffer()
+                self.write(req_buffer)
+                print('Message not found, trying again.')
+                time.sleep(.1)
+            else:
+                raise ValueError("Message {:X},{:X} not found".format(msg_id_0, msg_id_1))
+                
 
     def write(self, buffer):
         '''Writes buffer to serial port'''
@@ -174,7 +189,7 @@ class APTDevice():
                                        self.dst, self.src)
             self.write(write_buffer)
             # MGMSG_MOD_GET_CHANENABLESTATE
-            read_buffer = self.read(0x12, 0x02)
+            read_buffer = self.read(0x12, 0x02, req_buffer=write_buffer)
             result = struct.unpack("<BBBBBB", read_buffer)
             enable_state = {0x01:True, 0x02:False}[result[3]]
             return enable_state
@@ -195,7 +210,7 @@ class APTDevice():
                                    self.dst, self.src)
         self.write(write_buffer)
         # MGMSG_HW_GET_INFO
-        read_buffer = self.read(0x06, 0x00)
+        read_buffer = self.read(0x06, 0x00, req_buffer=write_buffer)
         result = struct.unpack("<BBBBBBL8sH4b60sHHH", read_buffer)
         return {"serial":       result[6],
                 "model":        result[7].decode("ascii").strip("\x00"),
@@ -273,7 +288,7 @@ class KDC101_PRM1Z8(APTDevice):
                                    self.dst, self.src)
         self.write(write_buffer)
         # MGMSG_MOT_GET_DCSTATUSUPDATE
-        read_buffer = self.read(0x91, 0x04)
+        read_buffer = self.read(0x91, 0x04, req_buffer=write_buffer)
         # MGMSG_MOT_ACK_DCSTATUSUPDATE
         ack_buffer = struct.pack("<BBBBBB", 0x92, 0x04,
                                  0x00, 0x00,
@@ -325,7 +340,7 @@ class KDC101_PRM1Z8(APTDevice):
                                        self.dst, self.src)
             self.write(write_buffer)
             # MGMSG_MOT_GET_POSCOUNTER 0x0412
-            read_buffer = self.read(0x12, 0x04)
+            read_buffer = self.read(0x12, 0x04, req_buffer=write_buffer)
             result = struct.unpack("<BBBBBBHl", read_buffer)
             position = (result[7] / self.ENC_CNT_DEG) % 360 # degrees
             return position
@@ -414,7 +429,7 @@ class KPZ101(APTDevice):
                                        self.dst, self.src)
             self.write(write_buffer)
             # MGMSG_PZ_GET_POSCONTROLMODE
-            read_buffer = self.read(0x42, 0x06)
+            read_buffer = self.read(0x42, 0x06, req_buffer=write_buffer)
             result = struct.unpack("<BBBBBB", read_buffer)
             mode = result[3]
             return mode
@@ -465,7 +480,7 @@ class KPZ101(APTDevice):
                                        self.dst, self.src)
             self.write(write_buffer)
             # MGMSG_PZ_GET_INPUTVOLTSSRC 0x0654
-            read_buffer = self.read(0x54, 0x06)
+            read_buffer = self.read(0x54, 0x06, req_buffer=write_buffer)
             result = struct.unpack("<BBBBBBHH", read_buffer)
             voltage_source = result[7]
             return voltage_source
@@ -520,7 +535,7 @@ class KPZ101(APTDevice):
                                        self.dst, self.src)
             self.write(write_buffer)
             # MGMSG_PZ_GET_TPZ_IOSETTINGS
-            read_buffer = self.read(0xD6, 0x07)
+            read_buffer = self.read(0xD6, 0x07, req_buffer=write_buffer)
             result = struct.unpack("<BBBBBBHHHHH", read_buffer)
             voltage_limit = result[7]
             analog_input = result[8]
@@ -573,7 +588,7 @@ class KPZ101(APTDevice):
                                        self.dst, self.src)
             self.write(write_buffer)
             # MGMSG_PZ_GET_OUTPUTVOLTS
-            read_buffer = self.read(0x45, 0x06)
+            read_buffer = self.read(0x45, 0x06, req_buffer=write_buffer)
             result = struct.unpack("<BBBBBBHh", read_buffer)
             voltage = result[7]/self.CNT_VLT_FR * self.MAX_VLT[self._voltage_limit]
             return voltage
@@ -719,7 +734,7 @@ class TNA001(APTDevice):
                                        self.dst, self.src)
             self.write(write_buffer)
             # MGMSG_PZ_GET_NTMODE 0x0605
-            read_buffer = self.read(0x05, 0x06)
+            read_buffer = self.read(0x05, 0x06, req_buffer=write_buffer)
             result = struct.unpack("<BBBBBB", read_buffer)
             mode = result[2]
             if (mode == self.TRCK_NO_SGN) or (mode == self.TRCK_NORM):
@@ -759,7 +774,7 @@ class TNA001(APTDevice):
                                        0x50, 0x01)
             self.write(write_buffer)
             # MGMSG_PZ_GET_NTTRACKTHRESHOLD 0x0608
-            read_buffer = self.read(0x08, 0x06)
+            read_buffer = self.read(0x08, 0x06, req_buffer=write_buffer)
             result = struct.unpack("<BBBBBBf", read_buffer)
             threshold = result[6]
             return threshold
@@ -792,7 +807,7 @@ class TNA001(APTDevice):
                                        self.dst, self.src)
             self.write(write_buffer)
             # MGMSG_PZ_GET_NTCIRCCENTREPOS 0x0614
-            read_buffer = self.read(0x14, 0x06)
+            read_buffer = self.read(0x14, 0x06, req_buffer=write_buffer)
             result = struct.unpack("<BBBBBBHHfHHH", read_buffer)
             x = result[6] / self.CNT_FR_POS
             y = result[7] / self.CNT_FR_POS
@@ -894,7 +909,7 @@ class TNA001(APTDevice):
                                        self.dst, self.src)
             self.write(write_buffer)
             # MGMSG_PZ_GET_NTCIRCPARAMS 0x0620
-            read_buffer = self.read(0x20, 0x06)
+            read_buffer = self.read(0x20, 0x06, req_buffer=write_buffer)
             result = struct.unpack("<BBBBBBHHHHHH", read_buffer)
             params = {
                 "mode":         result[6],
@@ -1015,7 +1030,7 @@ class TNA001(APTDevice):
                                        self.dst, self.src)
             self.write(write_buffer)
             # MGMSG_PZ_GET_NTPHASECOMPPARAMS 0x0628
-            read_buffer = self.read(0x28, 0x06)
+            read_buffer = self.read(0x28, 0x06, req_buffer=write_buffer)
             result = struct.unpack("<BBBBBBHhh", read_buffer)
             x = result[7]/(self.SMP_FRQ / self._circ_params["frequency"]) * 360
             y = result[8]/(self.SMP_FRQ / self._circ_params["frequency"]) * 360
@@ -1164,7 +1179,7 @@ class TNA001(APTDevice):
                                        self.dst, self.src)
             self.write(write_buffer)
             # MGMSG_PZ_GET_NTTIARANGEPARAMS 0x0632
-            read_buffer = self.read(0x32, 0x06)
+            read_buffer = self.read(0x32, 0x06, req_buffer=write_buffer)
             result = struct.unpack("<BBBBBBHhhhHH", read_buffer)
             params = {
                 "mode":         result[6],
@@ -1249,7 +1264,7 @@ class TNA001(APTDevice):
                                        self.dst, self.src)
             self.write(write_buffer)
             # MGMSG_PZ_GET_NTGAINPARAMS 0x0635
-            read_buffer = self.read(0x35, 0x06)
+            read_buffer = self.read(0x35, 0x06, req_buffer=write_buffer)
             result = struct.unpack("<BBBBBBHh", read_buffer)
             gain = result[7]
             return gain
@@ -1315,7 +1330,7 @@ class TNA001(APTDevice):
                                    self.dst, self.src)
         self.write(write_buffer)
         # MGMSG_PZ_GET_NTTIAREADING 0x063A
-        read_buffer = self.read(0x3A, 0x06)
+        read_buffer = self.read(0x3A, 0x06, req_buffer=write_buffer)
         result = struct.unpack("<BBBBBBfHHH", read_buffer)
         return {"abs reading":result[6],
                 "rel reading":result[7]/(self.CNT_FR_POS//2),
@@ -1355,7 +1370,7 @@ class TNA001(APTDevice):
                                        self.dst, self.src)
             self.write(write_buffer)
             # MGMSG_PZ_GET_NTFEEDBACKSRC 0x063D
-            read_buffer = self.read(0x3D, 0x06)
+            read_buffer = self.read(0x3D, 0x06, req_buffer=write_buffer)
             result = struct.unpack("<BBBBBB", read_buffer)
             source = result[2]
             return source
@@ -1399,7 +1414,7 @@ class TNA001(APTDevice):
                                    self.dst, self.src)
         self.write(write_buffer)
         # MGMSG_PZ_GET_NTSTATUSBITS 0x063F
-        read_buffer = self.read(0x3F, 0x06)
+        read_buffer = self.read(0x3F, 0x06, req_buffer=write_buffer)
         result = struct.unpack("<BBBBBBLBBBBBB", read_buffer)
         status_bits = {
             "tracking":     bool(result[6] & 0x00000001),
@@ -1447,7 +1462,7 @@ class TNA001(APTDevice):
                                        self.dst, self.src)
             self.write(write_buffer)
             # MGMSG_NT_GET_TNAIOSETTINGS 0x07ED
-            read_buffer = self.read(0xED, 0x07)
+            read_buffer = self.read(0xED, 0x07, req_buffer=write_buffer)
             result = struct.unpack("<BBBBBBHHHH", read_buffer)
             lv_out_range = result[6]
             lv_out_route = result[7]

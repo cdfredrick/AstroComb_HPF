@@ -19,9 +19,9 @@ import datetime
 
 # %% Start/Stop Time
 #--- Start
-start_time = None
-#start_time = datetime.datetime(2018, 5, 1)
-start_time = datetime.datetime.utcnow() - datetime.timedelta(days=3)
+#start_time = None
+start_time = datetime.datetime(2018, 5, 1)
+#start_time = datetime.datetime.utcnow() - datetime.timedelta(days=21)
 
 #--- Stop
 stop_time = None
@@ -110,4 +110,8 @@ ax2.set_ylabel("Temperature")
 ax2.yaxis.set_major_formatter(ticker.EngFormatter('C'))
 
 fig_0.autofmt_xdate()
+ax0.autoscale(axis='x', tight=True)
+ax0.grid(True, alpha=.25)
+ax1.grid(True, alpha=.25)
+ax2.grid(True, alpha=.25)
 fig_0.tight_layout()

@@ -94,7 +94,7 @@ logs = [
 
 
 # %% Uptime Calculator ========================================================
-def uptime(time, compliant, initialized, actual_state, desired_state,
+def uptime(timestamp, compliant, initialized, actual_state, desired_state,
            stop_time=None, prioritize_desire=False,
            strict_initialization=False):
     '''
@@ -106,44 +106,67 @@ def uptime(time, compliant, initialized, actual_state, desired_state,
 
     Notes
     -----
-    Strict initialization is only completely valid for UTC times greater than
-    2019-05-15 18:00 (new uptime bookeeping implemented on 2019-05-15 around
-    12pm MT).
+    Each state entry in the record indicates the start of a known state which
+    continues uninterupted until the next entry. If an entry indicates that
+    the state is not initialized, the compliance of that state and the
+    continuity of the preceeding state is suspect.
+
+    The compliance of the uninitialized state is determined by looking at the
+    compliance of the next entry in the record. If the uninitialized state is
+    found to be compliant or not, then the next entry in the database must
+    reflect that.
+
+    The compliance of the previous state is determined by the resulting
+    compliance of the uninitialized state along with the
+    `strict_initialization` parameter or the date. New uptime bookeeping was
+    implemented on 2019-05-15 around 12pm MT. The updated bookeeping ensurese
+    that the last known state from the buffer is transfered into the record if
+    there is a time gap between the two when the state is initialized. This
+    means that a non-compliant uninitialized state propagates only so far back
+    as the last known time. Without this change it was ambiguous
+    whether the control scripts were not functioning before an
+    initialization occured, or wether a large time gap between entries was
+    simply due to the system running sucessfully for a period of time before
+    encountering an error. The `strict_initialization` parameter forces all
+    entries before 2019-05-15 12pm MT to follow this same logic, if an
+    uninitialized state is not compliant, the entry before it is not compliant.
     '''
-    # Copy Input Arrays
-    time = np.copy(time)
+    timestamp = np.copy(timestamp)
     compliant = np.copy(compliant).astype(np.bool)
     initialized = np.copy(initialized).astype(np.bool)
     actual_state = np.copy(actual_state)
     desired_state = np.copy(desired_state)
+    result = {"total":{},
+              "state":{}}
 
-    # Stop Time
     if stop_time is None:
         stop_time = datetime.datetime.utcnow()
 
-    # Calculate Time Delta
-    time_delta = np.diff(np.append(time, stop_time))
+    #--- Calculate Time Delta
+    time_delta = np.diff(np.append(timestamp, stop_time))
 
-    # Prioritize Desired State
+    #--- Prioritize Desired State
     if prioritize_desire:
         compliant = np.logical_and(compliant,
                                    np.equal(desired_state, actual_state))
 
-    # Check Initialization Condition
+    #--- Check Initialization Condition
+    # Reverse order
     compliant = compliant[::-1]
     initialized = initialized[::-1]
-    for idx in range(1, len(time)):
+    # Check initialization
+    for idx in range(1, len(timestamp)):
         if (compliant[idx]) and (not initialized[idx]) and (not compliant[idx-1]):
+            # An uninitialized state is not compliant if the entry after it is not compliant
             compliant[idx] = False
-            if ((time[idx] > datetime.datetime(2019, 5, 15, 18)) or strict_initialization) and (idx+1 < len(time)):
+            if ((timestamp[idx] > datetime.datetime(2019, 5, 15, 18)) or strict_initialization) and (idx+1 < len(timestamp)):
+                # If an uninitialized state is not compliant, the entry before it is not compliant
                 compliant[idx+1] = False
+    # Normal order
     compliant = compliant[::-1]
     initialized = initialized[::-1]
 
-    # Result Container
-    result = {"total":{},
-              "state":{}}
-    # Total Uptime
+    #--- Total Uptime
     uptime = np.nonzero(compliant)[0]
     downtime = np.nonzero(np.logical_not(compliant))[0]
     uptime_gap = np.nonzero(np.not_equal(np.abs(np.diff(uptime)), 1))[0]
@@ -165,18 +188,18 @@ def uptime(time, compliant, initialized, actual_state, desired_state,
     uptime_time_delta = np.array([np.sum(time_delta[idx[0]:idx[1]+1]) for idx in uptime_idx])
     downtime_time_delta = np.array([np.sum(time_delta[idx[0]:idx[1]+1]) for idx in downtime_idx])
     result["total"]["uptime"] = {
-        "start":time[uptime_start],
-        "stop":time[uptime_start]+uptime_time_delta,
+        "start":timestamp[uptime_start],
+        "stop":timestamp[uptime_start]+uptime_time_delta,
         "delta":np.fromiter((td.total_seconds() for td in uptime_time_delta), np.float, len(uptime_time_delta)),
         "time":np.sum(uptime_time_delta).total_seconds() if len(uptime_time_delta) else 0.}
     result["total"]["downtime"] = {
-        "start":time[downtime_start],
-        "stop":time[downtime_start]+downtime_time_delta,
+        "start":timestamp[downtime_start],
+        "stop":timestamp[downtime_start]+downtime_time_delta,
         "delta":np.fromiter((td.total_seconds() for td in downtime_time_delta), np.float, len(downtime_time_delta)),
         "time":np.sum(downtime_time_delta).total_seconds() if len(downtime_time_delta) else 0.}
     result["total"]["time"] = np.sum(time_delta).total_seconds() if len(time_delta) else 0.
 
-    # Uptime by State
+    #--- Uptime by State
     states = np.unique([actual_state, desired_state])
     for state in states:
         result["state"][state] = {}
@@ -207,13 +230,13 @@ def uptime(time, compliant, initialized, actual_state, desired_state,
         uptime_time_delta = np.array([np.sum(time_delta[idx[0]:idx[1]+1]) for idx in uptime_idx])
         downtime_time_delta = np.array([np.sum(time_delta[idx[0]:idx[1]+1]) for idx in downtime_idx])
         result["state"][state]["uptime"] = {
-            "start":time[uptime_start],
-            "stop":time[uptime_start]+uptime_time_delta,
+            "start":timestamp[uptime_start],
+            "stop":timestamp[uptime_start]+uptime_time_delta,
             "delta":np.fromiter((td.total_seconds() for td in uptime_time_delta), np.float, len(uptime_time_delta)),
             "time":np.sum(uptime_time_delta).total_seconds() if len(uptime_time_delta) else 0.}
         result["state"][state]["downtime"] = {
-            "start":time[downtime_start],
-            "stop":time[downtime_start]+downtime_time_delta,
+            "start":timestamp[downtime_start],
+            "stop":timestamp[downtime_start]+downtime_time_delta,
             "delta":np.fromiter((td.total_seconds() for td in downtime_time_delta), np.float, len(downtime_time_delta)),
             "time":np.sum(downtime_time_delta).total_seconds() if len(downtime_time_delta) else 0.}
         result["state"][state]["time"] = np.sum(time_delta[is_state]).total_seconds() if len(time_delta[is_state]) else 0.

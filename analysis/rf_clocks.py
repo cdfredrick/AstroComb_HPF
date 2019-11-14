@@ -18,8 +18,8 @@ import datetime
 
 # %% Start/Stop Time
 #--- Start
-start_time = None
-#start_time = datetime.datetime(2018, 5, 1)
+#start_time = None
+start_time = datetime.datetime(2018, 5, 1)
 #start_time = datetime.datetime.utcnow() - datetime.timedelta(days=3)
 
 #--- Stop
@@ -137,6 +137,7 @@ ax1.plot(data[1][0], data[1][2], '.', markersize=1, label='flips')
 ax0.set_title("100MHz PLO")
 ax0.legend()
 ax0.set_yticks([-1, 0, 1])
+ax0.autoscale(axis='x', tight=True)
 
 ax1.set_title("1GHz PLO")
 ax1.legend()
@@ -193,17 +194,21 @@ ax1 = plt.subplot2grid((3,1),(1,0), sharex=ax0)
 ax2 = plt.subplot2grid((3,1),(2,0), sharex=ax0)
 
 ax0.plot(data[2][0], data[2][1]*1e-9, '.', markersize=1)
-ax1.plot(data[0][0], data[0][1]*1e-12, '.', markersize=1)
+ax1.plot(data[0][0], 10e6*data[0][1]*1e-12, '.', markersize=1)
 ax2.plot(data[1][0], data[1][1], '.', markersize=1)
 
 ax0.set_title("GPS Time Tag")
 ax0.yaxis.set_major_formatter(ticker.EngFormatter('s'))
+ax0.autoscale(axis='x', tight=True)
+ax0.grid(True, alpha=.25)
 
 ax1.set_title("Frequency Offset")
 ax1.yaxis.set_major_formatter(ticker.EngFormatter('Hz'))
+ax1.grid(True, alpha=.25)
 
 ax2.set_title("Magnetic Control")
 ax2.set_ylabel('DAC (arb. units)')
+ax2.grid(True, alpha=.25)
 
 fig_0.autofmt_xdate()
 fig_0.tight_layout()
@@ -255,12 +260,16 @@ ax2.plot(data[0][0], data[0][2], '.', markersize=1)
 
 ax0.set_title(r"Frequency Error Signal")
 ax0.set_ylabel('(arb. units)')
+ax0.autoscale(axis='x', tight=True)
+ax0.grid(True, alpha=.25)
 
 ax1.set_title(r"OCXO Control")
 ax1.set_ylabel('(arb. units)')
+ax1.grid(True, alpha=.25)
 
 ax2.set_title(r"RMS Amplitude at 2$\omega$")
 ax2.set_ylabel('(arb. units)')
+ax2.grid(True, alpha=.25)
 
 fig_0.autofmt_xdate()
 fig_0.tight_layout()
@@ -372,7 +381,9 @@ ax0.set_title(r"Temperature Reading")
 ax0.set_ylabel('Temperature')
 ax0.yaxis.set_major_formatter(ticker.EngFormatter('C'))
 ax0.legend(markerscale=10)
+ax0.autoscale(axis='x', tight=True)
 
+ax0.grid(True, alpha=0.25)
 ax1.set_title(r"Heater Control")
 ax1.set_ylabel('Setpoint (arb. units)')
 ax1.legend(loc=6, title='Setpoint')
@@ -380,6 +391,7 @@ ax1.legend(loc=6, title='Setpoint')
 ax1_c.set_ylabel('Actual (arb. units)')
 ax1_c.yaxis.set_major_formatter(ticker.EngFormatter('V'))
 ax1_c.legend(loc=7, title='Actual', markerscale=10)
+ax1.grid(True, alpha=0.25)
 
 fig_0.autofmt_xdate()
 fig_0.tight_layout()
@@ -401,10 +413,13 @@ ax1.plot(data_dac[1][0], data_dac[1][1], '.', markersize=1, label='1pps Output D
 ax0.set_title(r"Misc. ADC")
 ax0.legend(markerscale=10)
 ax0.yaxis.set_major_formatter(ticker.EngFormatter('V'))
+ax0.autoscale(axis='x', tight=True)
+ax0.grid(True, alpha=0.25)
 
 ax1.set_title(r"Misc. DAC")
 ax1.set_ylabel('(arb. units)')
 ax1.legend(markerscale=10)
+ax1.grid(True, alpha=0.25)
 
 fig_0.autofmt_xdate()
 fig_0.tight_layout()
@@ -419,7 +434,6 @@ ax1_c = ax1.twinx()
 ax0.plot(data_adc[8][0], data_adc[8][1], '.', markersize=1, label='AC Photosignal')
 ax0.plot(data_adc[9][0], data_adc[9][1], '.', markersize=1, label='I to V Converter')
 
-
 ax1.plot(data_dac[2][0], data_dac[2][1], '--', markersize=1, label='Drain V Control')
 ax1_c.plot(data_adc[3][0], data_adc[3][1]*10, '.', markersize=1, label='Drain Voltage')
 ax1_c.plot(data_adc[4][0], data_adc[4][1]*10, '.', markersize=1, label='Gate Voltage')
@@ -427,12 +441,15 @@ ax1_c.plot(data_adc[4][0], data_adc[4][1]*10, '.', markersize=1, label='Gate Vol
 ax0.set_title(r"Photosignal")
 ax0.legend(markerscale=10)
 ax0.yaxis.set_major_formatter(ticker.EngFormatter('V'))
+ax0.autoscale(axis='x', tight=True)
+ax0.grid(True, alpha=0.25)
 
 ax1.set_title(r"Lamp Current Control")
 ax1.set_ylabel('(arb. units)')
 ax1.legend(loc=6, markerscale=10)
 ax1_c.legend(loc=7, markerscale=10)
 ax1_c.yaxis.set_major_formatter(ticker.EngFormatter('V'))
+ax1.grid(True, alpha=0.25)
 
 fig_0.autofmt_xdate()
 fig_0.tight_layout()
@@ -449,23 +466,24 @@ ax0.plot(data_adc[1][0], data_adc[1][1]*10, '.', markersize=1, label='Heater Sup
 ax0.plot(data_adc[2][0], data_adc[2][1]*10, '.', markersize=1, label='Electrical Supply')
 ax0.plot(data_adc[15][0], data_adc[15][1], '.', markersize=1, label='Ground')
 
-
 ax1.plot(data_dac[0][0], data_dac[0][1], '.', markersize=1, label='RF Mult. Ampl.')
 ax1.plot(data_dac[6][0], data_dac[6][1], '.', markersize=1, label='10MHz Ampl.')
 ax1_c.plot(data_adc[18][0][0], np.nan)
 ax1_c.plot(data_adc[18][0][0], np.nan)
 ax1_c.plot(data_adc[18][0], data_adc[18][1], '.', markersize=1, label='Freq. Mult. Gain')
 
-
 ax0.set_title(r"Electrical Power")
 ax0.legend(markerscale=10)
 ax0.yaxis.set_major_formatter(ticker.EngFormatter('V'))
+ax0.autoscale(axis='x', tight=True)
+ax0.grid(True, alpha=0.25)
 
 ax1.set_title(r"RF Power")
 ax1.set_ylabel('(arb. units)')
 ax1.legend(loc=6, markerscale=10)
 ax1_c.legend(loc=7, markerscale=10)
 ax1_c.yaxis.set_major_formatter(ticker.EngFormatter('V'))
+ax1.grid(True, alpha=0.25)
 
 fig_0.autofmt_xdate()
 fig_0.tight_layout()

@@ -21,10 +21,10 @@ import datetime
 # %% Start/Stop Time
 #--- Start
 #start_time = None
-start_time = datetime.datetime(2018, 5, 1)
+#start_time = datetime.datetime(2018, 5, 1)
 #start_time = datetime.datetime.utcnow() - datetime.timedelta(days=14)
 #start_time = datetime.datetime.utcnow() - datetime.timedelta(weeks=4)
-#start_time = datetime.datetime.utcnow() - datetime.timedelta(days=4)
+start_time = datetime.datetime.utcnow() - datetime.timedelta(days=4)
 
 #--- Stop
 stop_time = None

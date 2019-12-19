@@ -429,7 +429,7 @@ def monitor(state_db):
 
 # Find Lock -------------------------------------------------------------------
 from scipy.optimize import curve_fit
-v_range_threshold = 0.1 #(limit-threshold)/(upper - lower limits)
+v_range_threshold = 0.075 #(limit-threshold)/(upper - lower limits)
 t_setpoint_threshold = 0.02 #kOhm
 tec_adjust_interval = 1.0 #s
 lock_hold_interval = 1.0 #s
@@ -456,7 +456,7 @@ def find_lock(state_db, last_good_position=None):
                 {'pid_action':False},
                 {'offset_action':True,'offset':last_good_position},
                 {'pid_action':True}]
-        sm.update_device_settings(device_db, settings_list)
+        sm.update_device_settings(device_db, settings_list, write_log=False)
     # Update lock timer -----------------------------------
         timer['find_lock:locked'] = time.time()
         with sm.lock['mll_fR/DAQ_error_signal']:
@@ -515,7 +515,7 @@ def find_lock(state_db, last_good_position=None):
                 {'pid_action':False},
                 {'upper_output_limit':STATES[state_db][sm.current_state[state_db]['state']]['settings'][device_db]['upper_output_limit'],
                  'lower_output_limit':STATES[state_db][sm.current_state[state_db]['state']]['settings'][device_db]['lower_output_limit']}]
-        sm.update_device_settings(device_db, settings_list)
+        sm.update_device_settings(device_db, settings_list, write_log=False)
     # Reinitialize threshold variables --------------------
         v_high = (1-v_range_threshold*2)*sm.dev[device_db]['driver'].upper_limit + v_range_threshold*2*sm.dev[device_db]['driver'].lower_limit
         v_low = (1-v_range_threshold*2)*sm.dev[device_db]['driver'].lower_limit + v_range_threshold*2*sm.dev[device_db]['driver'].upper_limit
@@ -607,12 +607,12 @@ def find_lock(state_db, last_good_position=None):
                     timer['find_lock:tec_adjust'] = time.time()
                 # Adjust the setpoint
                     if (new_output < sm.dev['mll_fR/device_PID']['driver'].center):
-                        log_str = ' Estimated voltage setpoint = {:.3f}, raising the resistance setpoint'.format(new_output)
+                        log_str = ' Estimated voltage setpoint = {:.3f}, raising the resistance setpoint {:.3f}'.format(new_output, t_setpoint)
                         log.log_info(mod_name, func_name, log_str)
                     # Raise the resistance setpoint
                         sm.dev[device_db]['driver'].tec_step(+1)
                     elif new_output > sm.dev['mll_fR/device_PID']['driver'].center:
-                        log_str = ' Estimated voltage setpoint = {:.3f}, lowering the resistance setpoint.'.format(new_output)
+                        log_str = ' Estimated voltage setpoint = {:.3f}, lowering the resistance setpoint {:.3f}'.format(new_output, t_setpoint)
                         log.log_info(mod_name, func_name, log_str)
                     # Lower the resistance setpoint
                         sm.dev[device_db]['driver'].tec_step(-1)

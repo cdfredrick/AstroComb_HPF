@@ -6,7 +6,8 @@ Created on Wed Mar 21 11:46:06 2018
 """
 
 # %% Modules
-
+%matplotlib inline
+%matplotlib qt5
 import matplotlib.pyplot as plt
 from matplotlib import ticker
 import datetime
@@ -45,8 +46,8 @@ ct_to_utc_conv = lambda dt: (central_tz.localize(dt.replace(tzinfo=None))).astim
 #start_time = ct_to_utc_conv(datetime.datetime(2018, 5, 1, 0, 0))
 #stop_time = ct_to_utc_conv(datetime.datetime(2018, 10, 15, 0, 0))
 stop_time = datetime.datetime.utcnow()
-start_time = stop_time - datetime.timedelta(days=2)
-#start_time = stop_time - datetime.timedelta(hours=5)
+start_time = stop_time - datetime.timedelta(days=11)
+#start_time = stop_time - datetime.timedelta(hours=9)
 DBs = {
 #    # ambience ----------------------------------------------------------------
     'ambience/box_temperature_0':{
@@ -72,10 +73,10 @@ DBs = {
 #            'start':start_time, 'stop':stop_time,
 #            'keys':{
 #                    'position':lambda p: p}},
-    'broadening_stage/rot_stg_position':{
-            'start':start_time, 'stop':stop_time,
-            'keys':{
-                    'deg':lambda p: p}},
+#    'broadening_stage/rot_stg_position':{
+#            'start':start_time, 'stop':stop_time,
+#            'keys':{
+#                    'deg':lambda p: p}},
 #    # comb_generator ----------------------------------------------------------
 #    'comb_generator/IM_bias':{
 #            'start':start_time, 'stop':stop_time,
@@ -90,11 +91,11 @@ DBs = {
 #                    'max_V':lambda v: v,
 #                    'min_std':lambda v: v,
 #                    'max_std':lambda v: v}},
-#    'cw_laser/dac_output':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'V':lambda v: v,
-#                    'std':lambda v: v}},
+    'cw_laser/dac_output':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'V':lambda v: v,
+                    'std':lambda v: v}},
 #    'cw_laser/freq_err':{
 #            'start':start_time, 'stop':stop_time,
 #            'keys':{
@@ -141,52 +142,52 @@ DBs = {
 #                    'min_std':lambda v: v,
 #                    'max_V':lambda v: v,
 #                    'max_std':lambda v: v}},
-#    'mll_f0/dac_output':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'V':lambda v: v,
-#                    'std':lambda v: v}},
+    'mll_f0/dac_output':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'V':lambda v: v,
+                    'std':lambda v: v}},
 #    'mll_f0/freq_err':{
 #            'start':start_time, 'stop':stop_time,
 #            'keys':{
 #                    'Hz':lambda f: f,
 #                    'std':lambda f: f}},
 ##    # mll_fR ------------------------------------------------------------------
-###    'mll_fR/DAQ_Vout_vs_freq':{
-###            'start':start_time, 'stop':stop_time,
-###            'keys':{
-###                    'V':lambda v: v,
-###                    'Hz':lambda f: f}},
-#    'mll_fR/DAQ_error_signal':{
+#    'mll_fR/DAQ_Vout_vs_freq':{
+#            'start':start_time, 'stop':stop_time,
+#            'keys':{
+#                    'V':lambda v: v,
+#                    'Hz':lambda f: f}},
+    'mll_fR/DAQ_error_signal':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'V':lambda v: v,
+                    'std':lambda v: v}},
+    'mll_fR/HV_output':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'V':lambda v: v,
+                    'std':lambda v: v}},
+#    'mll_fR/PID_output':{
 #            'start':start_time, 'stop':stop_time,
 #            'keys':{
 #                    'V':lambda v: v,
 #                    'std':lambda v: v}},
-#    'mll_fR/HV_output':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'V':lambda v: v,
-#                    'std':lambda v: v}},
-##    'mll_fR/PID_output':{
-##            'start':start_time, 'stop':stop_time,
-##            'keys':{
-##                    'V':lambda v: v,
-##                    'std':lambda v: v}},
 ###    #'mll_fR/PID_output_limits':{
 ###    #        'start':start_time, 'stop':stop_time,
 ###    #        'keys':{
 ###    #                'min':lambda v: v,
 ###    #                'max':lambda v: v}},
-#    'mll_fR/TEC_current':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'A':lambda a: a,
-#                    'std':lambda a: a}},
-#    'mll_fR/TEC_temperature':{
-#            'start':start_time, 'stop':stop_time,
-#            'keys':{
-#                    'kOhm':lambda o: o,
-#                    'std':lambda o: o}},
+    'mll_fR/TEC_current':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'A':lambda a: a,
+                    'std':lambda a: a}},
+    'mll_fR/TEC_temperature':{
+            'start':start_time, 'stop':stop_time,
+            'keys':{
+                    'kOhm':lambda o: o,
+                    'std':lambda o: o}},
 #    # rf_oscillators ----------------------------------------------------------
 ##    'rf_oscillators/100MHz_phase_lock':{
 ##            'start':start_time, 'stop':stop_time,
@@ -226,11 +227,11 @@ DBs = {
 #                    'ns':lambda s: s,
 #                    'std':lambda s: s}},
 #    # spectral_shaper ---------------------------------------------------------
-    'spectral_shaper/DW':{
-            'start':start_time, 'stop':stop_time,
-            'keys':{
-                    'dBm':lambda dw: dw,
-                    'std':lambda dw: dw}},
+#    'spectral_shaper/DW':{
+#            'start':start_time, 'stop':stop_time,
+#            'keys':{
+#                    'dBm':lambda dw: dw,
+#                    'std':lambda dw: dw}},
 #    'spectral_shaper/DW_vs_IM_bias':{
 #            'start':start_time, 'stop':stop_time,
 #            'keys':{

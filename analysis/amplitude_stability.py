@@ -273,14 +273,21 @@ norm_power /= np.nanmean(norm_power[flt_idxs])
 time_delta = -header['time'].diff(periods=-1)
 t_thr = np.array(int(1e9 * 1e4), dtype="timedelta64[ns]")
 t_dwt = time_delta.index[time_delta > t_thr]
-t_dwt = t_dwt.delete([2,6,7,8,9,10,11])
-t_dwt_dt = time_delta.loc[t_dwt]
+#t_dwt = t_dwt.delete([2,6,7,8,9,10,11])
+if len(t_dwt)>0:
+    t_dwt_dt = time_delta.loc[t_dwt]
+else:
+    t_dwt_dt = np.array([], dtype=np.timedelta64)
 
-#p_dwt_idxs = np.flatnonzero(norm_power < 0.25)
-#p_dwt = np.append(0, 1 + np.flatnonzero(np.diff(p_dwt_idxs) > 10))
+p_dwt_idxs = np.flatnonzero(norm_power < 0.25)
+p_dwt = np.append(0, 1 + np.flatnonzero(np.diff(p_dwt_idxs) > 10))
 #p_dwt = np.delete(p_dwt, [0])
-#p_dwt_dt = header['time'].loc[p_dwt_idxs[np.append(p_dwt[1:]-1, -1)]].values - header['time'].loc[p_dwt_idxs[p_dwt]]
-#p_dwt = p_dwt_idxs[p_dwt]
+if len(p_dwt_idxs)>0:
+    p_dwt_dt = header['time'].loc[p_dwt_idxs[np.append(p_dwt[1:]-1, -1)]].values - header['time'].loc[p_dwt_idxs[p_dwt]]
+    p_dwt = p_dwt_idxs[p_dwt]
+else:
+    p_dwt_dt = np.array([], dtype=np.timedelta64)
+    p_dwt = np.array([])
 
 total_downtime = t_dwt_dt.sum() #+ p_dwt_dt.sum()
 total_time = header['time'].max() - header['time'].min()
@@ -392,10 +399,9 @@ plt.pcolormesh(header['time'].loc[flat],
 #                       (10, 1),
 #                       ),
                cmap=plt.cm.nipy_spectral)#plt.cm.seismic)
-#plt.clim(-4,4)
 plt.ylabel("Wavelength (nm)")
 c_bar = plt.colorbar()
-c_bar.set_label(r"dBm")
+c_bar.set_label(r"dB")
 fig.autofmt_xdate()
 #plt.xlim([736810.5475672083, 736970.9387923519])
 #plt.gca().xaxis.set_major_locator(MonthLocator())

@@ -17,14 +17,15 @@ import datetime
 
 # %% Start/Stop Time
 #--- Start
-start_time = None
+# start_time = None
 #start_time = datetime.datetime(2018, 5, 1)
-#start_time = datetime.datetime.utcnow() - datetime.timedelta(days=10)
-start_time = datetime.datetime.utcnow() - datetime.timedelta(weeks=4)
+# start_time = datetime.datetime.utcnow() - datetime.timedelta(weeks=4)
+start_time = datetime.datetime.utcnow() - datetime.timedelta(days=7)
+# start_time = datetime.datetime.utcnow() - datetime.timedelta(hours=1)
 
 #--- Stop
 stop_time = None
-#stop_time = datetime.datetime(2019, 5, 1)
+# stop_time = datetime.datetime(2018, 5, 1)
 #stop_time = datetime.datetime.utcnow()
 
 
@@ -158,7 +159,6 @@ for label in ax2.xaxis.get_ticklabels():
 
 ax3.set_title(r"f$_0$ Servo Output")
 ax3.yaxis.set_major_formatter(ticker.EngFormatter('V'))
-ax3.autoscale(axis='x', tight=True)
 for label in ax3.xaxis.get_ticklabels():
     label.set_ha('right')
     label.set_rotation(30)
@@ -167,7 +167,7 @@ ax0.grid(True, alpha=0.25)
 ax1.grid(True, alpha=0.25)
 ax2.grid(True, alpha=0.25)
 ax3.grid(True, alpha=0.25)
-ax0.autoscale(axis='x', tight=True)
+ax0.set_xlim((data[0][0].min(), data[0][0].max()))
 fig_0.tight_layout()
 
 
@@ -258,7 +258,6 @@ ax2.yaxis.get_major_locator().set_params(numticks=3)
 ax2.yaxis.set_major_formatter(ticker.EngFormatter('Hz'))
 ax2.yaxis.set_minor_formatter(ticker.NullFormatter())
 ax2.set_ylim([ax0.get_ylim()[1], ax2.get_ylim()[1]])
-ax2.autoscale(axis='x', tight=True)
 
 ax1.hist(fR_err, bins=10000, density=True, orientation="horizontal", range=(-1000*fR_std, 1000*fR_std))
 
@@ -277,7 +276,6 @@ for label in ax2.xaxis.get_ticklabels():
 
 ax3.set_title(r"f$_R$ Servo Output")
 ax3.yaxis.set_major_formatter(ticker.EngFormatter('V'))
-ax3.autoscale(axis='x', tight=True)
 
 for label in ax3.xaxis.get_ticklabels():
     label.set_ha('right')
@@ -287,7 +285,7 @@ ax0.grid(True, alpha=0.25)
 ax1.grid(True, alpha=0.25)
 ax2.grid(True, alpha=0.25)
 ax3.grid(True, alpha=0.25)
-ax0.autoscale(axis='x', tight=True)
+ax0.set_xlim((data[0][0].min(), data[0][0].max()))
 fig_0.tight_layout()
 
 
@@ -385,8 +383,8 @@ ax0 = plt.subplot2grid((4,1),(0,0), rowspan=3)
 ax1 = plt.subplot2grid((4,1),(3,0))
 
 colormap = plt.cm.nipy_spectral
-ax0.set_prop_cycle(color=colormap(np.linspace(0, 0.95, n)))
-ax1.set_prop_cycle(color=colormap(np.linspace(0, 0.95, n)))
+ax0.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
+ax1.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
 
 for idx in range(n):
     ax0.plot(data[2, idx], data[1, idx], '-')

@@ -19,7 +19,7 @@ import datetime
 #--- Start
 start_time = None
 #start_time = datetime.datetime(2018, 5, 1)
-#start_time = datetime.datetime.utcnow() - datetime.timedelta(days=30)
+start_time = datetime.datetime.utcnow() - datetime.timedelta(days=14)
 
 #--- Stop
 stop_time = None
@@ -206,6 +206,8 @@ ax0.grid(True, alpha=0.25)
 ax1.grid(True, alpha=0.25)
 ax2.grid(True, alpha=0.25)
 ax3.grid(True, alpha=0.25)
+
+ax0.set_xlim((data[0][0].min(), data[0][0].max()))
 
 fig_0.tight_layout()
 

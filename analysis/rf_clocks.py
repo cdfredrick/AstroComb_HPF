@@ -254,8 +254,8 @@ ax1 = plt.subplot2grid((3,1),(1,0), sharex=ax0)
 ax2 = plt.subplot2grid((3,1),(2,0), sharex=ax0)
 
 ax0.plot(data[0][0], data[0][1], '.', markersize=1)
-ax1.plot(data[1][0], data[1][1], '.', markersize=1, label='MSBs')
 ax1.plot(data[1][0], data[1][2], '.', markersize=1, label='LSBs')
+ax1.plot(data[1][0], data[1][1], '.', markersize=1, label='MSBs')
 ax2.plot(data[0][0], data[0][2], '.', markersize=1)
 
 ax0.set_title(r"Frequency Error Signal")
@@ -265,6 +265,7 @@ ax0.grid(True, alpha=.25)
 
 ax1.set_title(r"OCXO Control")
 ax1.set_ylabel('(arb. units)')
+ax1.legend()
 ax1.grid(True, alpha=.25)
 
 ax2.set_title(r"RMS Amplitude at 2$\omega$")

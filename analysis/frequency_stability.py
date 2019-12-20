@@ -20,12 +20,13 @@ import datetime
 # %% Start/Stop Time
 #--- Start
 start_time = None
-#start_time = datetime.datetime(2018, 5, 1)
-start_time = datetime.datetime.utcnow() - datetime.timedelta(days=10)
+# start_time = datetime.datetime(2018, 5, 1)
+start_time = datetime.datetime.utcnow() - datetime.timedelta(days=4)
+# start_time = datetime.datetime.utcnow() - datetime.timedelta(hours=1)
 
 #--- Stop
 stop_time = None
-#stop_time = datetime.datetime(2019, 5, 1)
+# stop_time = datetime.datetime(2018, 5, 2)
 #stop_time = datetime.datetime.utcnow()
 
 # %% Database Paths ===========================================================
@@ -81,14 +82,14 @@ data[0][0] = data[0][0][1:][fGPS_mask]
 data[0][1] = fGPS_err
 n[0] = len(fGPS_err)
 
-# %% Plot
+# Plot
 fig_0 = plt.figure("Rb Clock - GPS Stability")
 fig_0.set_size_inches([6.4 , 4.78*1.25], forward=True)
 plt.clf()
 
-gs0 = gridspec.GridSpec(7, 1)
-gs00 = gridspec.GridSpecFromSubplotSpec(5, 10, subplot_spec=gs0[:3+1,0], wspace=0, hspace=0)
-gs10 = gridspec.GridSpecFromSubplotSpec(1, 10, subplot_spec=gs0[4:,0], wspace=0, hspace=0)
+gs0 = plt.matplotlib.gridspec.GridSpec(7, 1)
+gs00 = plt.matplotlib.gridspec.GridSpecFromSubplotSpec(5, 10, subplot_spec=gs0[:3+1,0], wspace=0, hspace=0)
+gs10 = plt.matplotlib.gridspec.GridSpecFromSubplotSpec(1, 10, subplot_spec=gs0[4:,0], wspace=0, hspace=0)
 
 ax0 = plt.subplot(gs00[1:3+1,0:-1])
 ax1 = plt.subplot(gs00[1:3+1,-1], sharey=ax0)
@@ -211,18 +212,17 @@ data[0][1] = fR_err
 n[0] = len(fR_err)
 
 # Plot
-fig_0 = plt.figure("Aux. Comb - fR Stability")
+fig_0 = plt.figure("Aux. Comb - fR Stability", clear=True, constrained_layout=True)
 fig_0.set_size_inches([6.4 , 4.78*1.25], forward=True)
-plt.clf()
 
-gs0 = gridspec.GridSpec(7, 1)
-gs00 = gridspec.GridSpecFromSubplotSpec(5, 10, subplot_spec=gs0[:3+1,0], wspace=0, hspace=0)
-gs10 = gridspec.GridSpecFromSubplotSpec(1, 10, subplot_spec=gs0[4:,0], wspace=0, hspace=0)
+gs0 = plt.matplotlib.gridspec.GridSpec(7, 1, figure=fig_0)
+gs00 = plt.matplotlib.gridspec.GridSpecFromSubplotSpec(5, 10, subplot_spec=gs0[:3+1,0], wspace=0, hspace=0)
+gs10 = plt.matplotlib.gridspec.GridSpecFromSubplotSpec(1, 10, subplot_spec=gs0[4:,0], wspace=0, hspace=0)
 
-ax0 = plt.subplot(gs00[1:3+1,0:-1])
-ax1 = plt.subplot(gs00[1:3+1,-1], sharey=ax0)
-ax2 = plt.subplot(gs00[0,0:-1], sharex=ax0)
-ax2_2 = plt.subplot(gs00[4,0:-1], sharex=ax0)
+ax0 = fig_0.add_subplot(gs00[1:3+1,0:-1])
+ax1 = fig_0.add_subplot(gs00[1:3+1,-1], sharey=ax0)
+ax2 = fig_0.add_subplot(gs00[0,0:-1], sharex=ax0)
+ax2_2 = fig_0.add_subplot(gs00[4,0:-1], sharex=ax0)
 
 ax3 = plt.subplot(gs10[:,0:-1])
 
@@ -300,7 +300,6 @@ ax3.yaxis.set_major_formatter(ticker.EngFormatter('Hz'))
 ax3.set_xlabel("seconds")
 ax3.grid()
 ax3.legend(markerscale=5)
-fig_0.tight_layout()
 
 
 # %% Aux. Comb - f0 Stability =================================================

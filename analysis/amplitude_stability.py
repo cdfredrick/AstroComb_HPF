@@ -40,8 +40,8 @@ from Drivers.Database import MongoDB
 start_time = None
 #start_time = datetime.datetime(2018, 5, 1)
 #start_time = datetime.datetime.utcnow() - datetime.timedelta(hours=4.5)
-#start_time = datetime.datetime.utcnow() - datetime.timedelta(days=2)
-
+start_time = datetime.datetime.utcnow() - datetime.timedelta(days=5)
+start_time = datetime.datetime(2019, 11, 12, 19)
 #--- Stop
 stop_time = None
 #stop_time = datetime.datetime(2019, 5, 1)
@@ -80,7 +80,7 @@ try:
         spc_data['y_std'].append(doc['data']['y_std'] if isinstance(doc['data']['y_std'],list) else [np.nan])
         header.append({'time':doc['_timestamp']})
     spc_data['x'] = pd.DataFrame(spc_data['x']).transpose(copy=True) # each column is a OSA trace
-    spc_data['y'] = pd.DataFrame(spc_data['y']).apply(hf.dBm_to_W, result_type='broadcast').transpose(copy=True) # linear scale, each column is a OSA trace
+    spc_data['y'] = hf.dBm_to_W(pd.DataFrame(spc_data['y'])).transpose(copy=True) # linear scale, each column is a OSA trace
     spc_data['y_std'] = pd.DataFrame(spc_data['y_std']).transpose(copy=True) # keep in dB, each column is a OSA trace
     # Dispersive Wave -----------------------------------------------
     spc_data['DW'] = []
@@ -276,19 +276,19 @@ t_dwt = time_delta.index[time_delta > t_thr]
 t_dwt = t_dwt.delete([2,6,7,8,9,10,11])
 t_dwt_dt = time_delta.loc[t_dwt]
 
-p_dwt_idxs = np.flatnonzero(norm_power < 0.25)
-p_dwt = np.append(0, 1 + np.flatnonzero(np.diff(p_dwt_idxs) > 10))
-p_dwt = np.delete(p_dwt, [0])
-p_dwt_dt = header['time'].loc[p_dwt_idxs[np.append(p_dwt[1:]-1, -1)]].values - header['time'].loc[p_dwt_idxs[p_dwt]]
-p_dwt = p_dwt_idxs[p_dwt]
+#p_dwt_idxs = np.flatnonzero(norm_power < 0.25)
+#p_dwt = np.append(0, 1 + np.flatnonzero(np.diff(p_dwt_idxs) > 10))
+#p_dwt = np.delete(p_dwt, [0])
+#p_dwt_dt = header['time'].loc[p_dwt_idxs[np.append(p_dwt[1:]-1, -1)]].values - header['time'].loc[p_dwt_idxs[p_dwt]]
+#p_dwt = p_dwt_idxs[p_dwt]
 
-total_downtime = t_dwt_dt.sum() + p_dwt_dt.sum()
+total_downtime = t_dwt_dt.sum() #+ p_dwt_dt.sum()
 total_time = header['time'].max() - header['time'].min()
 print(total_time)
 print(total_downtime)
 print(total_downtime/total_time)
-print(p_dwt_dt.sum())
-print(p_dwt_dt.sum()/total_time)
+#print(p_dwt_dt.sum())
+#print(p_dwt_dt.sum()/total_time)
 
 
 # 2D Spectral Amplitudes
@@ -314,7 +314,7 @@ ax0.set_ylim(bottom=0)
 ax0.grid(True, alpha=0.25)
 
 ax3.errorbar(header['time'].loc[t_dwt], np.zeros_like(t_dwt), xerr=[np.zeros_like(t_dwt_dt), t_dwt_dt], fmt='.')
-ax3.errorbar(header['time'].loc[p_dwt], np.zeros_like(p_dwt), xerr=[np.zeros_like(p_dwt_dt), p_dwt_dt], fmt='.')
+#ax3.errorbar(header['time'].loc[p_dwt], np.zeros_like(p_dwt), xerr=[np.zeros_like(p_dwt_dt), p_dwt_dt], fmt='.')
 
 pcolor_cmap = plt.cm.nipy_spectral
 pcolor_cmap.set_bad(color='k')
@@ -377,6 +377,31 @@ plt.tight_layout()
 #plt.savefig('long_spectrum.png', dpi=600, transparent=True)
 
 #avg_flat = copy.deepcopy(np.array([data_list[0], data_avg]))
+
+# %% Flat 2D
+flat = header['time'][header['mask']==0].sort_values().index
+
+fig = plt.figure("Flat 2D")
+plt.clf()
+fig.set_size_inches(6.35*1.5, 4.8, forward=True)
+plt.pcolormesh(header['time'].loc[flat],
+               spc_data['x_nm'].loc[:,flat].mean(axis='columns'),
+               spc_data['y_P/nm'].loc[:,flat].apply(hf.dB, result_type='broadcast'),
+#               hf.gaus_filt(
+#                       spc_data['y_P/nm'].loc[:,flat].apply(hf.dB, result_type='broadcast').sub(spc_data['y_P/nm'].loc[:,flat].apply(hf.dB).mean(axis='columns'), axis='index'),
+#                       (10, 1),
+#                       ),
+               cmap=plt.cm.nipy_spectral)#plt.cm.seismic)
+#plt.clim(-4,4)
+plt.ylabel("Wavelength (nm)")
+c_bar = plt.colorbar()
+c_bar.set_label(r"dBm")
+fig.autofmt_xdate()
+#plt.xlim([736810.5475672083, 736970.9387923519])
+#plt.gca().xaxis.set_major_locator(MonthLocator())
+#plt.ylim(800, 1300)
+plt.tight_layout()
+
 
 # %% Flat 2D Diff
 flat = header['time'][header['mask']==0].sort_values().index

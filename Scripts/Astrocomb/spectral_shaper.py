@@ -440,7 +440,7 @@ thread['get_new_single_quick'] = ThreadFactory(target=sm.dev['spectral_shaper/de
 #--- Optimization Functions ---------------------------------------------------
 
 # Optimize DW Setpoint --------------------------------------------------------
-def optimize_DW_setpoint(sig=3, max_iter=None, n_avg=2):
+def optimize_DW_setpoint(sig=3, max_iter=None, n_avg=1):
     # Info
     mod_name = __name__
     func_name = optimize_DW_setpoint.__name__
@@ -688,7 +688,7 @@ def optimize_DW_setpoint(sig=3, max_iter=None, n_avg=2):
 
 
 # Optimize 2nd Stage Z Coupling -----------------------------------------------
-def optimize_z_coupling(sig=3, max_iter=None, stage="in", scan_range=10, n_avg=5):
+def optimize_z_coupling(sig=3, max_iter=None, stage="in", scan_range=20, n_avg=1):
     # Info
     mod_name = __name__
     func_name = optimize_z_coupling.__name__
@@ -711,7 +711,6 @@ def optimize_z_coupling(sig=3, max_iter=None, stage="in", scan_range=10, n_avg=5
 
     #--- Setup optimizer --------------------------------------------------
     current_position = sm.dev[pz_db]['driver'].voltage()
-    scan_range = scan_range # default is 5V, +- 2.5 V
     start_scan = current_position - scan_range/2
     stop_scan = current_position + scan_range/2
     if start_scan < piezo_limits["min"]:
@@ -886,7 +885,7 @@ def optimize_z_coupling(sig=3, max_iter=None, stage="in", scan_range=10, n_avg=5
 
 
 # Optimize IM Bias ------------------------------------------------------------
-def optimize_IM_bias(sig=3, max_iter=None, n_avg=5):
+def optimize_IM_bias(sig=3, max_iter=None, n_avg=1):
     # Info
     mod_name = __name__
     func_name = optimize_IM_bias.__name__
@@ -1078,7 +1077,7 @@ def optimize_IM_bias(sig=3, max_iter=None, n_avg=5):
 
 
 # Optimize Finisar Waveshaper Phase -------------------------------------------
-def optimize_optical_phase(sig=3, max_iter=None, n_avg=2):
+def optimize_optical_phase(sig=3, max_iter=None, n_avg=1):
     # Info
     mod_name = __name__
     func_name = optimize_optical_phase.__name__
@@ -1096,7 +1095,8 @@ def optimize_optical_phase(sig=3, max_iter=None, n_avg=2):
     sm.dev[ws_db]['queue'].queue_and_wait()
 
     #--- Setup  Optimizer -------------------------------------------------
-    opt_orders = 6
+    coefs_scan_range = [1.5, 4.0, 0.75, 1.5, 0.5, 1.5] # ~3dB scan range
+    opt_orders = len(coefs_scan_range)
     opt_data = {}
     total_obs = 0
     current_phase = sm.dev[ws_db]['driver'].phase_profile()
@@ -1104,16 +1104,9 @@ def optimize_optical_phase(sig=3, max_iter=None, n_avg=2):
     frq_smp = (freqs > WaveShaper.SPEED_OF_LIGHT_NM_THZ/1070) & (freqs < WaveShaper.SPEED_OF_LIGHT_NM_THZ/1058)
     current_polyfit = np.polynomial.Legendre.fit(freqs[frq_smp], current_phase[frq_smp], 1+opt_orders)
     current_coefs = current_polyfit.coef[2:].tolist()
-    coefs_scan_range = 0.5 * (2*np.pi)
     bounds = []
     for idx, coef in enumerate(current_coefs):
-        bounds.append((coef - coefs_scan_range/(2), coef + coefs_scan_range/(2)))
-#    for bound in bounds:
-#        c_scan_range = bound[1] - bound[0]
-#        # Limit total scan range for faster model convergence
-#        abs_bounds.append((bound[0]-c_scan_range, bound[1]+c_scan_range))
-
-
+        bounds.append((coef - coefs_scan_range[idx]/1.5, coef + coefs_scan_range[idx]/1.5))
 
     #--- Setup OSA --------------------------------------------------------
     settings_list = STATES['spectral_shaper/state_optimizer']['optimal']['settings']['DW']
@@ -1309,10 +1302,10 @@ def optimize_optical_phase(sig=3, max_iter=None, n_avg=2):
         return new_phase
 
 # Optimize All Finisar Waveshaper Phase ---------------------------------------
-def optimize_all_optical_phase(sig=3, max_iter=None):
+def optimize_all_optical_phase(sig=3, max_iter=None, n_avg=1):
     # Info
     mod_name = __name__
-    func_name = optimize_optical_phase.__name__
+    func_name = optimize_all_optical_phase.__name__
     log_str = ' Beginning optical phase optimization'
     log.log_info(mod_name, func_name, log_str)
     start_time = time.time()
@@ -1327,7 +1320,7 @@ def optimize_all_optical_phase(sig=3, max_iter=None):
     sm.dev[ws_db]['queue'].queue_and_wait()
 
     #--- Setup  Optimizer -------------------------------------------------
-    coefs_scan_range = []
+    coefs_scan_range = [1.5, 4.0, 0.75, 1.5, 0.5, 1.5] # ~3dB scan range
     opt_orders = len(coefs_scan_range)
     total_obs = 0
     current_phase = sm.dev[ws_db]['driver'].phase_profile()
@@ -1337,11 +1330,7 @@ def optimize_all_optical_phase(sig=3, max_iter=None):
     current_coefs = current_polyfit.coef[2:].tolist()
     bounds = []
     for idx, coef in enumerate(current_coefs):
-        bounds.append((coef - coefs_scan_range/(2), coef + coefs_scan_range/(2)))
-#    for bound in bounds:
-#        c_scan_range = bound[1] - bound[0]
-#        # Limit total scan range for faster model convergence
-#        abs_bounds.append((bound[0]-c_scan_range, bound[1]+c_scan_range))
+        bounds.append((coef - coefs_scan_range[idx]/3, coef + coefs_scan_range[idx]/3))
 
     #--- Setup OSA --------------------------------------------------------
     settings_list = STATES['spectral_shaper/state_optimizer']['optimal']['settings']['DW']
@@ -1357,7 +1346,7 @@ def optimize_all_optical_phase(sig=3, max_iter=None):
         #--- Initialize optimizer -------------------------------------
         optimizer = Minimizer(
                         bounds, abs_bounds=None,
-                        n_initial_points=10, sig=sig)
+                        n_initial_points=10*opt_orders, sig=sig)
         #--- Optimize coefficient -------------------------------------
         while search:
             #--- Ensure queues
@@ -1367,29 +1356,31 @@ def optimize_all_optical_phase(sig=3, max_iter=None):
             #--- Measure new OSA trace
             thread_name = 'get_new_single_quick'
             current_DW = 0
-            (alive, error) = thread[thread_name].check_thread()
-            if error != None:
-                raise error[1].with_traceback(error[2])
-            if not(alive):
-                # Start new thread
-                thread[thread_name].start()
-            # Check Progress
-            while thread[thread_name].is_alive():
-                time.sleep(0.1)
-                sm.dev[osa_db]['queue'].touch()
-                sm.dev[ws_db]['queue'].touch()
-            # Get Result
-            (alive, error) = thread[thread_name].check_thread()
-            if error != None:
-                raise error[1].with_traceback(error[2])
-            else:
-                osa_trace = thread[thread_name].result
-            # Get DW
-            spectrum = np.array(osa_trace['data']['y'])
-            wavelengths = np.array(osa_trace['data']['x'])
-            dw = np.diff(wavelengths).mean()
-            current_DW = np.max(spectrum[wavelengths<740])
-            current_DW = 10*np.log10(dw*np.sum(10**(spectrum[wavelengths<740]/10)))
+            for _ in range(n_avg):
+                (alive, error) = thread[thread_name].check_thread()
+                if error != None:
+                    raise error[1].with_traceback(error[2])
+                if not(alive):
+                    # Start new thread
+                    thread[thread_name].start()
+                # Check Progress
+                while thread[thread_name].is_alive():
+                    time.sleep(0.1)
+                    sm.dev[osa_db]['queue'].touch()
+                    sm.dev[ws_db]['queue'].touch()
+                # Get Result
+                (alive, error) = thread[thread_name].check_thread()
+                if error != None:
+                    raise error[1].with_traceback(error[2])
+                else:
+                    osa_trace = thread[thread_name].result
+                # Get DW
+                spectrum = np.array(osa_trace['data']['y'])
+                wavelengths = np.array(osa_trace['data']['x'])
+                current_DW += np.max(spectrum[wavelengths<740])/n_avg
+                # Integrate?
+                #dw = np.diff(wavelengths).mean()
+                #current_DW += 10*np.log10(dw*np.sum(10**(spectrum[wavelengths<740]/10)))/n_avg
 
             #--- Update Model
             new_y = -current_DW # maximize the DW (dBm)
@@ -1445,7 +1436,7 @@ def optimize_all_optical_phase(sig=3, max_iter=None):
                 log.log_info(mod_name, func_name, log_str)
                 converged = False
                 search = False
-                opt_x = current_coefs[idx]
+                opt_x = current_coefs
 
             #--- Get new point
             if search:
@@ -1512,7 +1503,13 @@ def optimize_all_optical_phase(sig=3, max_iter=None):
                 'domain':current_polyfit.domain.tolist(),
                 'model':{
                     "n obs":total_obs,
-                    'time':stop_time - start_time}
+                    'time':stop_time - start_time,
+                    "opt x":opt_x,
+                    "x":optimizer.x,
+                    "y":optimizer.y, # -dBm
+                    "diagnostics":diag,
+                    "target sig":optimizer.sig,
+                    "converged":converged}
                 }
             sm.db[mon_db].write_record_and_buffer(sm.mon[mon_db]['data'])
         if error is not None:
@@ -1832,6 +1829,7 @@ optimizer_functions = [
     "optimize_z_out_coupling",
     "optimize_IM_bias",
     "optimize_optical_phase",
+    "optimize_all_optical_phase",
     ]
 # Optimize setpoints ----------------------------------------------------------
 def optimize_setpoints(state_db):
@@ -1862,19 +1860,21 @@ def optimize_setpoints(state_db):
         if 'n_avg' in run_optimizer:
             n_avg = run_optimizer['n_avg']
         else:
-            n_avg = 5
+            n_avg = 1
         target = run_optimizer['target']
         if target in optimizer_functions:
             if target == "optimize_DW_setpoint":
                 optimize_DW_setpoint(sig=sig, n_avg=n_avg)
             elif target == "optimize_z_in_coupling":
-                optimize_z_coupling(sig=sig, stage="in", scan_range=20, n_avg=n_avg)
+                optimize_z_coupling(sig=sig, stage="in", n_avg=n_avg)
             elif target == "optimize_z_out_coupling":
-                optimize_z_coupling(sig=sig, stage="out", scan_range=20, n_avg=n_avg)
+                optimize_z_coupling(sig=sig, stage="out", n_avg=n_avg)
             elif target == "optimize_IM_bias":
                 optimize_IM_bias(sig=sig, n_avg=n_avg)
             elif target == "optimize_optical_phase":
                 optimize_optical_phase(sig=sig, n_avg=n_avg)
+            elif target == "optimize_all_optical_phase":
+                optimize_all_optical_phase(sig=sig, n_avg=n_avg)
 
 
 # %% States ===================================================================

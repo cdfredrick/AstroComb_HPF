@@ -511,7 +511,7 @@ class WaveShaperHTTP():
         while count < 3:
             try:
                 result = requests.post('http://'+ip_address+'/waveshaper/loadprofile', json.dumps(filter_profile), timeout=self.timeout)
-            except requests.exceptions.Timeout:
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
                 count += 1
             else:
                 count = 3
@@ -528,7 +528,7 @@ class WaveShaperHTTP():
         while count < 3:
             try:
                 result = requests.get('http://'+ip_address+'/waveshaper/getprofile', timeout=self.timeout).text #.json() or .text?
-            except requests.exceptions.Timeout:
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
                 count += 1
             else:
                 count = 3
@@ -555,7 +555,7 @@ class WaveShaperHTTP():
         while count < 3:
             try:
                 result = requests.get('http://'+ip_address+'/waveshaper/devinfo', timeout=self.timeout).json()
-            except requests.exceptions.Timeout:
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
                 count += 1
             else:
                 count = 3

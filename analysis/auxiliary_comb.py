@@ -185,7 +185,7 @@ try:
     for doc in cursor:
         data[0].append(
             [doc['_timestamp'],
-             doc['V']/(0.4*np.sqrt(2)),
+             doc['V']/(0.4*np.sqrt(2)), #.125 instead?
              ])
     cursor = db_fR_out.read_record(start=start_time, stop=stop_time)
     for doc in cursor:

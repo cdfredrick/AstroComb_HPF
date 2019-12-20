@@ -86,8 +86,11 @@ mll_TEC = TECModule('GPIB0::20::INSTR', 1)
 mll_TEC.tec_resistance_setpoint()
 #Out[3]: 7.862
 
+mll_TEC.tec_gain()
+#Out[4]: 30 (or 10?)
+
 mll_TEC.tec_output()
-#Out[4]: False
+#Out[5]: False
 
 mll_TEC.tec_output(output=True)
 
@@ -178,26 +181,12 @@ old_coefs = [
     -0.18849556]
 #%%
 new_coefs = [
-2.541886835320573,
--4.764894713715443,
--10.402150681294284,
--1.4642983089296204,
--0.7423573240999327,
-0.07389741789685643
-    ]
-
-new_coefs = [
-1.1
-,-4.8
-,-10.421378100910463
-,-1.3808963467335154
-,-1.0382775086093914
-,0.2499456050377791]
-
-
-#new_coefs = [
-#20.05,
-#    ]
+    -6.0394090775996965 + 0.3*0 - 1.0*0,
+    -5.800888350528486 + 2.*0 -2.*0,
+    -10.846185606096743 + 0.5*0 - 0.2*0,
+    -1.3103647581879212 + 0.7*0 - .7*0,
+    -0.7194257485576765 + 0.1*0 - 0.4*0,
+    0.3945781226450866 + 0.7*0 - 0.7*0]
 
 #new_coefs = [
 #    12.873779823260552,
@@ -324,7 +313,7 @@ spec_opt.push(message={'control_parameter':{'abort_optimizer':True}})
 spec_opt.push(message={'control_parameter':{'setpoint_optimization':0}})
 spec_opt.push(message={'control_parameter':{'setpoint_optimization':tomorrow_at_noon()}})
 
-spec_opt.push(message={'control_parameter':{'DW_setpoint':-45.5}})
+spec_opt.push(message={'control_parameter':{'DW_setpoint':-43.5}})
 
 spec_opt.push(message={'control_parameter':{'run_optimizer':{'target':"optimize_z_in_coupling",
                                                              'sig':3}}})
@@ -338,5 +327,15 @@ spec_opt.push(message={'control_parameter':{'run_optimizer':{'target':"optimize_
 spec_opt.push(message={'control_parameter':{'run_optimizer':{'target':"optimize_optical_phase",
                                                              'sig':3}}})
 
+spec_opt.push(message={'control_parameter':{'run_optimizer':{'target':"optimize_all_optical_phase",
+                                                             'sig':3}}})
+    
 spec_opt.push(message={'control_parameter':{'run_optimizer':{'target':"optimize_DW_setpoint",
                                                              'sig':3}}})
+    
+#%%
+mll_state = PriorityQueue('mll_fR')
+
+mll_state.push(message={"state":{'mll_fR/state':{"state":"manual"}}})
+
+mll_state.push(message={"state":{'mll_fR/state':{"state":"lock"}}})

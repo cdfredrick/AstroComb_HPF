@@ -174,7 +174,9 @@ MONITOR_DBs = [
     'spectral_shaper/mask', 'spectral_shaper/spectrum',
     'spectral_shaper/DW', 'spectral_shaper/DW_vs_IM_bias',
     'spectral_shaper/DW_vs_waveplate_angle',
+    'spectral_shaper/DW_vs_piezo_in_voltage',
     'spectral_shaper/DW_bulk_vs_waveplate_angle',
+    'spectral_shaper/DW_bulk_vs_piezo_in_voltage',
     'spectral_shaper/2nd_stage_z_in_optimizer',
     'spectral_shaper/2nd_stage_z_out_optimizer',
     'spectral_shaper/optical_phase_optimizer'
@@ -192,6 +194,7 @@ R_STATE_DBs = []
 R_DEVICE_DBs =[]
 R_MONITOR_DBs = [
     'broadening_stage/rot_stg_position',
+    'broadening_stage/piezo_z_in_HV_output',
     'comb_generator/device_IM_bias',
     ]
 READ_DBs = R_STATE_DBs + R_DEVICE_DBs + R_MONITOR_DBs
@@ -327,8 +330,12 @@ warning = {}
 warning_interval = 100 # seconds
 
 IM_bias_limits = {'max':5.5, 'min':0.5}
-rot_stg_limits = {"min":16, "max":45}
-piezo_limits = {"min":0, "max":75}
+rot_stg_limits = {"min":16., "max":45.}
+piezo_limits = {"min":0., "max":75.}
+
+piezo_limits_pwr_ctrl = {"min":0., "max":38.} # for controlling the input power when the rtg stg is unavailable
+# the maximum value should be the location of optimal coupling
+
 
 #--- Monitor Functions --------------------------------------------------------
 
@@ -440,7 +447,7 @@ thread['get_new_single_quick'] = ThreadFactory(target=sm.dev['spectral_shaper/de
 #--- Optimization Functions ---------------------------------------------------
 
 # Optimize DW Setpoint --------------------------------------------------------
-def optimize_DW_setpoint(sig=3, max_iter=None, n_avg=1):
+def optimize_DW_setpoint(sig=3, max_iter=None, n_avg=1, exp_alpha=0.2):
     # Info
     mod_name = __name__
     func_name = optimize_DW_setpoint.__name__
@@ -620,7 +627,7 @@ def optimize_DW_setpoint(sig=3, max_iter=None, n_avg=1):
     finally:
 
         # Optimum output
-        new_angle = opt_x[0]
+        new_angle = exp_alpha*opt_x[0] + (1-exp_alpha)*current_angle
         stop_time = time.time()
 
         #--- Implement result -------------------------------------------------
@@ -642,6 +649,7 @@ def optimize_DW_setpoint(sig=3, max_iter=None, n_avg=1):
 
         #--- Update DW Setpoint -----------------------------------------------
         if converged:
+            new_DW = exp_alpha*opt_DW + (1-opt_DW)*sm.local_settings[CONTROL_DB]['DW_setpoint']['value']
             with sm.lock[CONTROL_DB]:
                 log_str = ' Optimal DW = {:.3g}+-{:.2g} dBm'.format(opt_DW, opt_DW_std)
                 log.log_info(mod_name, func_name, log_str)
@@ -650,7 +658,7 @@ def optimize_DW_setpoint(sig=3, max_iter=None, n_avg=1):
                     stop_time - start_time,
                     optimizer.n_obs)
                 log.log_info(mod_name, func_name, log_str)
-                sm.local_settings[CONTROL_DB]['DW_setpoint']['value'] = opt_DW
+                sm.local_settings[CONTROL_DB]['DW_setpoint']['value'] = new_DW
                 sm.db[CONTROL_DB].write_record_and_buffer(sm.local_settings[CONTROL_DB])
         if error is not None:
             raise error
@@ -686,9 +694,248 @@ def optimize_DW_setpoint(sig=3, max_iter=None, n_avg=1):
             sm.db[mon_db].write_record_and_buffer(sm.mon[mon_db]['data'])
         return new_angle, opt_DW, opt_DW_std
 
+# Optimize DW Setpoint (no rotation stage) ------------------------------------
+def optimize_DW_setpoint_nrs(sig=3, max_iter=None, n_avg=1, exp_alpha=0.2):
+    # Info
+    mod_name = __name__
+    func_name = optimize_DW_setpoint_nrs.__name__
+    log_str = ' Beginning DW setpoint optimization'
+    log.log_info(mod_name, func_name, log_str)
+    start_time = time.time()
+
+    #--- Databases --------------------------------------------------------
+    mon_db = 'spectral_shaper/DW_bulk_vs_piezo_in_voltage'
+    osa_db = 'spectral_shaper/device_OSA'
+    pz_db = 'spectral_shaper/device_piezo_z_in'
+
+    #--- Queue and wait ---------------------------------------------------
+    sm.dev[osa_db]['queue'].queue_and_wait()
+    sm.dev[pz_db]['queue'].queue_and_wait()
+
+    #--- Setup  Optimizer -------------------------------------------------
+    voltage_scan_range = 4 # 4 volt range, +-2 volts
+    current_voltage = sm.dev[pz_db]['driver'].voltage()
+    start_scan = current_voltage - voltage_scan_range/2
+    stop_scan = current_voltage + voltage_scan_range/2
+    if start_scan < piezo_limits_pwr_ctrl["min"]:
+        start_scan = piezo_limits_pwr_ctrl["min"]
+        stop_scan = start_scan + voltage_scan_range
+    if stop_scan > piezo_limits_pwr_ctrl["max"]:
+        stop_scan = piezo_limits_pwr_ctrl["max"]
+        start_scan = stop_scan - voltage_scan_range
+    bounds = [(start_scan, stop_scan)]
+
+    #--- Initialize optimizer ---------------------------------------------
+    optimizer = Minimizer(
+        bounds,
+        n_initial_points=10, sig=sig,
+        abs_bounds=[(piezo_limits_pwr_ctrl["min"], piezo_limits_pwr_ctrl["max"])])
+
+    #--- Setup OSA --------------------------------------------------------
+    settings_list = STATES['spectral_shaper/state_optimizer']['optimal']['settings']['short']
+    sm.update_device_settings(osa_db, settings_list, write_log=False)
+
+    #--- Optimize DW Setpoint ---------------------------------------------
+    converged = False
+    search = True
+    new_x = [current_voltage]
+    DWs = []
+    try:
+        while search:
+            #--- Ensure queues
+            sm.dev[osa_db]['queue'].touch()
+            sm.dev[pz_db]['queue'].touch()
+
+            #--- Measure new OSA trace
+            thread_name = 'get_new_single_quick'
+            current_DW = 0
+            current_bulk = 0
+            for _ in range(n_avg):
+                (alive, error) = thread[thread_name].check_thread()
+                if error != None:
+                    raise error[1].with_traceback(error[2])
+                if not(alive):
+                    # Start new thread
+                    thread[thread_name].start()
+                # Check Progress
+                while thread[thread_name].is_alive():
+                    time.sleep(0.1)
+                    sm.dev[osa_db]['queue'].touch()
+                    sm.dev[pz_db]['queue'].touch()
+                # Get Result
+                (alive, error) = thread[thread_name].check_thread()
+                if error != None:
+                    raise error[1].with_traceback(error[2])
+                else:
+                    osa_trace = thread[thread_name].result
+                # Get DW
+                spectrum = np.array(osa_trace['data']['y'])
+                wavelengths = np.array(osa_trace['data']['x'])
+                current_DW += spectrum[wavelengths<740].max()/n_avg
+                current_bulk += spectrum[wavelengths>800].max()/n_avg
+
+            #--- Update Model
+            new_y = -current_bulk # maximize the bulk spectrum (dBm)
+            opt_x, diag = optimizer.tell(new_x, new_y, diagnostics=True)
+            # Save dispersive wave amplitude
+            DWs.append(current_DW)
+
+            #--- Calculate Optimal DW Amplitude
+            dw_model = Minimizer.new_model(optimizer.x, DWs, optimizer.dims)
+            opt_DW, opt_DW_std = dw_model.predict(opt_x, return_std=True)
+
+            #--- Write Intermediate Result to Buffer
+            with sm.lock[mon_db]:
+                sm.mon[mon_db]['new'] = True
+                sm.mon[mon_db]['data'] = {
+                    'V':np.array(optimizer.x).flatten().tolist(),
+                    'bulk_dBm':(-np.array(optimizer.y)).tolist(),
+                    'DW_dBm':DWs,
+                    "bulk_model":{
+                        "opt x":opt_x,
+                        "x":optimizer.x, # V
+                        "y":optimizer.y, # -dBm
+                        "diagnostics":diag,
+                        "n obs":optimizer.n_obs,
+                        "target sig":optimizer.sig,
+                        "time":time.time() - start_time
+                        },
+                    "DW_model":{
+                        "opt x":opt_x,
+                        "x":dw_model.x, # Volts
+                        "y":dw_model.y, # dBm
+                        "diagnostics":dw_model.fitness(test_x=opt_x),
+                        "n obs":dw_model.n_obs,
+                        "target sig":dw_model.sig,
+                        "time":time.time() - start_time
+                        }
+                    }
+                sm.db[mon_db].write_buffer(sm.mon[mon_db]['data'])
+
+            #--- Check abort flag
+            with sm.lock[CONTROL_DB]:
+                abort_optimization = sm.local_settings[CONTROL_DB]['abort_optimizer']['value']
+                if abort_optimization:
+                    sm.local_settings[CONTROL_DB]['abort_optimizer']['value'] = False
+                    sm.db[CONTROL_DB].write_record_and_buffer(sm.local_settings[CONTROL_DB])
+
+            #--- Check convergence or end search
+            if optimizer.convergence_count >= 3:
+                converged = True
+                search = False
+            elif max_iter:
+                if optimizer.n_obs >= max_iter:
+                    converged = False
+                    search = False
+                    opt_x = [current_voltage]
+                    log_str = ' Model did not converge to {:} sig after {:} samples. Returning to initial point.'.format(
+                        optimizer.sig,
+                        optimizer.n_obs)
+                    warning_id = 'DW optimization'
+                    if (warning_id in warning):
+                        if (time.time() - warning[warning_id]) > warning_interval:
+                            log.log_warning(mod_name, func_name, log_str)
+                    else:
+                        warning[warning_id] = time.time()
+                        log.log_warning(mod_name, func_name, log_str)
+            elif abort_optimization:
+                log_str = ' Optimization aborted, returning to initial point.'
+                log.log_info(mod_name, func_name, log_str)
+                converged = False
+                search = False
+                opt_x = [current_voltage]
+
+            #--- Get new point
+            if search:
+                if not (optimizer.n_obs % 5):
+                    print(" {:} observations, {:.2f} significance, {:.3g}s".format(optimizer.n_obs, diag["significance"], time.time()-start_time))
+                #--- Ask for new point
+                new_x = optimizer.ask()
+                #--- Move to new point
+                sm.dev[pz_db]['driver'].voltage(new_x[0])
+                #--- Settle time
+                time.sleep(.1)
+        error = None
+    except Exception as err:
+        error = err
+        log_str = ' Error encountered optimization aborted, returning to initial point.'
+        log.log_info(mod_name, func_name, log_str)
+        converged = False
+        search = False
+        opt_x = [current_voltage]
+    finally:
+
+        # Optimum output
+        new_voltage = exp_alpha*opt_x[0] + (1-exp_alpha)*current_voltage
+        stop_time = time.time()
+
+        #--- Implement result -------------------------------------------------
+        sm.dev[pz_db]['driver'].voltage(new_voltage)
+        # Update Monitor
+        rot_mon_db = 'broadening_stage/piezo_z_in_HV_output'
+        with sm.lock[rot_mon_db]:
+            sm.mon[rot_mon_db]['new'] = True
+            sm.mon[rot_mon_db]['data'].append(new_voltage)
+
+        #--- Remove from queue ------------------------------------------------
+        sm.dev[osa_db]['queue'].remove()
+        sm.dev[pz_db]['queue'].remove()
+
+        #--- Log Result -------------------------------------------------------
+        if converged:
+            log_str = ' Bulk spectrum optimized at {:.2f} V'.format(new_voltage)
+            log.log_info(mod_name, func_name, log_str)
+
+        #--- Update DW Setpoint -----------------------------------------------
+        if converged:
+            new_DW = exp_alpha*opt_DW + (1-exp_alpha)*sm.local_settings[CONTROL_DB]['DW_setpoint']['value']
+            with sm.lock[CONTROL_DB]:
+                log_str = ' Optimal DW = {:.3g}+-{:.2g} dBm'.format(opt_DW, opt_DW_std)
+                log.log_info(mod_name, func_name, log_str)
+                log_str = ' >{:} sig after {:.3g}s and {:} observations'.format(
+                    optimizer.sig,
+                    stop_time - start_time,
+                    optimizer.n_obs)
+                log.log_info(mod_name, func_name, log_str)
+                sm.local_settings[CONTROL_DB]['DW_setpoint']['value'] = new_DW
+                sm.db[CONTROL_DB].write_record_and_buffer(sm.local_settings[CONTROL_DB])
+        if error is not None:
+            raise error
+
+        #--- Record result ----------------------------------------------------
+        with sm.lock[mon_db]:
+            sm.mon[mon_db]['new'] = True
+            sm.mon[mon_db]['data'] = {
+                'V':np.array(optimizer.x).flatten().tolist(),
+                'bulk_dBm':(-np.array(optimizer.y)).tolist(),
+                'DW_dBm':DWs,
+                "bulk_model":{
+                    "opt x":opt_x,
+                    "x":optimizer.x, # V
+                    "y":optimizer.y, # -dBm
+                    "diagnostics":diag,
+                    "n obs":optimizer.n_obs,
+                    "target sig":optimizer.sig,
+                    "time":stop_time - start_time,
+                    "converged":converged,
+                    },
+                "DW_model":{
+                    "opt x":opt_x,
+                    "x":dw_model.x, # Volts
+                    "y":dw_model.y, # dBm
+                    "diagnostics":dw_model.fitness(test_x=opt_x),
+                    "n obs":dw_model.n_obs,
+                    "target sig":dw_model.sig,
+                    "time":stop_time - start_time,
+                    "converged":converged,
+                    }
+                }
+            sm.db[mon_db].write_record_and_buffer(sm.mon[mon_db]['data'])
+        return new_voltage, opt_DW, opt_DW_std
+
 
 # Optimize 2nd Stage Z Coupling -----------------------------------------------
-def optimize_z_coupling(sig=3, max_iter=None, stage="in", scan_range=20, n_avg=1):
+def optimize_z_coupling(sig=3, max_iter=None, stage="in", scan_range=20, n_avg=1, exp_alpha=0.2):
     # Info
     mod_name = __name__
     func_name = optimize_z_coupling.__name__
@@ -841,7 +1088,7 @@ def optimize_z_coupling(sig=3, max_iter=None, stage="in", scan_range=20, n_avg=1
         opt_x = [current_position]
     finally:
         # Optimum output
-        new_position = opt_x[0]
+        new_position = exp_alpha*opt_x[0] + (1-exp_alpha)*current_position
         stop_time = time.time()
 
         #--- Implement result -------------------------------------------------
@@ -885,7 +1132,7 @@ def optimize_z_coupling(sig=3, max_iter=None, stage="in", scan_range=20, n_avg=1
 
 
 # Optimize IM Bias ------------------------------------------------------------
-def optimize_IM_bias(sig=3, max_iter=None, n_avg=1):
+def optimize_IM_bias(sig=3, max_iter=None, n_avg=1, exp_alpha=0.2):
     # Info
     mod_name = __name__
     func_name = optimize_IM_bias.__name__
@@ -1033,7 +1280,7 @@ def optimize_IM_bias(sig=3, max_iter=None, n_avg=1):
         opt_x = [current_bias]
     finally:
         # Optimum output
-        new_bias = opt_x[0]
+        new_bias = exp_alpha*opt_x[0] + (1-exp_alpha)*current_bias
         stop_time = time.time()
 
         #--- Implement result -------------------------------------------------
@@ -1552,6 +1799,18 @@ def monitor_spectrum(state_db):
                 sm.mon[monitor_db]['data'] = sm.update_buffer(
                     sm.mon[monitor_db]['data'],
                     new_data, 500, extend=True)
+    # Input Piezo Voltage
+        new_data = []
+        monitor_db = 'broadening_stage/piezo_z_in_HV_output'
+        for doc in sm.mon[monitor_db]['cursor'].read():
+            new_data.append(doc['V'])
+        # Update buffers -----------------------
+        if len(new_data) > 0:
+            with sm.lock[monitor_db]:
+                sm.mon[monitor_db]['new'] = True
+                sm.mon[monitor_db]['data'] = sm.update_buffer(
+                    sm.mon[monitor_db]['data'],
+                    new_data, 500, extend=True)
     # Intensity Modulator Bias
         new_data = []
         monitor_db = 'comb_generator/device_IM_bias'
@@ -1610,7 +1869,7 @@ def apply_mask(state_db):
 
 # Adjust Chip Input Power (Fast) ----------------------------------------------
 DW_limits = 2. #4.5 #{'max':-41, 'min':-50}
-DW_range_threshold = 1. # 3.5/9 #  3.5/9 for -44.5 and -46.5 soft limits :: 1/3.6 for -43.5 and -47.5 soft limits
+DW_range_threshold = 1.25 # 3.5/9 #  3.5/9 for -44.5 and -46.5 soft limits :: 1/3.6 for -43.5 and -47.5 soft limits
 minimum_angle = rot_stg_limits["min"] # degrees
 maximum_angle = rot_stg_limits["max"] # degrees
 def adjust_quick(state_db):
@@ -1717,6 +1976,113 @@ def adjust_quick(state_db):
             sm.mon[monitor_db]['data'].append(current_angle)
 
 
+# Adjust Chip Input Power (Fast, No Rotation Stage) ---------------------------
+minimum_voltage = piezo_limits_pwr_ctrl["min"]
+maximum_voltage = piezo_limits_pwr_ctrl["max"]
+def adjust_quick_nrs(state_db):
+    mod_name = adjust_quick_nrs.__module__
+    func_name = adjust_quick_nrs.__name__
+    osa_db = 'spectral_shaper/device_OSA'
+    pz_db = 'spectral_shaper/device_piezo_z_in'
+# DW threshold
+    DW_high = sm.local_settings[CONTROL_DB]['DW_setpoint']['value']+DW_range_threshold # (1-DW_range_threshold)*DW_limits['max'] + DW_range_threshold*DW_limits['min']
+    DW_low = sm.local_settings[CONTROL_DB]['DW_setpoint']['value']-DW_range_threshold # (1-DW_range_threshold)*DW_limits['min'] + DW_range_threshold*DW_limits['max']
+# Wait for OSA queue
+    sm.dev[osa_db]['queue'].queue_and_wait()
+# Adjust 2nd Stage Power
+    sm.dev[pz_db]['queue'].queue_and_wait()
+    continue_adjusting_voltage = True
+    DWs = []
+    voltages = []
+    while continue_adjusting_voltage:
+    # Ensure Queues
+        sm.dev[osa_db]['queue'].queue_and_wait()
+        sm.dev[pz_db]['queue'].queue_and_wait()
+    # Setup OSA
+        settings_list = STATES['spectral_shaper/state_optimizer']['optimal']['settings']['DW']
+        sm.update_device_settings(osa_db, settings_list, write_log=False)
+    # Get New Trace
+        thread_name = 'get_new_single_quick'
+        (alive, error) = thread[thread_name].check_thread()
+        if error != None:
+            raise error[1].with_traceback(error[2])
+        if not(alive):
+        # Start new thread
+            thread[thread_name].start()
+    # Check Progress
+        while thread[thread_name].is_alive():
+            time.sleep(0.1)
+            sm.dev[osa_db]['queue'].touch()
+            sm.dev[pz_db]['queue'].touch()
+    # Get Result
+        (alive, error) = thread[thread_name].check_thread()
+        if error != None:
+            raise error[1].with_traceback(error[2])
+        else:
+            osa_trace = thread[thread_name].result
+    # Get DW
+        current_DW = np.max(osa_trace['data']['y'])
+        DWs.append(current_DW)
+    # Get Input Piezo Voltage
+        current_voltage = sm.dev[pz_db]['driver'].voltage() 
+        voltages.append(current_voltage)
+    # Maximum voltage condition
+        maximum_voltage_condition = (current_voltage > maximum_voltage)
+    # Check compliance
+        DW_diff = current_DW - sm.local_settings[CONTROL_DB]['DW_setpoint']['value']
+        upper_limit_condition = (current_DW > DW_high)
+        lower_limit_condition = (current_DW < DW_low)
+    # Adjust the setpoint
+        if lower_limit_condition:
+            if maximum_voltage_condition:
+                warning_id = 'high_voltage_fast'
+                log_str = ' DW is {:.3f}dB from setpoint {:.3f}dBm, but 2nd stage power is already at maximum'.format(DW_diff, sm.local_settings[CONTROL_DB]['DW_setpoint']['value'])
+                if (warning_id in warning):
+                    if (time.time() - warning[warning_id]) > warning_interval:
+                        log.log_warning(mod_name, func_name, log_str)
+                else:
+                    warning[warning_id] = time.time()
+                    log.log_warning(mod_name, func_name, log_str)
+                continue_adjusting_voltage = False
+            else:
+                log_str = ' DW is {:.3f}dB from setpoint {:.3f}dBm, raising the 2nd stage power.\n Current voltage {:.3f}V.'.format(DW_diff, sm.local_settings[CONTROL_DB]['DW_setpoint']['value'], current_voltage)
+                log.log_info(mod_name, func_name, log_str)
+            # Raise the 2nd stage power
+                settings_list = [{'voltage':current_voltage+0.1}]
+                sm.update_device_settings(pz_db, settings_list, write_log=False)
+        elif upper_limit_condition:
+            log_str = ' DW is {:.3f}dB from setpoint {:.3f}dBm, lowering the 2nd stage power.\n Current voltage {:.3f}V.'.format(DW_diff, sm.local_settings[CONTROL_DB]['DW_setpoint']['value'], current_voltage)
+            log.log_info(mod_name, func_name, log_str)
+        # Lower the 2nd stage power
+            settings_list = [{'voltage':current_voltage-0.1}]
+            sm.update_device_settings(pz_db, settings_list, write_log=False)
+        else:
+        # Good to go
+            continue_adjusting_voltage = False
+# Remove from Queue
+    sm.dev[osa_db]['queue'].remove()
+    sm.dev[pz_db]['queue'].remove()
+# Record Movement
+    monitor_db = 'spectral_shaper/DW_vs_piezo_in_voltage'
+    with sm.lock[monitor_db]:
+        sm.mon[monitor_db]['new'] = True
+        sm.mon[monitor_db]['data'] = np.array([voltages, DWs])
+        sm.db[monitor_db].write_record_and_buffer({'V':voltages, 'dBm':DWs})
+# Update State Variable
+    if not(upper_limit_condition or lower_limit_condition):
+        with sm.lock[state_db]:
+            sm.current_state[state_db]['compliance'] = True
+            sm.db[state_db].write_record_and_buffer(sm.current_state[state_db])
+        # Log
+        log_str = ' Spectrum successfully optimized at {:}V'.format(current_voltage)
+        log.log_info(mod_name, func_name, log_str)
+        # Update Monitor
+        monitor_db = 'broadening_stage/piezo_z_in_HV_output'
+        with sm.lock[monitor_db]:
+            sm.mon[monitor_db]['new'] = True
+            sm.mon[monitor_db]['data'].append(current_voltage)
+
+
 # %% Maintain Routines ========================================================
 '''This section is for defining the methods needed to maintain the system in
     its defined states.'''
@@ -1820,11 +2186,94 @@ def adjust_slow(state_db):
                         sm.update_device_settings(device_db, settings_list, write_log=False)
 
 
+# Adjust Chip Input Power (Slow, No rotation stage) ---------------------------
+def adjust_slow_nrs(state_db):
+    mod_name = adjust_slow_nrs.__module__
+    func_name = adjust_slow_nrs.__name__
+    compliant = True
+# Get most recent values --------------------------------------------
+    with sm.lock['spectral_shaper/DW']:
+        new_DW_condition = sm.mon['spectral_shaper/DW']['new']
+        sm.mon['spectral_shaper/DW']['new'] = False
+        if new_DW_condition:
+            current_DW = sm.mon['spectral_shaper/DW']['data'][-1]
+    # DW threshold
+    DW_high = sm.local_settings[CONTROL_DB]['DW_setpoint']['value']+DW_limits # (1-DW_range_threshold)*DW_limits['max'] + DW_range_threshold*DW_limits['min']
+    DW_low = sm.local_settings[CONTROL_DB]['DW_setpoint']['value']-DW_limits # (1-DW_range_threshold)*DW_limits['min'] + DW_range_threshold*DW_limits['max']
+# Check if the output is outside the acceptable range ---------------
+    if new_DW_condition:
+        if (current_DW < DW_low):
+        # Spectrum is not optimized
+            compliant = False
+            log_str = " Spectrum not optimized, DW amplitude lower than the acceptable range"
+            log.log_error(mod_name, func_name, log_str)
+        elif (current_DW > DW_high):
+        # Spectrum is not optimized
+            compliant = False
+            log_str = " Spectrum not optimized, DW amplitude higher than the acceptable range"
+            log.log_error(mod_name, func_name, log_str)
+# If not optimized --------------------------------------------------
+    if not(compliant):
+    # Update state variable
+        with sm.lock[state_db]:
+            sm.current_state[state_db]['compliance'] = False
+            sm.db[state_db].write_record_and_buffer(sm.current_state[state_db])
+# If optimized ------------------------------------------------------
+    else:
+    # If the system is at a stable point, adjust the 2nd stage input power if necessary
+        if (new_DW_condition):
+            update = False
+            DW_diff = current_DW - sm.local_settings[CONTROL_DB]['DW_setpoint']['value']
+            power_too_low = (DW_diff < 0)
+            power_is_close = np.isclose(DW_diff, 0, atol=0.1)
+            if not(power_is_close):
+                update = True
+        # Update the temperature setpoint
+            if not(update):
+                pass
+            else:
+            # If approaching the state limits, adjust the 2nd stage power setpoint
+                mon_db = 'broadening_stage/piezo_z_in_HV_output'
+                with sm.lock[mon_db]:
+                    sm.mon[mon_db]['new'] = False
+                    current_voltage = sm.mon[mon_db]['data'][-1]
+                    upper_voltage_condition = (current_voltage >= maximum_voltage)
+                if upper_voltage_condition and power_too_low:
+                    warning_id = 'high_voltage_slow'
+                    log_str = ' DW is {:.3f}dB from setpoint {:.3f}dBm, but 2nd stage power is already at maximum'.format(DW_diff, sm.local_settings[CONTROL_DB]['DW_setpoint']['value'])
+                    if (warning_id in warning):
+                        if (time.time() - warning[warning_id]) > warning_interval:
+                            log.log_warning(mod_name, func_name, log_str)
+                    else:
+                        warning[warning_id] = time.time()
+                        log.log_warning(mod_name, func_name, log_str)
+                else:
+                # Adjust the setpoint
+                    device_db = 'spectral_shaper/device_piezo_z_in'
+                    step_size = 0.05 + (0.1-0.05) * abs(DW_diff)/DW_limits
+                    step_size /= 2
+                    if power_too_low:
+                        if (current_voltage + step_size) > maximum_voltage:
+                            step_size = abs(current_voltage - maximum_voltage)
+                        log_str = ' DW is {:.3f}dB from setpoint {:.3f}dBm, raising the 2nd stage power.\n Current voltage {:.3f}V.'.format(DW_diff, sm.local_settings[CONTROL_DB]['DW_setpoint']['value'], current_voltage)
+                        log.log_info(mod_name, func_name, log_str)
+                    # Raise the 2nd stage power
+                        settings_list = [{'voltage':current_voltage + step_size}]
+                        sm.update_device_settings(device_db, settings_list, write_log=False)
+                    else:
+                        log_str = ' DW is {:.3f}dB from setpoint {:.3f}dBm, lowering the 2nd stage power.\n Current voltage {:.3f}V.'.format(DW_diff, sm.local_settings[CONTROL_DB]['DW_setpoint']['value'], current_voltage)
+                        log.log_info(mod_name, func_name, log_str)
+                    # Lower the 2nd stage power
+                        settings_list = [{'voltage':current_voltage - step_size}]
+                        sm.update_device_settings(device_db, settings_list, write_log=False)
+
+
 # %% Operate Routines =========================================================
 '''This section is for defining the methods called only when the system is in
     its defined states.'''
 optimizer_functions = [
     "optimize_DW_setpoint",
+    "optimize_DW_setpoint_nrs",
     "optimize_z_in_coupling",
     "optimize_z_out_coupling",
     "optimize_IM_bias",
@@ -1839,11 +2288,12 @@ def optimize_setpoints(state_db):
             sm.local_settings[CONTROL_DB]['setpoint_optimization']['value'] = tomorrow_at_noon()
             sm.db[CONTROL_DB].write_record_and_buffer(sm.local_settings[CONTROL_DB])
         # Run Optimizers
-        optimize_z_coupling(sig=3, stage="in", scan_range=20)
+#        optimize_z_coupling(sig=3, stage="in", scan_range=20)
         optimize_z_coupling(sig=3, stage="out", scan_range=20)
         optimize_IM_bias(sig=3)
         optimize_optical_phase(sig=3)
-        optimize_DW_setpoint(sig=3)
+#        optimize_DW_setpoint(sig=3)
+        optimize_DW_setpoint_nrs(sig=3)
     # Check if optimizer requested
     with sm.lock[CONTROL_DB]:
         run_optimizer = {}
@@ -1962,6 +2412,55 @@ STATES = {
                         'routines':{
                                 'monitor':monitor_spectrum, 'search':adjust_quick,
                                 'maintain':adjust_slow, 'operate':optimize_setpoints}
+                },
+                'optimal-nrs':{ # no rotation stage for fine power control
+                        'settings':{
+                                'spectral_shaper/device_OSA':{},
+                                'DW':[
+                                        {'fix_all':True},
+                                        {'active_trace':'TRA'},
+                                        {'trace_type':[[{'mode':'WRIT', 'avg':1}]],
+                                         'sensitivity':[[{'sense':'HIGH1', 'chop':'OFF'}]],
+                                         'wvl_range':[[{'start':690, 'stop':740}]],
+                                         'resolution':2, 'level_scale':'LOG'}
+                                        ],
+                                'short':[
+                                        {'fix_all':True},
+                                        {'active_trace':'TRA'},
+                                        {'trace_type':[[{'mode':'WRIT', 'avg':1}]],
+                                         'sensitivity':[[{'sense':'HIGH1', 'chop':'OFF'}]],
+                                         'wvl_range':[[{'start':690, 'stop':825}]],
+                                         'resolution':2, 'level_scale':'LOG'}
+                                        ],
+                                'full':[
+                                        {'fix_all':True},
+                                        {'active_trace':'TRA'},
+                                        {'trace_type':[[{'mode':'WRIT', 'avg':1}]],
+                                         'sensitivity':[[{'sense':'HIGH1', 'chop':'OFF'}]],
+                                         'wvl_range':[[{'start':690, 'stop':1320}]],
+                                         'resolution':2, 'level_scale':'LOG'}
+                                        ]
+                                },
+                        'prerequisites':{
+                                'necessary':[
+                                        {'db':'spectral_shaper/state_SLM',
+                                         'key':'state',
+                                         'test':(lambda state: ((state=='flat') or (state=='top'))),
+                                         'doc':"lambda state: ((state=='flat') or (state=='top'))"},
+                                        {'db':'spectral_shaper/state_SLM',
+                                         'key':'compliance',
+                                         'test':(lambda comp: (comp==True)),
+                                         'doc':"lambda comp: (comp==True)"}
+                                        ],
+                                'critical':[
+                                        {'db':'spectral_shaper/state_SLM',
+                                         'key':'initialized',
+                                         'test':(lambda init: (init==True)),
+                                         'doc':"lambda init: (init==True)"}]
+                                },
+                        'routines':{
+                                'monitor':monitor_spectrum, 'search':adjust_quick_nrs,
+                                'maintain':adjust_slow_nrs, 'operate':optimize_setpoints}
                 },
                 'safe':{
                         'settings':{},

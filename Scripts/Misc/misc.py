@@ -246,6 +246,8 @@ rt_stg = APT.KDC101_PRM1Z8("COM10", serial_number=27251608)
 rt_stg.home()
 #Out[2]: {'homed': True, 'homing': False}
 
+rt_stg.status()
+
 # %% 2nd Stage Input ==========================================================
 
 # X in ()
@@ -332,6 +334,10 @@ spec_opt.push(message={'control_parameter':{'run_optimizer':{'target':"optimize_
     
 spec_opt.push(message={'control_parameter':{'run_optimizer':{'target':"optimize_DW_setpoint",
                                                              'sig':3}}})
+
+# States
+spec_opt.push(message={"state":{'spectral_shaper/state_optimizer':{"state":'optimal-nrs'}}})    
+    
     
 #%%
 mll_state = PriorityQueue('mll_fR')

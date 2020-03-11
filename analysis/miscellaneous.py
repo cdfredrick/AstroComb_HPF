@@ -21,8 +21,8 @@ import datetime
 #--- Start
 #start_time = None
 #start_time = datetime.datetime(2018, 5, 1)
-start_time = datetime.datetime.utcnow() - datetime.timedelta(days=21)
-start_time = datetime.datetime.utcnow() - datetime.timedelta(weeks=6)
+# start_time = datetime.datetime.utcnow() - datetime.timedelta(days=21)
+start_time = datetime.datetime.utcnow() - datetime.timedelta(weeks=3)
 
 #--- Stop
 stop_time = None

@@ -21,11 +21,15 @@ The following lists the procedure for turning on the astrocomb system. The one-o
 9. Start "XEM_GUI.py"
     - Note: this file is currently found within a separate repository in the *Frequency-comb-DPLL* folder.
     1. Lock the "CEO" signal near 0 V
-    2. Lock the "Optical" (RIO CW) signal nearest to its historical average and drift
+    2. Lock the "Optical" (RIO CW) signal nearest to its historical average after accounting for drift
 10. Enable the Finisar WaveShaper and apply the last know mask
 11. Start "filter_cavity.py"
-    - Note: depending on the state of the hysteresis, the offset of the HV amplifier may need to be adjusted in order to find the lock point.
+    - Note: depending on the state of the hysteresis, the offset of the HV amplifier may need to be adjusted in order to find the lock point. This is found in the state settings as "y_voltage"
 12. Enable the Cybel amplifier
+    - Note: this step is performed in the *Cybel* app
+	1. Enable 1 through 3 in that order
+	2. Enable operation without the GUI
+	3. Close the GUI
 13. Reset the Nufern amplifier to a known state
     - Note: steps 1-5 **cannot** be done remotely
     1. Turn the key to the off ("0") position
@@ -50,7 +54,7 @@ The following lists the procedure for turning on the astrocomb system. The one-o
     1. Enable output of the Nufern amplifier at 0%
     2. Enable the FiberLock by selecting the "search" button in the Kangoo GUI
     3. Enable the NanoTracks by selecting the "track" button in the Kinesis GUI
-    4. Turn up the Nufern amplifier to 50% in increments of 10% while confiming that the FiberLock and NanoTracks are locked and tracking
+    4. Turn up the Nufern amplifier to 50% in increments of 10% while confirming that the FiberLock and NanoTracks are locked and tracking
     5. Close the FiberLock's Kangoo GUI
     6. Adjust the rotation stage until the dispersive wave is visible on the OSA
     7. Close the Kinesis GUI
@@ -58,10 +62,10 @@ The following lists the procedure for turning on the astrocomb system. The one-o
 19. Start "spectral_shaper.py"
     - Schedule optimizations as needed
 
-If the RIO freqeuncy (optical lock) needs to be adjusted,
+If the RIO frequency (optical lock) needs to be adjusted,
 1. Stop the "broadening_stage.py" and "spectral_shaper.py" scripts
 2. Latch the FiberLock and NanoTracks
-3. Move the Nufern to 0% and disble
+3. Move the Nufern to 0% and disable
 4. Unlock the "Optical" signal
 5. Move the frequency by adjusting the "Offset DAC" with the scroll wheel
 6. Lock the "Optical" signal

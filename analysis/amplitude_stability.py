@@ -40,8 +40,8 @@ from Drivers.Database import MongoDB
 start_time = None
 #start_time = datetime.datetime(2018, 5, 1)
 #start_time = datetime.datetime.utcnow() - datetime.timedelta(hours=4.5)
-start_time = datetime.datetime.utcnow() - datetime.timedelta(days=5)
-start_time = datetime.datetime(2019, 11, 12, 19)
+start_time = datetime.datetime.utcnow() - datetime.timedelta(weeks=2)
+# start_time = datetime.datetime(2019, 11, 12, 19)
 #--- Stop
 stop_time = None
 #stop_time = datetime.datetime(2019, 5, 1)
@@ -291,9 +291,9 @@ else:
 
 total_downtime = t_dwt_dt.sum() #+ p_dwt_dt.sum()
 total_time = header['time'].max() - header['time'].min()
-print(total_time)
-print(total_downtime)
-print(total_downtime/total_time)
+print("Total Time:\t{:}".format(total_time))
+print("Downtime:\t{:}".format(total_downtime))
+print("Downtime %:\t{:}".format(100*total_downtime/total_time))
 #print(p_dwt_dt.sum())
 #print(p_dwt_dt.sum()/total_time)
 
@@ -352,6 +352,7 @@ for label in ax3.xaxis.get_ticklabels():
     label.set_visible(False)
 ax3.yaxis.set_ticks([])
 
+ax1.set_xlim(left=header['time'].loc[flt_idxs].min(), right=header['time'].loc[flt_idxs].max())
 
 # %% All Traces
 
@@ -423,7 +424,8 @@ plt.pcolormesh(header['time'].loc[flat],
 #                       (10, 1),
 #                       ),
                cmap=plt.cm.nipy_spectral)#plt.cm.seismic)
-plt.clim(-4,4)
+# plt.clim(-1,1)
+plt.clim(-3,3)
 plt.ylabel("Wavelength (nm)")
 c_bar = plt.colorbar()
 c_bar.set_label(r"$\Delta$dB")

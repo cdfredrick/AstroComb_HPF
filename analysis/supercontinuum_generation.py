@@ -23,8 +23,8 @@ import datetime
 #start_time = None
 #start_time = datetime.datetime(2018, 5, 1)
 #start_time = datetime.datetime.utcnow() - datetime.timedelta(days=14)
-#start_time = datetime.datetime.utcnow() - datetime.timedelta(weeks=4)
-start_time = datetime.datetime.utcnow() - datetime.timedelta(days=4)
+start_time = datetime.datetime.utcnow() - datetime.timedelta(weeks=3)
+# start_time = datetime.datetime.utcnow() - datetime.timedelta(days=4)
 
 #--- Stop
 stop_time = None
@@ -106,7 +106,7 @@ finally:
 data = np.array(data).T
 
 # Plot
-fig = plt.figure("Brd.Stg. - Rotation Stage Position")
+fig = plt.figure("Brd-Stg_Rotation-Stage-Position")
 plt.clf()
 
 ax0 = plt.subplot2grid((2,1), (0,0))
@@ -128,13 +128,19 @@ plt.tight_layout()
 
 
 # %% Brd.Stg. - NanoTrack In ==================================================
-data = [[],[]]
+data = [[],[],[],[],[]]
 try:
     mongo_client = MongoDB.MongoClient()
     db_tia = MongoDB.DatabaseRead(mongo_client,
                                   'broadening_stage/nanotrack_in_TIA')
     db_ntp = MongoDB.DatabaseRead(mongo_client,
                                   'broadening_stage/nanotrack_in_position')
+    db_HV_x = MongoDB.DatabaseRead(mongo_client,
+                                  'broadening_stage/piezo_x_in_HV_output')
+    db_HV_y = MongoDB.DatabaseRead(mongo_client,
+                                  'broadening_stage/piezo_y_in_HV_output')
+    db_HV_z = MongoDB.DatabaseRead(mongo_client,
+                                  'broadening_stage/piezo_z_in_HV_output')
     cursor = db_tia.read_record(start=start_time, stop=stop_time)
     for doc in cursor:
         data[0].append(
@@ -151,55 +157,93 @@ try:
              doc['x_std'],
              doc['y_std'],
              ])
+    cursor = db_HV_x.read_record(start=start_time, stop=stop_time)
+    for doc in cursor:
+        data[2].append(
+            [doc['_timestamp'],
+             doc['V'],
+             doc['std'],
+             ])
+    cursor = db_HV_y.read_record(start=start_time, stop=stop_time)
+    for doc in cursor:
+        data[3].append(
+            [doc['_timestamp'],
+             doc['V'],
+             doc['std'],
+             ])
+    cursor = db_HV_z.read_record(start=start_time, stop=stop_time)
+    for doc in cursor:
+        data[4].append(
+            [doc['_timestamp'],
+             doc['V'],
+             doc['std'],
+             ])
 finally:
     mongo_client.close()
 data = [np.array(data[0]).T,
-        np.array(data[1]).T]
+        np.array(data[1]).T,
+        np.array(data[2]).T,
+        np.array(data[3]).T,
+        np.array(data[4]).T]
 n_0 = len(data[0][0])
 n_1 = len(data[1][0])
+n_2 = len(data[2][0])
+n_3 = len(data[3][0])
+n_4 = len(data[4][0])
 
 # Plot
-fig_0 = plt.figure("Brd.Stg. - NanoTrack In")
+fig_0 = plt.figure("Brd-Stg_NanoTrack-In")
+fig_0.set_size_inches([6.4 , 4.78*1.25])
 plt.clf()
-ax0 = plt.subplot2grid((2,1),(0,0))
-ax1 = plt.subplot2grid((2,1),(1,0), sharex=ax0)
-
-colormap = plt.cm.nipy_spectral
-#ax0.set_prop_cycle(color=colormap(np.linspace(0, 0.95, n_0)))
-#ax1.set_prop_cycle(color=colormap(np.linspace(0, 0.95, n_1)))
+ax0 = plt.subplot2grid((3,1),(0,0))
+ax1 = plt.subplot2grid((3,1),(1,0), sharex=ax0)
+ax2 = plt.subplot2grid((3,1),(2,0), sharex=ax0)
 
 #ax0.errorbar(data[0][0], data[0][1], yerr=np.array(data[0][2])*2, fmt='.')
 ax0.plot(data[0][0], data[0][1], '.', markersize=1)
+ax0.set_title("NT-In TIA Reading")
+ax0.set_ylabel("TIA Current")
+ax0.yaxis.set_major_formatter(ticker.EngFormatter('A'))
 
 #ax1.errorbar(data[1][0], data[1][1], yerr=np.array(data[1][3])*2, fmt='.', label='x')
 #ax1.errorbar(data[1][0], data[1][2], yerr=np.array(data[1][4])*2, fmt='.', label='y')
 ax1.plot(data[1][0], data[1][1], '.', label='x', markersize=1)
 ax1.plot(data[1][0], data[1][2], '.', label='y', markersize=1)
-
 ax1.legend()
-
-ax0.set_title("NT-In TIA Reading")
-ax0.set_ylabel("TIA Current")
-ax0.yaxis.set_major_formatter(ticker.EngFormatter('A'))
-
 ax1.set_title("NT-In Position")
 ax1.set_ylabel("arb. units")
+
+ax2.plot(data[2][0], data[2][1], '.', label='x', markersize=1)
+ax2.plot(data[3][0], data[3][1], '.', label='y', markersize=1)
+ax2.plot(data[4][0], data[4][1], '.', label='z', markersize=1)
+ax2.legend()
+ax2.set_title("Piezo-In")
+ax2.set_ylabel("HV Output")
+ax2.yaxis.set_major_formatter(ticker.EngFormatter('V'))
+
 
 fig_0.autofmt_xdate()
 ax0.grid(True, alpha=0.25)
 ax1.grid(True, alpha=0.25)
+ax2.grid(True, alpha=0.25)
 ax0.autoscale(axis='x', tight=True)
 fig_0.tight_layout()
 
 
 # %% Brd.Stg. - NanoTrack Out =================================================
-data = [[],[]]
+data = [[],[],[],[],[]]
 try:
     mongo_client = MongoDB.MongoClient()
     db_tia = MongoDB.DatabaseRead(mongo_client,
                                   'broadening_stage/nanotrack_out_TIA')
     db_ntp = MongoDB.DatabaseRead(mongo_client,
                                   'broadening_stage/nanotrack_out_position')
+    db_HV_x = MongoDB.DatabaseRead(mongo_client,
+                                  'broadening_stage/piezo_x_out_HV_output')
+    db_HV_y = MongoDB.DatabaseRead(mongo_client,
+                                  'broadening_stage/piezo_y_out_HV_output')
+    db_HV_z = MongoDB.DatabaseRead(mongo_client,
+                                  'broadening_stage/piezo_z_out_HV_output')
     cursor = db_tia.read_record(start=start_time, stop=stop_time)
     for doc in cursor:
         data[0].append(
@@ -216,43 +260,75 @@ try:
              doc['x_std'],
              doc['y_std'],
              ])
+    cursor = db_HV_x.read_record(start=start_time, stop=stop_time)
+    for doc in cursor:
+        data[2].append(
+            [doc['_timestamp'],
+             doc['V'],
+             doc['std'],
+             ])
+    cursor = db_HV_y.read_record(start=start_time, stop=stop_time)
+    for doc in cursor:
+        data[3].append(
+            [doc['_timestamp'],
+             doc['V'],
+             doc['std'],
+             ])
+    cursor = db_HV_z.read_record(start=start_time, stop=stop_time)
+    for doc in cursor:
+        data[4].append(
+            [doc['_timestamp'],
+             doc['V'],
+             doc['std'],
+             ])
 finally:
     mongo_client.close()
 data = [np.array(data[0]).T,
-        np.array(data[1]).T]
+        np.array(data[1]).T,
+        np.array(data[2]).T,
+        np.array(data[3]).T,
+        np.array(data[4]).T]
 n_0 = len(data[0][0])
 n_1 = len(data[1][0])
+n_2 = len(data[2][0])
+n_3 = len(data[3][0])
+n_4 = len(data[4][0])
 
 # Plot
 fig_0 = plt.figure("Brd.Stg. - NanoTrack Out")
+fig_0.set_size_inches([6.4 , 4.78*1.25])
 plt.clf()
-ax0 = plt.subplot2grid((2,1),(0,0))
-ax1 = plt.subplot2grid((2,1),(1,0), sharex=ax0)
-
-colormap = plt.cm.nipy_spectral
-#ax0.set_prop_cycle(color=colormap(np.linspace(0, 0.95, n_0)))
-#ax1.set_prop_cycle(color=colormap(np.linspace(0, 0.95, n_1)))
+ax0 = plt.subplot2grid((3,1),(0,0))
+ax1 = plt.subplot2grid((3,1),(1,0), sharex=ax0)
+ax2 = plt.subplot2grid((3,1),(2,0), sharex=ax0)
 
 #ax0.errorbar(data[0][0], data[0][1], yerr=np.array(data[0][2])*2, fmt='.')
 ax0.plot(data[0][0], data[0][1], '.', markersize=1)
+ax0.set_title("NT-Out TIA Reading")
+ax0.set_ylabel("TIA Current")
+ax0.yaxis.set_major_formatter(ticker.EngFormatter('A'))
 
 #ax1.errorbar(data[1][0], data[1][1], yerr=np.array(data[1][3])*2, fmt='.', label='x')
 #ax1.errorbar(data[1][0], data[1][2], yerr=np.array(data[1][4])*2, fmt='.', label='y')
 ax1.plot(data[1][0], data[1][1], '.', label='x', markersize=1)
 ax1.plot(data[1][0], data[1][2], '.', label='y', markersize=1)
-
 ax1.legend()
-
-ax0.set_title("NT-Out TIA Reading")
-ax0.set_ylabel("TIA Current")
-ax0.yaxis.set_major_formatter(ticker.EngFormatter('A'))
-
 ax1.set_title("NT-Out Position")
 ax1.set_ylabel("arb. units")
+
+ax2.plot(data[2][0], data[2][1], '.', label='x', markersize=1)
+ax2.plot(data[3][0], data[3][1], '.', label='y', markersize=1)
+ax2.plot(data[4][0], data[4][1], '.', label='z', markersize=1)
+ax2.legend()
+ax2.set_title("Piezo-Out")
+ax2.set_ylabel("HV Output")
+ax2.yaxis.set_major_formatter(ticker.EngFormatter('V'))
+
 
 fig_0.autofmt_xdate()
 ax0.grid(True, alpha=0.25)
 ax1.grid(True, alpha=0.25)
+ax2.grid(True, alpha=0.25)
 ax0.autoscale(axis='x', tight=True)
 fig_0.tight_layout()
 
@@ -488,11 +564,26 @@ try:
     mongo_client = MongoDB.MongoClient()
     db = MongoDB.DatabaseRead(mongo_client,
                               'spectral_shaper/DW_bulk_vs_waveplate_angle')
+    db_nwp = MongoDB.DatabaseRead(mongo_client,
+                              'spectral_shaper/DW_bulk_vs_piezo_in_voltage')
     cursor = db.read_record(start=start_time, stop=stop_time)
     for doc in cursor:
+        measure = "Angle"
+        unit = "deg"
         data.append(
             [doc['_timestamp'],
              doc['deg'],
+             doc['bulk_dBm'],
+             doc['DW_dBm'],
+             doc.get('bulk_model', None),
+             doc.get('DW_model', None)])
+    cursor = db_nwp.read_record(start=start_time, stop=stop_time)
+    for doc in cursor:
+        measure = "Voltage"
+        unit = "V"
+        data.append(
+            [doc['_timestamp'],
+             doc['V'],
              doc['bulk_dBm'],
              doc['DW_dBm'],
              doc.get('bulk_model', None),
@@ -541,17 +632,17 @@ for idx in range(n):
 
 ax0.set_title("Bulk Optimization")
 ax0.set_ylabel("dBm")
-ax0.set_xlabel("deg")
+ax0.set_xlabel("{:}".format(unit))
 ax0.autoscale(axis="x", tight=True)
 ax0.grid(True, alpha=0.25)
 
-ax1.set_title("DW vs Angle")
+ax1.set_title("DW vs {:}".format(measure))
 ax1.set_ylabel("dBm")
-ax1.set_xlabel("deg")
+ax1.set_xlabel("{:}".format(unit))
 ax1.grid(True, alpha=0.25)
 
-ax3.set_title("Optimum Angle")
-ax3.set_ylabel("deg")
+ax3.set_title("Optimum {:}".format(measure))
+ax3.set_ylabel("{:}".format(unit))
 ax3.autoscale(axis="x", tight=True)
 ax3.grid(True, alpha=0.25)
 

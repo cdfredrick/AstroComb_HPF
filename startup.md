@@ -13,7 +13,7 @@ The following lists the procedure for turning on the astrocomb system. The one-o
     3. CH3: Aux. Comb amplifier pump laser 1
     4. CH4: Aux. Comb amplifier pump laser 2
 6. Start "monitor_daq.py"
-7. Start "comb_generation.py"
+7. Start "comb_generator.py"
     - Note: this script enables the high power RF components
 8. Start "rf_oscillators.py"
 9. Start "mll_fR.py"
@@ -22,6 +22,8 @@ The following lists the procedure for turning on the astrocomb system. The one-o
     - Note: this file is currently found within a separate repository in the *Frequency-comb-DPLL* folder.
     1. Lock the "CEO" signal near 0 V
     2. Lock the "Optical" (RIO CW) signal nearest to its historical average after accounting for drift
+    3. Enable "Auto Recover" and "Limit DAC Output"
+    4. Set "Recovery Threshold" of "Optical" to 7.
 11. Enable the Finisar WaveShaper and apply the last know mask
 12. Enable the Cybel amplifier
     - Note: this step is performed in the *Cybel* app
@@ -63,6 +65,10 @@ The following lists the procedure for turning on the astrocomb system. The one-o
 19. Start "broadening_stage.py"
 20. Start "spectral_shaper.py"
     - Schedule optimizations as needed
+21. Start TIMS
+    1. Open "Anaconda Prompt"
+    2. Enter: cd C:\HPFics
+    3. Enter: python -m TIMS.clients.tims_nistlfc
 
 If the RIO frequency (optical lock) needs to be adjusted,
 1. Stop the "broadening_stage.py" and "spectral_shaper.py" scripts

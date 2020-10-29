@@ -44,6 +44,7 @@ with Public Methods:
 # %% Modules ------------------------------------------------------------------
 
 import time
+from functools import wraps
 
 #3rd party imports
 import numpy as np
@@ -55,6 +56,27 @@ from Drivers.Logging import ACExceptions as ac_excepts
 from Drivers.Logging import EventLog as log
 
 
+# %% Helper Functions ---------------------------------------------------------
+
+@log.log_this()
+def _auto_connect(func):
+    """A function decorator that handles automatic connections."""
+    @wraps(func)
+    def auto_connect(self, *args, **kwargs):
+        """Wrapped function"""
+        if (self.auto_connect and not(self.opened)):
+            try:
+                self.open_port()
+                result = func(self, *args, **kwargs)
+                return result
+            finally:
+                self.close_port()
+        else:
+            result = func(self, *args, **kwargs)
+            return result
+    return auto_connect
+
+
 # %% OSA ----------------------------------------------------------------------
 class OSA(vo.VISA):
     """Holds Yokogawa OSA's attributes and method library."""
@@ -62,22 +84,79 @@ class OSA(vo.VISA):
     @log.log_this()
     def __init__(self, res_address):
         super(OSA, self).__init__(res_address)
+        if res_address[:5] == "TCPIP":
+            self.is_tcpip = True
+            self.open_command = 'open "anonymous"'
+            self.close_command = 'CLOSE'
+            self.open_resource()
+            self.resource.read_termination = self.resource.write_termination
+            self.close_resource()
+        else:
+            self.is_tcpip = False
         if self.resource is None:
             raise ac_excepts.VirtualDeviceError(
                 'Could not create OSA instrument!', self.__init__)
-        self.__set_command_format()
+        # Initialize Active Trace
         self.active_trace()
+    
+    def init_TCPIP(self):
+        super(OSA, self).__init__(self.address)
+        self.open_resource()
+        self.resource.read_termination = self.resource.write_termination
+    
+    @vo._handle_visa_error
+    @log.log_this()
+    def open_port(self):
+        if self.is_tcpip:
+            self.init_TCPIP()
+            self.resource.query(self.open_command)
+            result = self.resource.query("").strip()
+            if result != "ready":
+                raise ac_excepts.VirtualDeviceError(
+                    'Could not open OSA instrument! User authentication error.', self.__init__)
+        else:
+            self.open_resource()
+        self.opened = True
+    
+    @vo._handle_visa_error
+    @log.log_this()
+    def close_port(self):
+        if self.is_tcpip:
+            self.resource.write(self.close_command)
+        self.close_resource()
+        self.opened = False
+    
+    @vo._handle_visa_error
+    @_auto_connect
+    @log.log_this()
+    def query(self, message, delay=None):
+        result = self.resource.query(message, delay=delay).strip()
+        return result
+
+    @vo._handle_visa_error
+    @_auto_connect
+    @log.log_this()
+    def read(self, termination=None, encoding=None):
+        result = self.resource.read(termination=termination, encoding=encoding).strip()
+        return result
+    
+    @vo._handle_visa_error
+    @_auto_connect
+    @log.log_this()
+    def write(self, message, termination=None, encoding=None):
+        self.resource.write(message, termination=termination, encoding=encoding)
     
     @log.log_this()
     def reset(self):
         """Stops current machine operation and returns OSA to default values"""
         self.write('*RST')
         self.__set_command_format()
+        self.level_unit(set_unit="dBm/nm")
 
 #Query Methods
    
     @log.log_this()
-    @vo._auto_connect
+    @_auto_connect
     def sweep_parameters(self):
         """Returns sweep parameters as a dictionary
 
@@ -108,8 +187,7 @@ class OSA(vo.VISA):
         wvl_dict = {key:value for (key, value) in zip(t_list_keys, t_list_values)}
         # Level
         ref_lvl = self.query(":DISPlay:WINDow:TRACe:Y1:SCALe:RLEVel?").strip()
-        level_unit = self.query(":DISPlay:WINDow:TRACe:Y1:SCALe:UNIT?").strip()
-        level_unit = {0:'dBm',1:'W',2:'dBm',3:'W'}[int(level_unit)]
+        level_unit = self.level_unit()
         sens = self.query(":SENSe:SENSe?").strip()
         sens = {0:'NORMAL HOLD',1:'NORMAL AUTO',2:'MID',3:'HIGH1',4:'HIGH2',5:'HIGH3',6:'NORMAL'}[int(sens)]
         chopper = self.query(":SENSe:CHOPper?").strip()
@@ -123,9 +201,9 @@ class OSA(vo.VISA):
         return {key:value for (key, value) in zip(t_list_keys, t_list_values)}
 
     @log.log_this()
-    @vo._auto_connect
+    @_auto_connect
     def spectrum(self, active_trace=None):
-        """Sweepss OSA's spectrum"""
+        """Get OSA's spectrum"""
         if (active_trace!=None):
             self.active_trace(set_trace=active_trace)
         y_trace = self.query_list(':TRAC:DATA:Y? {:}'.format(self.act_trace))
@@ -134,7 +212,7 @@ class OSA(vo.VISA):
         data = {'x':x_trace ,'y':y_trace}
         return data
 
-    @vo._auto_connect
+    @_auto_connect
     def get_new_single(self, active_trace=None, get_parameters=True):
     # Active Trace
         if (active_trace!=None):
@@ -142,30 +220,15 @@ class OSA(vo.VISA):
     # Prepare OSA
         if (self.sweep_mode() != 'SING'):
             self.sweep_mode('SING')
-        time.sleep(.05)
-        self.write(':ABORt')
-        time.sleep(.05)
-        self.write('*WAI')
-        time.sleep(.05)
-        wait_for_setup = True
-        while wait_for_setup:
-            time.sleep(.05)
-            try:
-                wait_for_setup = not(int(self.query('*OPC?').strip()))
-            except pyvisa.VisaIOError as visa_err:
-                if (visa_err.error_code == -1073807339): #timeout error
-                    pass
-                else:
-                    raise visa_err
+        self.write('*CLS')
     # Initiate Sweep
-        self.write(':INITiate:IMMediate')
-        time.sleep(.05)
+        self.initiate_sweep()
     # Wait for sweep to finish
         wait_for_sweep = True
         while wait_for_sweep:
-            time.sleep(.05)
+            time.sleep(0.25)
             try:
-                wait_for_sweep = not(int(self.query('*OPC?').strip()))
+                wait_for_sweep = not(int(self.query(":stat:oper:even?").strip()))
             except pyvisa.VisaIOError as visa_err:
                 if (visa_err.error_code == -1073807339): #timeout error
                     pass
@@ -185,7 +248,7 @@ class OSA(vo.VISA):
         self.write(':INITiate:IMMediate')
     
 #Set Methods
-    @vo._auto_connect
+    @_auto_connect
     def wvl_range(self, set_range=None):
         if (set_range==None):
             start_wvl = float(self.query(":SENSe:WAVelength:STARt?").strip())*1e9
@@ -204,7 +267,6 @@ class OSA(vo.VISA):
         else:
             self.write(':SENSE:BANDWIDTH:RESOLUTION {:.2f}NM'.format(set_res))
     
-    @vo._auto_connect
     def sensitivity(self, set_sens=None):
         '''
         set_sens={'sense':<sensitivity>, 'chop':<chopper action>}
@@ -265,7 +327,7 @@ class OSA(vo.VISA):
             else:
                 raise Exception('Unrecognized trace {:}'.format(set_trace))
     
-    @vo._auto_connect
+    @_auto_connect
     def trace_type(self, set_type=None, active_trace=None):
         '''
         WRITe = WRITE
@@ -315,7 +377,25 @@ class OSA(vo.VISA):
             else:
                 raise Exception('Unrecognized level scale {:}'.format(set_mode))
     
-    @vo._auto_connect
+    def level_unit(self, set_unit=None):
+        '''
+        dBm = dBm per bin
+        W = W per bin
+        dBm/nm = dBm/nm or dBm/THz
+        W/nm = W/nm or W/THz
+        '''
+        if (set_unit == None):
+            level_unit = self.query(":DISPlay:WINDow:TRACe:Y1:SCALe:UNIT?").strip()
+            level_unit = {0:'dBm',1:'W',2:'dBm/nm',3:'W/nm'}[int(level_unit)]
+            return level_unit
+        else:
+            if (set_unit in ['dBm','W','dBm/nm','W/nm']):
+                set_unit = {'dBm':"DBM", 'W':"W", 'dBm/nm':"DBM/NM", 'W/nm':"W/NM"}[set_unit]
+                self.write(":DISPlay:WINDow:TRACe:Y1:SCALe:UNIT {:}".format(set_unit))
+            else:
+                raise Exception('Unrecognized level unit {:}'.format(set_unit))
+    
+    @_auto_connect
     def fix_all(self, fix=None):
         if (fix == None):
             fixed = True

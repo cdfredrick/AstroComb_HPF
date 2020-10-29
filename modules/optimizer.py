@@ -192,13 +192,16 @@ class Minimizer():
         if self.n_obs < self.n_init:
             return opt_x
         else:
-            opt_y = np.inf
-            for x in self.x:
-                # Test all sample points
-                result = minimize(self.predict, x, bounds=self.dims)
-                if result.fun < opt_y:
-                    opt_y = result.fun
-                    opt_x = result.x.tolist()
+            # Test Best Point
+            result = minimize(self.predict, opt_x, bounds=self.dims)
+            opt_x = result.x.tolist()
+#            opt_y = np.inf
+#            for x in self.x:
+#                # Test all sample points
+#                result = minimize(self.predict, x, bounds=self.dims)
+#                if result.fun < opt_y:
+#                    opt_y = result.fun
+#                    opt_x = result.x.tolist()
             return opt_x
 
     def predict(self, x, return_std=False):

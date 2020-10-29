@@ -6,8 +6,12 @@ Created on Thu Jan 10 12:15:09 2019
 """
 # %% Drivers
 import datetime
+import json
+
 import numpy as np
 import matplotlib.pyplot as plt
+%matplotlib inline
+%matplotlib qt5
 
 from Drivers.VISA.ILXLightwave import LaserModule, TECModule, CombinationModule
 
@@ -19,12 +23,22 @@ from Drivers.Thorlabs import APT
 
 from Drivers.Finisar import WaveShaper
 
+from Drivers.VISA.Yokogawa import OSA
+
+
 # %% Helper Functions
 
 def tomorrow_at_noon():
     tomorrow = datetime.date.today()+datetime.timedelta(days=1)
     noon = datetime.time(hour=12)
     return datetime.datetime.combine(tomorrow,noon).timestamp()
+
+#%%
+comb_gen = PriorityQueue('comb_generator')
+
+comb_gen.push(message={"state":{'comb_generator/state_12V_supply':{"state":'engineering'}}})
+
+comb_gen.push(message={"state":{'comb_generator/state_12V_supply':{"state":'on'}}})
 
 
 # %% ILX 1 ====================================================================
@@ -162,65 +176,43 @@ imbias.voltage_setpoint()
 imbias.output()
 #Out[3]: True
 
+#%% Filter Cavity =============
+filt_cav = PriorityQueue('filter_cavity')
+
+
+filt_cav.push(message={"state":{'filter_cavity/state':{"state":'safe'}}})
+filt_cav.push(message={"state":{'filter_cavity/state':{"state":'lock'}}})
+
+
 # %% WaveShaper ===============================================================
 #==============================================================================
 ws = WaveShaper.WS1000A('192.168.0.5')
 
 domain = [280.18, 283.357]
 
-old_coefs = [
-    23.27920156,
-    -0.31415927,
-    -0.53407075,
-    -0.06283185,
-    1.57079633,
-    -0.12566371,
-    0.,
-    -0.12566371,
-    -0.56548668,
-    -0.18849556]
+#old_coefs = [
+#    23.27920156,
+#    -0.31415927,
+#    -0.53407075,
+#    -0.06283185,
+#    1.57079633,
+#    -0.12566371,
+#    0.,
+#    -0.12566371,
+#    -0.56548668,
+#    -0.18849556]
 #%%
 new_coefs = [
-    -6.0394090775996965 + 0.3*0 - 1.0*0,
-    -5.800888350528486 + 2.*0 -2.*0,
-    -10.846185606096743 + 0.5*0 - 0.2*0,
-    -1.3103647581879212 + 0.7*0 - .7*0,
-    -0.7194257485576765 + 0.1*0 - 0.4*0,
-    0.3945781226450866 + 0.7*0 - 0.7*0]
-
+    17.55802827222414,
+    7.665978886488576,
+    -3.601415011690909,
+    -9.397208717696527,
+    -39.87257271060393,
+    -28.287981456253068]
 #new_coefs = [
-#    12.873779823260552,
-#    -0.00010805471567221225,
-#    -8.382069235254972,
-#    0.24959336119687642,
-#    -1.5047378684494916,
-#    0.19003929512744833]
+#    18]
 
-#new_coefs = [
-#    12.957652700500315,
-#    -0.49569232204816693,
-#    -8.414189277585605,
-#    0.380450128189349,
-#    -1.3942859402315253,
-#    0.3111486710709459,
-#    0.18849527583609194]
-
-
-#new_coefs = [13.1542830681408,
-#    -1.3832367395245435,
-#    -8.436227608887236,
-#    -0.06927063677322859,
-#    -1.5790805588000139,
-#    0.4499070303956333]
-
-#new_coefs = [
-#    10.591856341521305,
-#    -3.594328183434416,
-#    -8.64367174144833,
-#    -1.3639937867675582,
-#    -1.1992416114120243,
-#    -0.1520067562032628]
-new_poly_fit = np.polynomial.Legendre([0,0]+new_coefs, domain=domain)
+new_poly_fit = np.polynomial.Polynomial([0,0]+new_coefs, domain=domain)
 # Send new phase profile
 ws.phase_profile(new_poly_fit(ws.freq))
 
@@ -245,6 +237,8 @@ rt_stg = APT.KDC101_PRM1Z8("COM10", serial_number=27251608)
 
 rt_stg.home()
 #Out[2]: {'homed': True, 'homing': False}
+
+rt_stg.status()
 
 # %% 2nd Stage Input ==========================================================
 
@@ -275,6 +269,15 @@ nt_in.LATCH_MODE
 nt_in.track_mode()
 #Out[10]: 2
 
+nt_in.circle_parameters()
+#Out[28]: 
+#{'mode': 1,
+# 'diameter': 0.001007095445181964,
+# 'frequency': 60.3448275862069,
+# 'min diameter': 0.0,
+# 'max diameter': 0.0,
+# 'adjust type': 1}
+
 # %% 2nd Stage Out ============================================================
 
 # X out ()
@@ -304,6 +307,15 @@ nt_out.LATCH_MODE
 nt_out.track_mode()
 #Out[10]: 2
 
+nt_out.circle_parameters()
+#Out[11]: 
+#{'mode': 1,
+# 'diameter': 0.001007095445181964,
+# 'frequency': 43.75,
+# 'min diameter': 0.0,
+# 'max diameter': 0.0,
+# 'adjust type': 1}
+
 # %% Spectral Optimization ====================================================
 # =============================================================================
 spec_opt = PriorityQueue('spectral_shaper')
@@ -332,10 +344,45 @@ spec_opt.push(message={'control_parameter':{'run_optimizer':{'target':"optimize_
     
 spec_opt.push(message={'control_parameter':{'run_optimizer':{'target':"optimize_DW_setpoint",
                                                              'sig':3}}})
+
+# States
+spec_opt.push(message={"state":{'spectral_shaper/state_optimizer':{"state":'optimal-nrs'}}})    
+spec_opt.push(message={"state":{'spectral_shaper/state_optimizer':{"state":'optimal'}}})
     
+    
+#%% MLL
+#mll_state = PriorityQueue('mll_fR')
+#
+#mll_state.push(message={"state":{'mll_fR/state':{"state":"manual"}}})
+#
+#mll_state.push(message={"state":{'mll_fR/state':{"state":"lock"}}})
+
+#%% OSA
+
+#osa = OSA("GPIB0::27::INSTR")
+osa = OSA("TCPIP0::192.168.0.10::10001::SOCKET")
+
 #%%
-mll_state = PriorityQueue('mll_fR')
+#data = osa.get_new_single(active_trace="TRA")
 
-mll_state.push(message={"state":{'mll_fR/state':{"state":"manual"}}})
+osa.trace_type(set_type={"mode":"WRIT"}, active_trace="TRA")
+osa.wvl_range({"start":690, "stop":1320})
+osa.sensitivity({"sense":"HIGH1", "chop":"OFF"})
+#osa.sweep_mode("REP")
+osa.initiate_sweep()
 
-mll_state.push(message={"state":{'mll_fR/state':{"state":"lock"}}})
+#%%
+data = osa.get_new_single(get_parameters=True)
+#data = osa.spectrum()
+plt.figure("OSA")
+#plt.clf()
+
+plt.plot(data["data"]["x"], data["data"]["y"])
+
+# %%
+
+#date = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+#ident = "N-PCF"
+#file_name = "_".join((date, ident))+".txt"
+#with open(file_name, "x") as opened_file:
+#    json.dump(data, opened_file, indent="\t")

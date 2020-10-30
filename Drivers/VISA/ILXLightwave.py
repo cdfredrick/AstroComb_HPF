@@ -204,7 +204,7 @@ class LDC3900(vo.VISA):
             if set_radix in ['DEC', 'BIN', 'HEX', 'OCT']:
                 set_radix = ['DEC', 'BIN', 'HEX', 'OCT'].index(set_radix)
             else:
-                set_radix = int(set_radix)
+                set_radix = int(float(set_radix))
         # Send command
             self.write('MODE:{:}'.format(['DEC', 'BIN', 'HEX', 'OCT'][set_radix]))
             
@@ -213,7 +213,7 @@ class LDC3900(vo.VISA):
 class LaserModule(LDC3900):
     @log.log_this()
     def __init__(self, visa_address, laser_channel, res_manager=None):
-        super(LaserModule, self).__init__(visa_address, res_manager=res_manager)
+        LDC3900.__init__(self, visa_address, res_manager=res_manager)
         self.las_channel = laser_channel
         self.las_open_command = 'LAS:CHAN {:}'.format(self.las_channel)
         self.las_opened = False
@@ -282,7 +282,7 @@ class LaserModule(LDC3900):
     # Send query
         result = self.query_las('STB?')
     # Parse result
-        results = '{:04b}'.format(int(result))
+        results = '{:04b}'.format(int(float(result)))
         results = {str(bit):bool(int(value)) for (bit,value) in enumerate(results[::-1])}
         return results
     
@@ -322,7 +322,7 @@ class LaserModule(LDC3900):
     # Send query
         result = self.query_las('COND?')
     # Parse result
-        results = '{:016b}'.format(int(result))
+        results = '{:016b}'.format(int(float(result)))
         results = {str(bit):bool(int(value)) for (bit,value) in enumerate(results[::-1])}
         return results
 
@@ -357,7 +357,7 @@ class LaserModule(LDC3900):
     # Send query
         result = self.query_las('EVE?')
     # Parse result
-        results = '{:016b}'.format(int(result))
+        results = '{:016b}'.format(int(float(result)))
         results = {str(bit):bool(int(value)) for (bit,value) in enumerate(results[::-1])}
         return results
 
@@ -400,7 +400,7 @@ class LaserModule(LDC3900):
         # Send query
             result = self.query_las('ENAB:COND?')
         # Parse result
-            results = '{:016b}'.format(int(result))
+            results = '{:016b}'.format(int(float(result)))
             results = {str(bit):bool(int(value)) for (bit,value) in enumerate(results[::-1])}
             return results
         else:
@@ -450,7 +450,7 @@ class LaserModule(LDC3900):
         # Send query
             result = self.query_las('ENAB:EVE?')
         # Parse result
-            results = '{:016b}'.format(int(result))
+            results = '{:016b}'.format(int(float(result)))
             results = {str(bit):bool(int(value)) for (bit,value) in enumerate(results[::-1])}
             return results
         else:
@@ -504,7 +504,7 @@ class LaserModule(LDC3900):
         # Send query
             result = self.query_las('ENAB:OUTOFF?')
         # Parse result
-            results = '{:016b}'.format(int(result))
+            results = '{:016b}'.format(int(float(result)))
             results = {str(bit):bool(int(value)) for (bit,value) in enumerate(results[::-1])}
             return results
         else:
@@ -686,7 +686,7 @@ class LaserModule(LDC3900):
 class TECModule(LDC3900):
     @log.log_this()
     def __init__(self, visa_address, tec_channel, res_manager=None):
-        super(TECModule, self).__init__(visa_address, res_manager=res_manager)
+        LDC3900.__init__(self, visa_address, res_manager=res_manager)
         self.tec_channel = tec_channel
         self.tec_opened = False
         self.tec_open_command = 'TEC:CHAN {:}'.format(self.tec_channel)
@@ -751,7 +751,7 @@ class TECModule(LDC3900):
     # Send query
         result = self.query_tec('STB?')
     # Parse result
-        results = '{:02b}'.format(int(result))
+        results = '{:02b}'.format(int(float(result)))
         results = {str(bit):bool(int(value)) for (bit,value) in enumerate(results[::-1])}
         return results
     
@@ -786,7 +786,7 @@ class TECModule(LDC3900):
     # Send query
         result = self.query_tec('COND?')
     # Parse result
-        results = '{:016b}'.format(int(result))
+        results = '{:016b}'.format(int(float(result)))
         results = {str(bit):bool(int(value)) for (bit,value) in enumerate(results[::-1])}
         return results
     
@@ -822,7 +822,7 @@ class TECModule(LDC3900):
     # Send query
         result = self.query_tec('EVE?')
     # Parse result
-        results = '{:016b}'.format(int(result))
+        results = '{:016b}'.format(int(float(result)))
         results = {str(bit):bool(int(value)) for (bit,value) in enumerate(results[::-1])}
         return results
     
@@ -863,7 +863,7 @@ class TECModule(LDC3900):
         # Send query
             result = self.query_tec('ENAB:COND?')
         # Parse result
-            results = '{:016b}'.format(int(result))
+            results = '{:016b}'.format(int(float(result)))
             results = {str(bit):bool(int(value)) for (bit,value) in enumerate(results[::-1])}
             return results
         else:
@@ -911,7 +911,7 @@ class TECModule(LDC3900):
         # Send query
             result = self.query_tec('ENAB:EVE?')
         # Parse result
-            results = '{:016b}'.format(int(result))
+            results = '{:016b}'.format(int(float(result)))
             results = {str(bit):bool(int(value)) for (bit,value) in enumerate(results[::-1])}
             return results
         else:
@@ -968,7 +968,7 @@ class TECModule(LDC3900):
         # Send query
             result = self.query_tec('ENAB:OUTOFF?')
         # Parse result
-            results = '{:016b}'.format(int(result))
+            results = '{:016b}'.format(int(float(result)))
             results = {str(bit):bool(int(value)) for (bit,value) in enumerate(results[::-1])}
             return results
         else:
@@ -1335,11 +1335,8 @@ class CombinationModule(LaserModule, TECModule):
         '''
         if output is None:
         # Send query
-            laser_result = self.laser_conditions()
-            tec_result = self.tec_conditions()
-        # Parse results
-            laser_result = 10 in laser_result
-            tec_result = 10 in tec_result
+            laser_result =self.laser_output()
+            tec_result = self.tec_output()
             return laser_result, tec_result
         else:
         # Send commands

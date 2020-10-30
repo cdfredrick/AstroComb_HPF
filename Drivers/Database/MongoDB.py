@@ -9,6 +9,106 @@ Created on Sun Nov 12 12:00:00 2017
 import pymongo
 import datetime
 import logging
+import copy
+
+# %% Sync Mongo
+
+def sync_to_local_buffer(local_client, remote_client, database, sync_stop_time=None):
+    '''
+    Update a local record with new entries from remote
+    '''
+    local = DatabaseMaster(local_client, database)
+    remote = DatabaseRead(remote_client, database)
+
+    # Get Start Time
+    cursor = local.read_buffer(number_of_documents=0, sort_ascending=False) # return newest entry first
+    doc = next(cursor, None)
+    if (doc is not None):
+        sync_start_time = doc['_timestamp']
+    else:
+        sync_start_time = None
+
+    # Sync
+    cursor = remote.read_buffer(number_of_documents=0, sort_ascending=True)
+    for doc in cursor:
+        timestamp = doc['_timestamp']
+        if sync_start_time and sync_stop_time:
+            if (timestamp > sync_start_time) and (timestamp <= sync_stop_time):
+                local.write_document_to_buffer(doc)
+        elif sync_start_time:
+            if timestamp > sync_start_time:
+                local.write_document_to_buffer(doc)
+        elif sync_stop_time:
+            if timestamp <= sync_stop_time:
+                local.write_document_to_buffer(doc)
+        else:
+            local.write_document_to_buffer(doc)
+
+def sync_to_local_record(local_client, remote_client, database, sync_stop_time=None):
+    '''
+    Update a local record with new entries from remote
+    '''
+    local = DatabaseMaster(local_client, database)
+    remote = DatabaseRead(remote_client, database)
+
+    # Get Start Time
+    cursor = local.read_record(sort_ascending=False) # return newest entry first
+    doc = next(cursor, None)
+    if (doc is not None):
+        sync_start_time = doc['_timestamp']
+    else:
+        sync_start_time = None
+
+    # Sync
+    cursor = remote.read_record(start=sync_start_time, stop=sync_stop_time)
+    for doc in cursor:
+        local.write_document_to_record(doc)
+
+def sync_to_local_log(local_client, remote_client, database, sync_stop_time=None):
+    '''
+    Update a local log with new entries from remote
+    '''
+    local = LogMaster(local_client, database)
+    remote = LogRead(remote_client, database)
+
+    # Get Start Time
+    cursor = local.read_log(log_level=logging.DEBUG ,sort_ascending=False) # return newest entry first
+    doc = next(cursor, None)
+    if (doc is not None):
+        sync_start_time = doc['_timestamp']
+    else:
+        sync_start_time = None
+
+    # Sync
+    cursor = remote.read_log(start=sync_start_time, stop=sync_stop_time, log_level=logging.DEBUG)
+    for doc in cursor:
+        local.write_document_to_log(doc)
+
+
+# %% Renewable Cursor =========================================================
+class Cursor():
+    def __init__(self, database):
+        self.database = database
+        self._cursor = self.database.read_buffer(tailable_cursor=True,
+                                                 no_cursor_timeout=True)
+        self.exhaust_cursor()
+
+    def read(self):
+        '''Returns cursor object that automatically renews itself when it dies.'''
+        if not self._cursor.alive:
+            self._cursor = self.database.read_buffer(tailable_cursor=True,
+                                                     no_cursor_timeout=True)
+            self.exhaust_cursor()
+        return self._cursor
+
+
+    # Exhaust a MongoDB Cursor to Queue up the Most Recent Values -------------
+    def exhaust_cursor(self):
+        '''A helper fuction to queue new values from a MongoDB capped
+        collection.
+        '''
+        for doc in self._cursor:
+            pass
 
 
 # %% MongoClient ==============================================================
@@ -19,7 +119,7 @@ class MongoClient:
         Connects to a mongoDB client, which can then be used to access different
             databases and collections.
         The "keys" list the hardcoded names of the collections and of the keys
-            needed to access records in the documents (documents are returned 
+            needed to access records in the documents (documents are returned
             as dictionaries). Items in the record and buffer only contain the
             '_id' and '_timestamp' key by default. The user specifies the other
             keys with the input dictionary. Logs contain all 4 hardcoded
@@ -29,7 +129,7 @@ class MongoClient:
         self.client = pymongo.MongoClient(host=host, port=port, maxPoolSize=None)
         self.COLLECTION_KEYS = ['record', 'buffer', 'log', 'log_buffer']
         self.DOCUMENT_KEYS = ['_id', 'entry', '_timestamp', 'log_level']
-    
+
     def close(self):
         '''
         Closes the connection to the mongoDB. Any subsequent calls to the client
@@ -44,15 +144,15 @@ class DatabaseRead():
         '''
         The "read only" handler for the database. This subclass is used to form
             a read only connection to a database, without needing to specify
-            the database specific settings. The methods in this subclass can not 
+            the database specific settings. The methods in this subclass can not
             change values in the database.
-        In order to allow for a more hierarchical structure, names may be 
+        In order to allow for a more hierarchical structure, names may be
             separated by a single forward slash '/'. The preceding name will be
-            the name of the database and the following name will be that of a 
-            collection. The sub collection names ('record', 'buffer', 
-            'log', 'log_buffer') will be appended to the collection name. Only 
+            the name of the database and the following name will be that of a
+            collection. The sub collection names ('record', 'buffer',
+            'log', 'log_buffer') will be appended to the collection name. Only
             one level is supported, mongoDB does not support nested collections.
-        
+
         *args
         mongo_client: a MongoClient object
         database: str, the name of the requested database. Use the '/' separator
@@ -84,26 +184,26 @@ class DatabaseRead():
         self.buffer = self.database[self.collection_name+'buffer']
     # Set constants
         self.COLLECTION_KEYS = [self.collection_name+key for key in self.COLLECTION_KEYS]
-    
-    def read_buffer(self, number_of_documents=1, sort_ascending=False, tailable_cursor=False, no_cursor_timeout=False):
+
+    def read_buffer(self, number_of_documents=1, sort_ascending=False, tailable_cursor=False, no_cursor_timeout=False, return_single_timestamp=False):
         '''
         Returns an iterable cursor object containing documents from the buffer.
         A tailable cursor remains open after the client exhausts the results in
-            the initial cursor. Subsequent calls to the cursor only returns new 
+            the initial cursor. Subsequent calls to the cursor only returns new
             documents. A non-tailable cursor will automatically be closed after
-            all results are exhausted. Regardless, all cursors time out in the 
+            all results are exhausted. Regardless, all cursors time out in the
             database (will be closed) after 10 minutes of inactivity.
             -If tailable cursor is specified the documents will be returned in
             ascending sort order and there will be no document limit.
             -Set no_cursor_timeout to "True" to prevent the natural ~1s cursor
             timeout if no new objects are added to the DB.
-        With the natural ordering of capped collections, ascending order gives 
+        With the natural ordering of capped collections, ascending order gives
             the oldest documents first, while descending gives the newest documents
             first.
-        When only one document is requested this method autmatically returns 
+        When only one document is requested this method autmatically returns
             the dictionary as given by the "entry_dict" of the write methods.
             Otherwise an interable Cursor object is returned.
-        
+
         **kwargs
         number_of_documents: int, maximum number of documents collected into the
             cursor. A maximum number of "0" is equivalent to an unlimited amount.
@@ -111,6 +211,8 @@ class DatabaseRead():
             descending order.
         tailable_cursor: bool, selects whether or not to return a tailable cursor
         no_cursor_timeout: bool, sets action of the cursor timeout
+        return_single_timestamp: bool, selects to keep or remove the internal
+            `_timestamp` key when only one document is returned.
         '''
     # Tailable cursor
         if tailable_cursor:
@@ -133,7 +235,8 @@ class DatabaseRead():
             if len(cursor) == 1:
                 cursor = cursor[0]
                 cursor.pop('_id')
-                cursor.pop('_timestamp')
+                if not return_single_timestamp:
+                    cursor.pop('_timestamp')
                 return cursor
             else:
                 return
@@ -141,30 +244,32 @@ class DatabaseRead():
         # Return the cursor in full
             return cursor
 
-    def read_record(self, start, stop, number_of_documents=0, sort_ascending=True):
+    def read_record(self, start=None, stop=None, number_of_documents=0, sort_ascending=True, return_single_timestamp=False):
         '''
         Returns an iterable cursor object containing documents from the record.
         The start and stop times are given as datetime.datetime objects. These
             can be formed directly with datetime.datetime.utcnow() or with
             datetime.datetime(year, month, day, hour=0, minute=0, second=0, microsecond=0),
-            and with differences between datetime.datetime objects and 
+            and with differences between datetime.datetime objects and
             datetime.timedelta(days=0, seconds=0, microseconds=0, milliseconds=0, minutes=0, hours=0, weeks=0)
             objects. All times should be given in UTC.
         With the timestamp ordering, ascending order gives the oldest documents
             first, while descending gives the newest documents first.
-        When only one document is requested this method autmatically returns 
+        When only one document is requested this method autmatically returns
             the dictionary as given by the "entry_dict" of the write methods.
             Otherwise an interable Cursor object is returned.
-        
+
         *args
         start: a datetime.datetime instance marking the start of the query period.
         stop: a datetime.datetime instance marking the end of the query period.
-        
+
         **kwargs
         number_of_documents: int, maximum number of documents collected into the
             cursor. A maximum number of "0" is equivalent to an unlimited amount.
         sort_ascending: bool, selects to sort the cursor either by ascending or
-            descending order. 
+            descending order.
+        return_single_timestamp: bool, selects to keep or remove the internal
+            `_timestamp` key when only one document is returned.
         '''
     # Sort order
         if sort_ascending:
@@ -172,7 +277,14 @@ class DatabaseRead():
         else:
             sort_order = [('_timestamp', pymongo.DESCENDING)]
     # Ranged filter
-        ranged_filter = {'_timestamp':{'$gte':start, '$lte':stop}}
+        if (start is not None) and (stop is not None):
+            ranged_filter = {'_timestamp':{'$gt':start, '$lte':stop}}
+        elif (start is not None):
+            ranged_filter = {'_timestamp':{'$gt':start}}
+        elif (stop is not None):
+            ranged_filter = {'_timestamp':{'$lte':stop}}
+        else:
+            ranged_filter = None
     # Cursor
         cursor = self.record.find(ranged_filter, limit=number_of_documents, sort=sort_order)
         if number_of_documents == 1:
@@ -181,7 +293,8 @@ class DatabaseRead():
             if len(cursor) == 1:
                 cursor = cursor[0]
                 cursor.pop('_id')
-                cursor.pop('_timestamp')
+                if not return_single_timestamp:
+                    cursor.pop('_timestamp')
                 return cursor
             else:
                 return
@@ -196,15 +309,15 @@ class LogRead():
         '''
         The "read only" handler for the database. This subclass is used to form
             a read only connection to a database, without needing to specify
-            the database specific settings. The methods in this subclass can not 
+            the database specific settings. The methods in this subclass can not
             change values in the database.
-        In order to allow for a more hierarchical structure, names may be 
+        In order to allow for a more hierarchical structure, names may be
             separated by a single forward slash '/'. The preceding name will be
-            the name of the database and the following name will be that of a 
-            collection. The sub collection names ('record', 'buffer', 
-            'log', 'log_buffer') will be appended to the collection name. Only 
+            the name of the database and the following name will be that of a
+            collection. The sub collection names ('record', 'buffer',
+            'log', 'log_buffer') will be appended to the collection name. Only
             one level is supported, mongoDB does not support nested collections.
-        
+
         *args
         mongo_client: a MongoClient object
         database: str, the name of the requested database. Use the '/' separator
@@ -237,13 +350,13 @@ class LogRead():
     # Set constants
         self.COLLECTION_KEYS = [self.collection_name+key for key in self.COLLECTION_KEYS]
 
-    def read_log(self, start, stop, number_of_documents=0, log_level=logging.INFO, sort_ascending=True):
+    def read_log(self, start=None, stop=None, number_of_documents=0, log_level=logging.INFO, sort_ascending=True):
         '''
         Returns an iterable cursor object containing documents from the log.
         The start and stop times are given as datetime.datetime objects. These
             can be formed directly with datetime.datetime.utcnow() or with
             datetime.datetime(year, month, day, hour=0, minute=0, second=0, microsecond=0),
-            and with differences between datetime.datetime objects and 
+            and with differences between datetime.datetime objects and
             datetime.timedelta(days=0, seconds=0, microseconds=0, milliseconds=0, minutes=0, hours=0, weeks=0)
             objects. All times should be given in UTC.
         With the timestamp ordering, ascending order gives the oldest documents
@@ -251,20 +364,20 @@ class LogRead():
         The recommended log levels are as those in the logging package.
         Levels  |   10  |  20  |   30    |   40  |    50    |
                 | debug | info | warning | error | critical |
-        When only one document is requested this method autmatically returns 
+        When only one document is requested this method autmatically returns
             the dictionary containing the entry, timestamp, and level.
             Otherwise an interable Cursor object is returned.
-        
+
         *args
         start: a datetime.datetime instance marking the start of the query period.
         stop: a datetime.datetime instance marking the end of the query period.
-        
+
         **kwargs
         number_of_documents: int, maximum number of documents collected into the
             cursor. A maximum number of "0" is equivalent to an unlimited amount.
         log_level: int, selects the minimum log level returned.
         sort_ascending: bool, selects to sort the cursor either by ascending or
-            descending order. 
+            descending order.
         '''
     # Sort order
         if sort_ascending:
@@ -272,7 +385,14 @@ class LogRead():
         else:
             sort_order = [('_timestamp', pymongo.DESCENDING)]
     # Ranged filter
-        ranged_filter = {'_timestamp':{'$gte':start, '$lte':stop}, 'log_level':{'$gte':log_level}}
+        if (start is not None) and (stop is not None):
+            ranged_filter = {'_timestamp':{'$gt':start, '$lte':stop}, 'log_level':{'$gte':log_level}}
+        elif (start is not None):
+            ranged_filter = {'_timestamp':{'$gt':start}, 'log_level':{'$gte':log_level}}
+        elif (stop is not None):
+            ranged_filter = {'_timestamp':{'$lte':stop}, 'log_level':{'$gte':log_level}}
+        else:
+            ranged_filter = None
     # Cursor
         cursor = self.log.find(ranged_filter, limit=number_of_documents, sort=sort_order)
         if number_of_documents == 1:
@@ -292,28 +412,28 @@ class LogRead():
         '''
         Returns an iterable cursor object containing documents from the log buffer.
         A tailable cursor remains open after the client exhausts the results in
-            the initial cursor. Subsequent calls to the cursor only returns new 
+            the initial cursor. Subsequent calls to the cursor only returns new
             documents. A non-tailable cursor will automatically be closed after
-            all results are exhausted. Regardless, all cursors time out in the 
+            all results are exhausted. Regardless, all cursors time out in the
             database (will be closed) after 10 minutes of inactivity.
             -If tailable cursor is specified the documents will be returned in
             ascending sort order and there will be no document limit.
-        With the natural ordering of capped collections, ascending order gives 
+        With the natural ordering of capped collections, ascending order gives
             the oldest documents first, while descending gives the newest documents
             first.
         The recommended log levels are as those in the logging package.
         Levels  |   10  |  20  |   30    |   40  |    50    |
                 | debug | info | warning | error | critical |
-        When only one document is requested this method autmatically returns 
+        When only one document is requested this method autmatically returns
             the dictionary containing the entry, timestamp, and level.
             Otherwise an interable Cursor object is returned.
-        
+
         **kwargs
         number_of_documents: int, maximum number of documents collected into the
             cursor. A maximum number of "0" is equivalent to an unlimited amount.
         log_level: int, selects the minimum log level returned.
         sort_ascending: bool, selects to sort the cursor either by ascending or
-            descending order. 
+            descending order.
         tailable_cursor: bool, selects whether or not to return a tailable cursor
         no_cursor_timeout: bool, sets action of the cursor timeout
         '''
@@ -356,13 +476,13 @@ class DatabaseReadWrite(DatabaseRead):
         The "read and write" handler for the database. This subclass is used to
             form a read and write connection to a database, without needing to
             specify the database specific settings.
-        In order to allow for a more hierarchical structure, names may be 
+        In order to allow for a more hierarchical structure, names may be
             separated by a single forward slash '/'. The preceding name will be
-            the name of the database and the following name will be that of a 
-            collection. The sub collection names ('record', 'buffer', 
-            'log', 'log_buffer') will be appended to the collection name. Only 
+            the name of the database and the following name will be that of a
+            collection. The sub collection names ('record', 'buffer',
+            'log', 'log_buffer') will be appended to the collection name. Only
             one level is supported, mongoDB does not support nested collections.
-        
+
         *args
         mongo_client: a MongoClient object
         database: str, the name of the requested database. Use the '/' separator
@@ -371,17 +491,34 @@ class DatabaseReadWrite(DatabaseRead):
     # Initialize
         super(DatabaseReadWrite, self).__init__(mongo_client, database)
 
-    def write_document_to_record(self, document):
+    def write_document_to_buffer(self, document):
         '''
-        Writes a document into the record. This is intended to be used to write 
-            documents from the buffer into the record. Since the database 
+        Writes a document into the buffer. This is intended to be used to write
+            documents from one buffer into another. Since the database
             requires object IDs to be unique, the old object ID is dropped and
             a new one is automatically created upon insertion.
-        
+
         *args
         document: a document in the format as given by the read_buffer function.
         '''
-        document.pop('_id')
+        document = copy.copy(document)
+        if '_id' in document:
+            document.pop('_id')
+        self.buffer.insert_one(document)
+
+    def write_document_to_record(self, document):
+        '''
+        Writes a document into the record. This is intended to be used to write
+            documents from the buffer into the record. Since the database
+            requires object IDs to be unique, the old object ID is dropped and
+            a new one is automatically created upon insertion.
+
+        *args
+        document: a document in the format as given by the read_buffer function.
+        '''
+        document = copy.copy(document)
+        if '_id' in document:
+            document.pop('_id')
         self.record.insert_one(document)
 
     def write_buffer(self, entry_dict, timestamp=None):
@@ -389,49 +526,55 @@ class DatabaseReadWrite(DatabaseRead):
         Writes an entry into the buffer. An entry into the buffer can contain any
             type, but all entries should contain the same type and should represent
             the same database object. Entries must be dictionaries.
-        
+
         *args
         entry_dict: a dictionary containing things to write to the buffer.
         '''
+        entry_dict = copy.copy(entry_dict)
+        if '_id' in entry_dict:
+            entry_dict.pop('_id')
         if (timestamp == None) or (type(timestamp) != datetime.datetime):
-            document = {'_timestamp':datetime.datetime.utcnow()}
+            entry_dict['_timestamp'] = datetime.datetime.utcnow()
         else:
-            document = {'_timestamp':timestamp}
-        document = dict(list(document.items()) + list(entry_dict.items()))
-        self.buffer.insert_one(document)
+            entry_dict['_timestamp'] = timestamp
+        self.buffer.insert_one(entry_dict)
 
     def write_record(self, entry_dict, timestamp=None):
         '''
-        Writes an entry into the record. This bypasses the buffer and directly 
-            writes an entry into the record. For compatibility considerations, 
+        Writes an entry into the record. This bypasses the buffer and directly
+            writes an entry into the record. For compatibility considerations,
             the entry should have the same format as those written to the buffer.
-        
+
         *args
         entry_dict: a dictionary containing thing to write to the record.
         '''
+        entry_dict = copy.copy(entry_dict)
+        if '_id' in entry_dict:
+            entry_dict.pop('_id')
         if (timestamp == None) or (type(timestamp) != datetime.datetime):
-            document = {'_timestamp':datetime.datetime.utcnow()}
+            entry_dict['_timestamp'] = datetime.datetime.utcnow()
         else:
-            document = {'_timestamp':timestamp}
-        document = dict(list(document.items()) + list(entry_dict.items()))
-        self.record.insert_one(document)
-    
+            entry_dict['_timestamp'] = timestamp
+        self.record.insert_one(entry_dict)
+
     def write_record_and_buffer(self, entry_dict, timestamp=None):
         '''
         Writes an entry into the record and into the buffer. For compatibility
         considerations, the entry should have the same format as those written
         to the buffer.
-        
+
         *args
         entry_dict: a dictionary containing thing to write to the record.
         '''
+        entry_dict = copy.copy(entry_dict)
+        if '_id' in entry_dict:
+            entry_dict.pop('_id')
         if (timestamp == None) or (type(timestamp) != datetime.datetime):
-            document = {'_timestamp':datetime.datetime.utcnow()}
+            entry_dict['_timestamp'] = datetime.datetime.utcnow()
         else:
-            document = {'_timestamp':timestamp}
-        document = dict(list(document.items()) + list(entry_dict.items()))
-        self.buffer.insert_one(document)
-        self.record.insert_one(document)
+            entry_dict['_timestamp'] = timestamp
+        self.buffer.insert_one(entry_dict)
+        self.record.insert_one(entry_dict)
 
 
 # %% LogReadWrite ========================================================
@@ -442,13 +585,13 @@ class LogReadWrite(LogRead):
         The "read and write" handler for the database. This subclass is used to
             form a read and write connection to a database, without needing to
             specify the database specific settings.
-        In order to allow for a more hierarchical structure, names may be 
+        In order to allow for a more hierarchical structure, names may be
             separated by a single forward slash '/'. The preceding name will be
-            the name of the database and the following name will be that of a 
-            collection. The sub collection names ('record', 'buffer', 
-            'log', 'log_buffer') will be appended to the collection name. Only 
+            the name of the database and the following name will be that of a
+            collection. The sub collection names ('record', 'buffer',
+            'log', 'log_buffer') will be appended to the collection name. Only
             one level is supported, mongoDB does not support nested collections.
-        
+
         *args
         mongo_client: a MongoClient object
         database: str, the name of the requested database. Use the '/' separator
@@ -456,18 +599,20 @@ class LogReadWrite(LogRead):
         '''
     # Initialize
         super(LogReadWrite, self).__init__(mongo_client, database)
-   
+
     def write_document_to_log(self, document):
         '''
         Writes a document into the log. This is intended to be used to write
-            documents from the log buffer into the record. Since the database 
+            documents from the log buffer into the record. Since the database
             requires object IDs to be unique, the old object ID is dropped and
             a new one is automatically created upon insertion.
-        
+
         *args
         document: a document in the format as given by the read_log function.
         '''
-        document.pop('_id')
+        document = copy.copy(document)
+        if '_id' in document:
+            document.pop('_id')
         self.log.insert_one(document)
 
     def write_log(self, entry, log_level, timestamp=None):
@@ -478,7 +623,7 @@ class LogReadWrite(LogRead):
         The recommended log levels are as those in the logging package.
         Levels  |   10  |  20  |   30    |   40  |    50    |
                 | debug | info | warning | error | critical |
-        
+
         *args
         entry: a thing to write to the log.
         log_level: int, the log level of the entry.
@@ -487,17 +632,17 @@ class LogReadWrite(LogRead):
             timestamp = datetime.datetime.utcnow()
         document = {'entry':entry, '_timestamp':timestamp, 'log_level':log_level}
         self.log.insert_one(document)
-    
+
     def write_log_buffer(self, entry, log_level, timestamp=None):
         '''
         Writes an entry into the log buffer. An entry into the log can be of
-            any type, but is ideally a text based description of the current 
+            any type, but is ideally a text based description of the current
             state of, or an action taken within, the system as it relates to
             this database.
         The recommended log levels are as those in the logging package.
         Levels  |   10  |  20  |   30    |   40  |    50    |
                 | debug | info | warning | error | critical |
-        
+
         *args
         entry: a thing to write to the log.
         log_level: int, the log level of the entry.
@@ -506,17 +651,17 @@ class LogReadWrite(LogRead):
             timestamp = datetime.datetime.utcnow()
         document = {'entry':entry, '_timestamp':timestamp, 'log_level':log_level}
         self.log_buffer.insert_one(document)
-    
+
     def write_log_and_log_buffer(self, entry, log_level, timestamp=None):
         '''
         Writes an entry into the log and log buffer. An entry into the log can
-            be of any type, but is ideally a text based description of the 
-            current state of, or an action taken within, the system as it 
+            be of any type, but is ideally a text based description of the
+            current state of, or an action taken within, the system as it
             relates to this database.
         The recommended log levels are as those in the logging package.
         Levels  |   10  |  20  |   30    |   40  |    50    |
                 | debug | info | warning | error | critical |
-        
+
         *args
         entry: a thing to write to the log.
         log_level: int, the log level of the entry.
@@ -531,23 +676,23 @@ class LogReadWrite(LogRead):
 # %% DatabaseMaster ===========================================================
 
 class DatabaseMaster(DatabaseReadWrite):
-    def __init__(self, mongo_client, database, capped_collection_size=int(1e6)):
+    def __init__(self, mongo_client, database, capped_collection_size=int(2e6)):
         '''
         The "master" handler for the database. This class enforces the database
             settings as given in the kwargs and ensures that the record and log
             have the correct indexes.
-        In order to allow for a more hierarchical structure, names may be 
+        In order to allow for a more hierarchical structure, names may be
             separated by a single forward slash '/'. The preceding name will be
-            the name of the database and the following name will be that of a 
-            collection. The sub collection names ('record', 'buffer', 
-            'log', 'log_buffer') will be appended to the collection name. Only 
+            the name of the database and the following name will be that of a
+            collection. The sub collection names ('record', 'buffer',
+            'log', 'log_buffer') will be appended to the collection name. Only
             one level is supported, mongoDB does not support nested collections.
-        
+
         *args
         mongo_client: a MongoClient object
         database: str, the name of the requested database. Use the '/' separator
             to include multiple collections in a single database file.
-        
+
         **kwargs
         capped_collection_size: int, the size of the capped collection (buffer)
             in bytes.
@@ -578,18 +723,18 @@ class LogMaster(LogReadWrite):
         The "master" handler for the database. This class enforces the database
             settings as given in the kwargs and ensures that the record and log
             have the correct indexes.
-        In order to allow for a more hierarchical structure, names may be 
+        In order to allow for a more hierarchical structure, names may be
             separated by a single forward slash '/'. The preceding name will be
-            the name of the database and the following name will be that of a 
-            collection. The sub collection names ('record', 'buffer', 
-            'log', 'log_buffer') will be appended to the collection name. Only 
+            the name of the database and the following name will be that of a
+            collection. The sub collection names ('record', 'buffer',
+            'log', 'log_buffer') will be appended to the collection name. Only
             one level is supported, mongoDB does not support nested collections.
-        
+
         *args
         mongo_client: a MongoClient object
         database: str, the name of the requested database. Use the '/' separator
             to include multiple collections in a single database file.
-        
+
         **kwargs
         capped_collection_size: int, the size of the capped collection (buffer)
             in bytes.
@@ -619,7 +764,7 @@ class LogMaster(LogReadWrite):
 class MongoLogBufferHandler(logging.Handler):
     """
     A handler class which writes logging records, appropriately formatted,
-        to the a specified database's log buffer. This is used to simplify the 
+        to the a specified database's log buffer. This is used to simplify the
         log generation process with the use of the python "logging" package.
     """
     def __init__(self, database):
@@ -633,7 +778,7 @@ class MongoLogBufferHandler(logging.Handler):
             raise TypeError('A LogMaster or LogReadWrite object must be specified. A {:} was specified instead'.format(type(database)))
         self.database_name = database.database_name
         self.write_log_buffer = database.write_log_buffer
-        
+
     def emit(self, record):
         """
         If a formatter is specified, it is used to format the record. The record
@@ -663,7 +808,7 @@ class MongoLogHandler(logging.Handler):
             raise TypeError('A LogMaster or LogReadWrite object must be specified. A {:} was specified instead'.format(type(database)))
         self.database_name = database.database_name
         self.write_log = database.write_log
-        
+
     def emit(self, record):
         """
         If a formatter is specified, it is used to format the record. The record
@@ -682,22 +827,22 @@ def MongoLogger(database, name=None, logger_level=logging.DEBUG, log_buffer_hand
         buffer. This is a helper function used to simplify logger setup.
     The name specifies the logger's place in the logging hierarchy. Every
         logger called by the same name is the same logger instance, so only one
-        call to this function is needed per database and Python interpreter 
-        process. Other pointers to this logger instance can be created by calling 
+        call to this function is needed per database and Python interpreter
+        process. Other pointers to this logger instance can be created by calling
         logging.getLogger(name). Child loggers, which inherit the properties and
         handlers from their parents can be automatically created by calling the
-        getLogger method with the name specified in the dot separated format, 
+        getLogger method with the name specified in the dot separated format,
         i.e. "name.child.grandchild".
-    The logger_level and handler_level respectively specify the minimum log 
-        level sent to the handler from the logger and from the handler to the 
+    The logger_level and handler_level respectively specify the minimum log
+        level sent to the handler from the logger and from the handler to the
         database.
     See the logging documentation for details on the format string.
-    
+
     *args
     database: a DatabaseMaster or DatabaseReadWrite object
-    
+
     *kwargs
-    name: str, the name of the logger instance. 
+    name: str, the name of the logger instance.
     logger_level: int, minimum logging level that the logger will pass to the
         handler
     handler_level: int, minimum logging level that the handler will log
@@ -802,7 +947,7 @@ if __name__ == '__main__':
     for doc in cursor:
         print(doc)
     print('\t tailable cursor only works with no document limits')
-    
+
     # Read and write to the record
     print('\n Read and write to the record ----------------------------------')
     for x in range(int(2e1)):
@@ -882,7 +1027,7 @@ if __name__ == '__main__':
     for doc in test_database.read_log_buffer(number_of_documents=5, sort_ascending=False, log_level=logging.DEBUG):
         print(doc)
     logging.shutdown()
-    
+
     # Read and write to the log
     print('\n Read and write to the log ------------------------------')
     for x in range(int(2e1)):

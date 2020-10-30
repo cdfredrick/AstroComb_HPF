@@ -21,9 +21,11 @@ import datetime
 # %% Start/Stop Time
 #--- Start
 #start_time = None
-#start_time = datetime.datetime(2018, 5, 1)
+start_time = datetime.datetime(2018, 5, 1)
+# start_time = datetime.datetime(2019, 9, 1)
+# start_time = datetime.datetime(2020, 5, 1)
 #start_time = datetime.datetime.utcnow() - datetime.timedelta(days=14)
-start_time = datetime.datetime.utcnow() - datetime.timedelta(weeks=3)
+# start_time = datetime.datetime.utcnow() - datetime.timedelta(weeks=1)
 # start_time = datetime.datetime.utcnow() - datetime.timedelta(days=4)
 
 #--- Stop
@@ -85,9 +87,6 @@ db_paths = [
     ]
 
 # %% Brd.Stg. - Rotation Stage Position =======================================
-def deg_to_pwr(deg):
-    return np.sin(np.pi/180 * 2*(58 - deg))**2
-
 data = []
 try:
     mongo_client = MongoDB.MongoClient()
@@ -96,9 +95,14 @@ try:
     cursor = db.read_record(start=start_time, stop=stop_time)
     for doc in cursor:
         if doc['deg'] > 0:
+            if doc['_timestamp'] < datetime.datetime(2020, 10, 27, 20):
+                pwr = np.sin(2*(58 - doc['deg']) * np.pi/180)**2
+            else:
+                pwr = np.cos(2*(60 - doc['deg']) * np.pi/180)**2
             data.append(
                 [doc['_timestamp'],
-                 doc['deg']])
+                 doc['deg'],
+                 pwr])
 finally:
     mongo_client.close()
 
@@ -117,7 +121,7 @@ ax0.set_ylabel("Angle (deg)")
 ax0.set_title("Position")
 ax0.grid(True, alpha=0.25)
 
-ax1.plot(data[0], deg_to_pwr(data[1].astype(np.float)), '.', markersize=1)
+ax1.plot(data[0], data[2], '.', markersize=1)
 ax1.set_title("Transmission")
 ax1.set_ylabel("Power (arb. unit)")
 ax1.grid(True, alpha=0.25)
@@ -191,6 +195,7 @@ n_2 = len(data[2][0])
 n_3 = len(data[3][0])
 n_4 = len(data[4][0])
 
+
 # Plot
 fig_0 = plt.figure("Brd-Stg_NanoTrack-In")
 fig_0.set_size_inches([6.4 , 4.78*1.25])
@@ -209,14 +214,14 @@ ax0.yaxis.set_major_formatter(ticker.EngFormatter('A'))
 #ax1.errorbar(data[1][0], data[1][2], yerr=np.array(data[1][4])*2, fmt='.', label='y')
 ax1.plot(data[1][0], data[1][1], '.', label='x', markersize=1)
 ax1.plot(data[1][0], data[1][2], '.', label='y', markersize=1)
-ax1.legend()
+ax1.legend(loc=2, markerscale=10)
 ax1.set_title("NT-In Position")
 ax1.set_ylabel("arb. units")
 
 ax2.plot(data[2][0], data[2][1], '.', label='x', markersize=1)
 ax2.plot(data[3][0], data[3][1], '.', label='y', markersize=1)
 ax2.plot(data[4][0], data[4][1], '.', label='z', markersize=1)
-ax2.legend()
+ax2.legend(loc=2, markerscale=10)
 ax2.set_title("Piezo-In")
 ax2.set_ylabel("HV Output")
 ax2.yaxis.set_major_formatter(ticker.EngFormatter('V'))
@@ -312,14 +317,14 @@ ax0.yaxis.set_major_formatter(ticker.EngFormatter('A'))
 #ax1.errorbar(data[1][0], data[1][2], yerr=np.array(data[1][4])*2, fmt='.', label='y')
 ax1.plot(data[1][0], data[1][1], '.', label='x', markersize=1)
 ax1.plot(data[1][0], data[1][2], '.', label='y', markersize=1)
-ax1.legend()
+ax1.legend(markerscale=10)
 ax1.set_title("NT-Out Position")
 ax1.set_ylabel("arb. units")
 
 ax2.plot(data[2][0], data[2][1], '.', label='x', markersize=1)
 ax2.plot(data[3][0], data[3][1], '.', label='y', markersize=1)
 ax2.plot(data[4][0], data[4][1], '.', label='z', markersize=1)
-ax2.legend()
+ax2.legend(markerscale=10)
 ax2.set_title("Piezo-Out")
 ax2.set_ylabel("HV Output")
 ax2.yaxis.set_major_formatter(ticker.EngFormatter('V'))
@@ -756,7 +761,7 @@ finally:
 data = np.array(data).T
 n = len(data[0])
 
-# Plot
+#--- Total Phase
 fig_0 = plt.figure("Spc.Shp. - Optical Phase Optimizer")
 fig_0.clf()
 ax0 = plt.subplot2grid((5,1),(0,0), rowspan=2)
@@ -782,8 +787,16 @@ for idx in range(n):
     else:
         coefs.append([0,0] + data[4, idx])
     freqs = np.array(data[1, idx]['freq'])
-    poly_fit = np.polynomial.Legendre(coefs[idx], domain=data[2, idx])
+    if data[0, idx] > datetime.datetime(2020, 6, 4, 17, 30):
+        poly_fit = np.polynomial.Polynomial(coefs[idx], domain=data[2, idx])
+    else:
+        poly_fit = np.polynomial.Legendre(coefs[idx], domain=data[2, idx])
+        # Switch to Polynomial
+        poly_fit2 = np.polynomial.Polynomial.fit(freqs, poly_fit(freqs), len(coefs[idx]), domain=data[2, idx])
+        poly_fit = np.polynomial.Polynomial([0,0] + poly_fit2.coef.tolist()[2:], domain=data[2, idx])
+        coefs[idx] = poly_fit.coef.tolist()
     ax0.plot(hf.nm_to_THz(freqs), poly_fit(freqs))
+    # ax0.plot(hf.nm_to_THz(freqs), poly_fit.deriv(2)(freqs))
     ax2.plot(data[0, idx], 0, 'o')
 
 for idx_2 in range(6):
@@ -798,7 +811,7 @@ ax0_sp.set_ylim([-30, 10])
 
 ax1.set_title("Optimum Coefficients")
 ax1.set_ylabel("arb. units")
-ax1.legend(loc=3, ncol=2)
+ax1.legend(loc=2, ncol=2)
 
 
 for label in ax1.xaxis.get_ticklabels():
@@ -816,3 +829,73 @@ ax1.grid(True, alpha=0.25)
 
 fig_0.tight_layout()
 
+#%%
+#--- Individual Orders
+fig_1 = plt.figure("Spc.Shp. - Optical Phase Optimizer - Ind")
+fig_1.clf()
+ax3_2 = plt.subplot2grid((13,1),(0,0), rowspan=2)
+ax3_3 = plt.subplot2grid((13,1),(2,0), rowspan=2)
+ax3_4 = plt.subplot2grid((13,1),(4,0), rowspan=2)
+ax3_5 = plt.subplot2grid((13,1),(6,0), rowspan=2)
+ax3_6 = plt.subplot2grid((13,1),(8,0), rowspan=2)
+ax3_7 = plt.subplot2grid((13,1),(10,0), rowspan=2)
+ax4 = plt.subplot2grid((13,1),(12,0))
+
+ax3_2.set_prop_cycle(color=colormap(np.linspace(0, .99, n)))
+ax3_3.set_prop_cycle(color=colormap(np.linspace(0, .99, n)))
+ax3_4.set_prop_cycle(color=colormap(np.linspace(0, .99, n)))
+ax3_5.set_prop_cycle(color=colormap(np.linspace(0, .99, n)))
+ax3_6.set_prop_cycle(color=colormap(np.linspace(0, .99, n)))
+ax3_7.set_prop_cycle(color=colormap(np.linspace(0, .99, n)))
+ax4.set_prop_cycle(color=colormap(np.linspace(0, 1, n)))
+
+# for idx, order in enumerate(data[5]):
+for idx, order in enumerate([data[5][-1]]):
+    if order is not None:
+        if '2' in order:
+            ax3_2.plot(order['2']['coefs'], order['2']['dBm'], 'o')
+        else:
+            ax3_2.plot([],[], '.')
+        if '3' in order:
+            ax3_3.plot(order['3']['coefs'], order['3']['dBm'], 'o')
+        else:
+            ax3_3.plot([],[], '.')
+        if '4' in order:
+            ax3_4.plot(order['4']['coefs'], order['4']['dBm'], 'o')
+        else:
+            ax3_4.plot([],[], '.')
+        if '5' in order:
+            ax3_5.plot(order['5']['coefs'], order['5']['dBm'], 'o')
+        else:
+            ax3_5.plot([],[], '.')
+        if '6' in order:
+            ax3_6.plot(order['6']['coefs'], order['6']['dBm'], 'o')
+        else:
+            ax3_6.plot([],[], '.')
+        if '7' in order:
+            ax3_7.plot(order['7']['coefs'], order['7']['dBm'], 'o')
+        else:
+            ax3_7.plot([],[], '.')
+        ax4.plot(data[0, idx], 0, 'o')
+
+ax3_2.grid(True, alpha=.25)
+ax3_3.grid(True, alpha=.25)
+ax3_4.grid(True, alpha=.25)
+ax3_5.grid(True, alpha=.25)
+ax3_6.grid(True, alpha=.25)
+ax3_7.grid(True, alpha=.25)
+
+ax3_2.set_ylabel("2nd Order")
+ax3_3.set_ylabel("3rd Order")
+ax3_4.set_ylabel("4th Order")
+ax3_5.set_ylabel("5th Order")
+ax3_6.set_ylabel("6th Order")
+ax3_7.set_ylabel("7th Order")
+
+ax4.autoscale(axis="x", tight=True)
+for label in ax4.xaxis.get_ticklabels():
+    label.set_ha('right')
+    label.set_rotation(30)
+ax4.yaxis.set_ticks([])
+
+fig_1.tight_layout()

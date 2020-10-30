@@ -728,18 +728,13 @@ def optimize_DW_setpoint_zpz(sig=3, max_iter=None, n_avg=1, exp_alpha=0.2):
     #--- Setup  Optimizer -------------------------------------------------
     voltage_scan_range = 10 # 10 volt range, +-5 volts
     current_voltage = sm.dev[pz_db]['driver'].voltage()
-    if current_voltage < piezo_limits["min"]:
-        current_voltage = piezo_limits["min"]
-    elif current_voltage > zpz_setpoint():
-        current_voltage = zpz_setpoint()
-        
     start_scan = current_voltage - voltage_scan_range/2
     stop_scan = current_voltage + voltage_scan_range/2
     if start_scan < piezo_limits["min"]:
         start_scan = piezo_limits["min"]
         stop_scan = start_scan + voltage_scan_range
-    if stop_scan > zpz_setpoint():
-        stop_scan = zpz_setpoint()
+    if stop_scan > piezo_limits["max"]:
+        stop_scan = piezo_limits["max"]
         start_scan = stop_scan - voltage_scan_range
     bounds = [(start_scan, stop_scan)]
 
@@ -747,7 +742,7 @@ def optimize_DW_setpoint_zpz(sig=3, max_iter=None, n_avg=1, exp_alpha=0.2):
     optimizer = Minimizer(
         bounds,
         n_initial_points=15, sig=sig,
-        abs_bounds=[(piezo_limits["min"], zpz_setpoint())])
+        abs_bounds=[(piezo_limits["min"], piezo_limits["max"])])
 
     #--- Setup OSA --------------------------------------------------------
     settings_list = STATES['spectral_shaper/state_optimizer']['optimal']['settings']['short']

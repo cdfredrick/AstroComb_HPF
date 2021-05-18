@@ -21,11 +21,11 @@ import datetime
 # %% Start/Stop Time
 #--- Start
 #start_time = None
-start_time = datetime.datetime(2018, 5, 1)
+# start_time = datetime.datetime(2018, 5, 1)
 # start_time = datetime.datetime(2019, 9, 1)
 # start_time = datetime.datetime(2020, 5, 1)
 #start_time = datetime.datetime.utcnow() - datetime.timedelta(days=14)
-# start_time = datetime.datetime.utcnow() - datetime.timedelta(weeks=1)
+start_time = datetime.datetime.utcnow() - datetime.timedelta(weeks=4*3)
 # start_time = datetime.datetime.utcnow() - datetime.timedelta(days=4)
 
 #--- Stop
@@ -95,8 +95,10 @@ try:
     cursor = db.read_record(start=start_time, stop=stop_time)
     for doc in cursor:
         if doc['deg'] > 0:
-            if doc['_timestamp'] < datetime.datetime(2020, 10, 27, 20):
+            if doc['_timestamp'] < datetime.datetime(2020, 1, 10, 18):
                 pwr = np.sin(2*(58 - doc['deg']) * np.pi/180)**2
+            elif doc['_timestamp'] < datetime.datetime(2020, 10, 27, 20):
+                continue
             else:
                 pwr = np.cos(2*(60 - doc['deg']) * np.pi/180)**2
             data.append(
@@ -110,7 +112,7 @@ finally:
 data = np.array(data).T
 
 # Plot
-fig = plt.figure("Brd-Stg_Rotation-Stage-Position")
+fig = plt.figure("Brd-Stg Rotation-Stage-Position")
 plt.clf()
 
 ax0 = plt.subplot2grid((2,1), (0,0))
@@ -197,7 +199,7 @@ n_4 = len(data[4][0])
 
 
 # Plot
-fig_0 = plt.figure("Brd-Stg_NanoTrack-In")
+fig_0 = plt.figure("Brd-Stg NanoTrack-In")
 fig_0.set_size_inches([6.4 , 4.78*1.25])
 plt.clf()
 ax0 = plt.subplot2grid((3,1),(0,0))
@@ -300,7 +302,7 @@ n_3 = len(data[3][0])
 n_4 = len(data[4][0])
 
 # Plot
-fig_0 = plt.figure("Brd.Stg. - NanoTrack Out")
+fig_0 = plt.figure("Brd-Stg NanoTrack-Out")
 fig_0.set_size_inches([6.4 , 4.78*1.25])
 plt.clf()
 ax0 = plt.subplot2grid((3,1),(0,0))
@@ -466,7 +468,7 @@ data = np.array(data).T
 n = len(data[0])
 
 # Plot
-fig = plt.figure("Spc.Shp. - 2nd Stage Input Optimizer")
+fig = plt.figure("Spc-Shp 2nd-Stage-Input-Optimizer")
 plt.clf()
 ax0 = plt.subplot2grid((5,1),(0,0), rowspan=2)
 ax1 = plt.subplot2grid((5,1),(2,0), rowspan=2)
@@ -524,7 +526,7 @@ data = np.array(data).T
 n = len(data[0])
 
 # Plot
-fig = plt.figure("Spc.Shp. - 2nd Stage Output Optimizer")
+fig = plt.figure("Spc-Shp 2nd-Stage-Output-Optimizer")
 plt.clf()
 ax0 = plt.subplot2grid((5,1),(0,0), rowspan=2)
 ax1 = plt.subplot2grid((5,1),(2,0), rowspan=2)
@@ -599,7 +601,7 @@ data = np.array(data).T
 n = len(data[0])
 
 # Plot
-fig_0 = plt.figure("Spc.Shp. - DW Setpoint Optimizer")
+fig_0 = plt.figure("Spc-Shp DW-Setpoint-Optimizer")
 fig_0.set_size_inches(6.4 , 8.9)
 plt.clf()
 ax0 = plt.subplot2grid((9,1),(0,0), rowspan=2)
@@ -695,7 +697,7 @@ data = np.array(data).T
 n = len(data[0])
 
 # Plot
-fig_0 = plt.figure("Spc.Shp. - IM Bias Optimizer")
+fig_0 = plt.figure("Spc-Shp IM-Bias-Optimizer")
 plt.clf()
 ax0 = plt.subplot2grid((5,1),(0,0), rowspan=2)
 ax1 = plt.subplot2grid((5,1),(2,0), rowspan=2)
@@ -762,7 +764,7 @@ data = np.array(data).T
 n = len(data[0])
 
 #--- Total Phase
-fig_0 = plt.figure("Spc.Shp. - Optical Phase Optimizer")
+fig_0 = plt.figure("Spc-Shp Optical-Phase-Optimizer")
 fig_0.clf()
 ax0 = plt.subplot2grid((5,1),(0,0), rowspan=2)
 ax0_sp = plt.twinx(ax0)
@@ -799,8 +801,11 @@ for idx in range(n):
     # ax0.plot(hf.nm_to_THz(freqs), poly_fit.deriv(2)(freqs))
     ax2.plot(data[0, idx], 0, 'o')
 
+    # Change coefficients to Taylor Series (phi[w] == phi[w0] + dphi/dw w + 0.5 d2phi/dw2 w**2 + ...)
+    coefs[idx] = [1/(2*np.pi)**m * poly_fit.deriv(m)(hf.constants.c/1064e-9 * 1e-12) for m in range(8)]
+
 for idx_2 in range(6):
-    ax1.plot(data[0], [coefs[idx][idx_2+2] for idx in range(n)], '--o', label=idx_2+2)
+    ax1.plot(data[0], [coefs[idx][idx_2+2] for idx in range(n)], '--.', label=idx_2+2, markersize=5, zorder=-idx_2)
 
 ax0.set_title("Optimum Phase")
 ax0.set_ylabel("Phase (rad.)")
@@ -811,7 +816,7 @@ ax0_sp.set_ylim([-30, 10])
 
 ax1.set_title("Optimum Coefficients")
 ax1.set_ylabel("arb. units")
-ax1.legend(loc=2, ncol=2)
+ax1.legend(loc="lower left", ncol=2, markerscale=2, columnspacing=1)
 
 
 for label in ax1.xaxis.get_ticklabels():

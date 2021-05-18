@@ -30,16 +30,23 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib import ticker
 from matplotlib.dates import MonthLocator
+import colorcet
 
 from Drivers.Database import MongoDB
+
+# %%
+plt.rcParams['savefig.dpi'] = 600
+plt.rcParams["savefig.format"] = 'png'
+plt.rcParams['savefig.bbox'] = 'tight'
 
 # %% Start/Stop Time
 #--- Start
 start_time = None
-start_time = datetime.datetime(2018, 5, 1)
+# start_time = datetime.datetime(2018, 5, 1)
+# start_time = datetime.datetime(2018, 10, 20)
 # start_time = datetime.datetime(2020, 3, 1)
 # start_time = datetime.datetime.utcnow() - datetime.timedelta(days=2)
-# start_time = datetime.datetime.utcnow() - datetime.timedelta(weeks=1)
+start_time = datetime.datetime.utcnow() - datetime.timedelta(weeks=2)
 
 #--- Stop
 stop_time = None
@@ -121,6 +128,7 @@ header.loc[mask_index, 'mask'] = np.nan
 mask_index = header.loc[((header['time'] > datetime.datetime(2020, 6, 6, 19, 0, 0)) & (header['time'] <= datetime.datetime(2020, 6, 8, 16, 0, 0)))].index
 header.loc[mask_index, 'mask'] = np.nan
 
+
 # %% Preliminary Plots
 # fig, ax0 = hf.plot_setup(0, len(header.index))
 
@@ -136,6 +144,7 @@ header.loc[mask_index, 'mask'] = np.nan
 # ax1 = hf.complementary_x_ticks(ax0, hf.nm_to_THz, nbins=7)
 
 # %% Normalize
+
 def nantrapz(y, x=None, axis=0):
     return np.asarray(np.trapz(np.ma.masked_invalid(y), x=None if x is None else np.ma.masked_invalid(x), axis=axis))
 
@@ -249,38 +258,64 @@ spc_data['y_Ph/mode/s'] = spc_data['y_Ph/mode'].mul(header['repetition_rate'], a
 # plt.tight_layout()
 
 # %% Output Power
-fig, ax0 = hf.plot_setup("Output Power", 1, size=(6.4*1.5, 4.8))
+fig, ax0 = hf.plot_setup("Amp-Stb Int-Spectra", 1, size=(6.4*1.5, 4.8))
 ax0.plot(header['time'][header['mask']==0], header['output_power'][header['mask']==0], '.')
 ax0.yaxis.set_major_formatter(ticker.EngFormatter(unit='W'))
 plt.tight_layout()
 
 
-# %% Uptime Plot
+# %% Uptime
 
 #--- Calculate
 hpf_psb = (spc_data['x_nm'][0] >= 810) & (spc_data['x_nm'][0] <= 1280)
 hpf_psb = hpf_psb.index[hpf_psb]
 
-flt_idxs = header['time'][header['mask']==0].sort_values().index
+msk_idxs = header['time'][header['mask']==0].sort_values().index
 
 # Integrated Power
+avg_line_power = np.nanmedian(spc_data['y_Ph/mode/s'].loc[hpf_psb, :][msk_idxs], axis=1)
 norm_power = np.trapz(
-    spc_data['y_Ph/mode/s'].loc[hpf_psb, :],
-    spc_data['x_mode'].loc[hpf_psb, :],
+    spc_data['y_Ph/mode/s'].loc[hpf_psb, :][msk_idxs] / avg_line_power[:, np.newaxis],
+    spc_data['x_mode'].loc[hpf_psb, :][msk_idxs],
     axis=0)
-norm_power /= np.nanmean(norm_power[flt_idxs])
+norm_power /= np.nanmedian(norm_power)
+
+# Power flatness
+power_std = np.nanstd(spc_data['y_Ph/mode/s'].loc[hpf_psb, :] / avg_line_power[:, np.newaxis], axis=0)[msk_idxs]
 
 # Downtime Locations
 time_delta = -header['time'].diff(periods=-1)
 t_thr = np.array(int(1e9 * 1e4), dtype="timedelta64[ns]")
-t_dwt = time_delta.index[time_delta > t_thr]
+t_dwt_candidates = time_delta.index[time_delta > t_thr]
+t_dwt = []
+scheduled_dowtime = [
+    datetime.datetime(2018,10,16,14,26,51,469000),
+    datetime.datetime(2019,4,10,14,53,31,617000),
+    datetime.datetime(2019,4,12,14,6,51,543000),
+    datetime.datetime(2019,4,19,16,56,52,332000),
+    datetime.datetime(2019,6,5,12,8,36,584000),
+    datetime.datetime(2019,10,4,22,26,56,675000),
+    datetime.datetime(2019,10,23,18,40,16,433000),
+    datetime.datetime(2019,11,11,14,53,31,509000),
+    datetime.datetime(2019,11,12,0,36,49,221000),
+    datetime.datetime(2019,11,12,15,3,28,572000),
+    datetime.datetime(2019,11,12,21,26,52,873000),
+    datetime.datetime(2019,12,19,19,34,43,516000),
+    datetime.datetime(2020,10,27,19,30,9,63000),
+    datetime.datetime(2020,10,28,22,26,50,193000)]
+for candidate in t_dwt_candidates:
+    if header["time"].loc[candidate] not in scheduled_dowtime:
+        t_dwt.append(candidate)
+t_dwt = np.array(t_dwt)
+
 # t_dwt = t_dwt.delete([2,6,7,8,9,10,11]) # manual cleanup of starting from 2018-05-01
 if len(t_dwt)>0:
     t_dwt_dt = time_delta.loc[t_dwt]
 else:
     t_dwt_dt = np.array([], dtype=np.timedelta64)
 
-p_dwt_idxs = np.flatnonzero(norm_power < 0.5)
+
+p_dwt_idxs = np.flatnonzero((norm_power < 0.5) | ((power_std > 0.8) & (header['time'].loc[msk_idxs] > datetime.datetime(2018,10,18))))
 p_dwt = np.append(0, 1 + np.flatnonzero(np.diff(p_dwt_idxs) > 1))
 # p_dwt = np.delete(p_dwt, [0])  # manual cleanup of starting from 2018-05-01
 if len(p_dwt_idxs)>0:
@@ -299,19 +334,25 @@ print("Downtime %:\t{:}".format(100*total_downtime/total_time))
 # print(p_dwt_dt.sum()/total_time)
 
 
+#--- Plot Uptime
+
 # 2D Spectral Amplitudes
-spc_db_diff = spc_data['y_Ph/mode/s'].loc[hpf_psb,flt_idxs].apply(hf.dB, result_type='broadcast')
-spc_db_diff = spc_db_diff.sub(spc_db_diff.mean(axis='columns'), axis='index')
+spc_db_diff = spc_data['y_Ph/mode/s'].loc[hpf_psb].apply(hf.dB, result_type='broadcast')
+spc_db_diff = spc_db_diff.sub(spc_db_diff.loc[:,msk_idxs].median(axis='columns'), axis='index')
 spc_db_diff = 10**(spc_db_diff/10)
 
-for dwt_idx in t_dwt:
-    try:
-        spc_db_diff.loc[:, dwt_idx] *= np.NaN
-    except:
-        pass
+try:
+    spc_db_diff.loc[:, t_dwt] *= np.NaN
+except:
+    pass
+spc_db_diff = spc_db_diff.loc[:, msk_idxs]
+try:
+    spc_db_diff.iloc[:, p_dwt_idxs] *= np.NaN
+except:
+    pass
 
-#--- Plot
-fig = plt.figure("Spectral Uptime", constrained_layout=True)
+#%%
+fig = plt.figure("Amp-Stb Spectral-Uptime", constrained_layout=True)
 fig.clf()
 gs = fig.add_gridspec(nrows=20, ncols=20)
 ax0 = fig.add_subplot(gs[:9, :-1])
@@ -319,21 +360,23 @@ ax1 = fig.add_subplot(gs[9:-1, :-1], sharex=ax0)
 ax2 = fig.add_subplot(gs[9:-1, -1])
 ax3 = fig.add_subplot(gs[-1, :-1], sharex=ax0)
 
-ax0.plot(header['time'].loc[flt_idxs], norm_power[flt_idxs]/norm_power[flt_idxs][-1], '.', markersize=1)
-ax0.set_ylabel("Integrated Power")
+ax0.plot(header['time'].loc[msk_idxs], norm_power, '.', markersize=1)
+# ax0.plot(header['time'].loc[msk_idxs], norm_power/norm_power[-1], '.', markersize=1)
+ax0.set_title("Relative Comb Line Amplitude")
+ax0.set_ylabel("Average")
 ax0.set_ylim(bottom=0)
 ax0.grid(True, alpha=0.25)
 
 ax3.errorbar(header['time'].loc[t_dwt], np.zeros_like(t_dwt), xerr=[np.zeros_like(t_dwt_dt), t_dwt_dt], fmt='.')
-ax3.errorbar(header['time'].loc[p_dwt], np.zeros_like(p_dwt), xerr=[np.zeros_like(p_dwt_dt), p_dwt_dt], fmt='.', c="C0")
+ax3.errorbar(header['time'].loc[msk_idxs].iloc[p_dwt], np.zeros_like(p_dwt), xerr=[np.zeros_like(p_dwt_dt), p_dwt_dt], fmt='.', c="C0")
 
-pcolor_cmap = plt.cm.nipy_spectral
+pcolor_cmap = colorcet.cm.diverging_bwr_20_95_c54 #plt.cm.nipy_spectral
 pcolor_cmap.set_bad(color='k')
 im = ax1.pcolormesh(
-    header['time'].loc[flt_idxs],
-    1e-3*spc_data['x_nm'].loc[hpf_psb,flt_idxs].mean(axis='columns'),
-    # spc_db_diff,
-    spc_db_diff.div(spc_db_diff.iloc[:,-1], axis="index"),
+    header['time'].loc[msk_idxs],
+    1e-3*spc_data['x_nm'].loc[hpf_psb,msk_idxs].mean(axis='columns'),
+    spc_db_diff,
+    # spc_db_diff.div(spc_db_diff.iloc[:,-1], axis="index"),
     cmap=pcolor_cmap,
     norm=plt.matplotlib.colors.LogNorm(),
     vmin=1/3, vmax=3)
@@ -344,52 +387,80 @@ cbar = fig.colorbar(im, cax=ax2, ticks=[1/3, 0.5, 1, 2, 3], format=tck_fmt)
 minorticks = np.arange(.4, 3, .1)
 cbar.ax.yaxis.set_ticks(minorticks, minor=True)
 cbar.ax.yaxis.set_minor_formatter(ticker.NullFormatter())
-cbar.set_label(r"Power / Avg Power")
+cbar.set_label(r"Relative Amplitude")
 
 for label in ax0.xaxis.get_ticklabels():
-    label.set_ha('right')
-    label.set_rotation(20)
+    label.set_visible(False)
 ax1.xaxis.tick_bottom()
 for label in ax1.xaxis.get_ticklabels():
     label.set_visible(False)
-ax3.xaxis.tick_top()
+ax3.xaxis.tick_bottom()
 for label in ax3.xaxis.get_ticklabels():
-    label.set_visible(False)
+    label.set_ha('right')
+    label.set_rotation(20)
 ax3.yaxis.set_ticks([])
 
-ax1.set_xlim(left=header['time'].loc[flt_idxs].min(), right=header['time'].loc[flt_idxs].max())
+ax1.set_xlim(left=header['time'].loc[msk_idxs].min(), right=header['time'].loc[msk_idxs].max())
 
-# %% All Traces
 
-fig = plt.figure("All Traces")
+# %% Plot All Traces
+
+spc_psb = (spc_data['x_nm'][0] >= 700) & (spc_data['x_nm'][0] <= 1320)
+spc_psb = spc_psb.index[spc_psb]
+
+fig = plt.figure("Amp-Stb All-Traces")
 plt.clf()
-fig.set_size_inches(6.35*1.5, 4.8, forward=True)
+fig.set_size_inches(6.4*1.5, 4.8, forward=True)
 ax0 = plt.subplot2grid((2,1), (0,0))
 ax1 = plt.subplot2grid((2,1), (1,0), sharex=ax0)
 
 flat = header['time'][header['mask']==0].sort_values().index
+flat_cond = (
+    ~flat.isin(flat[p_dwt_idxs])
+    & (header['time'] > datetime.datetime(2018, 10, 20))[header['mask']==0])
+flat = flat[flat_cond]
+
+# flat = flat[flat.isin(flat[(header['time']>datetime.datetime(2018, 10, 20))[header['mask']==0]])]
 #flat = header['time'][header['mask']==0][header['time']<utc_tz.localize(datetime.datetime(2018, 7, 24))].sort_values().index
 #flat = header['time'][header['mask']==0][header['time']>utc_tz.localize(datetime.datetime(2018, 7, 24))].sort_values().index
 
-ax0.plot(spc_data['x_nm'].loc[:,flat], spc_data['y_P/nm'].loc[:,flat].apply(hf.dB, result_type='broadcast'), color=[31/255, 119/255, 180/255], markersize=1, alpha=0.01)
-ax0.plot(spc_data['x_nm'].loc[:,flat].mean(axis='columns'), spc_data['y_P/nm'].loc[:,flat].apply(hf.dB, result_type='broadcast').mean(axis='columns'), color='0', markersize=0.5, alpha=1)
 
-ax1.plot(spc_data['x_nm'].loc[:,flat], spc_data['y_std'].loc[:,flat], color=[31/255, 119/255, 180/255], markersize=1, alpha=0.01)
-ax1.plot(spc_data['x_nm'].loc[:,flat].mean(axis='columns'), spc_data['y_std'].loc[:,flat].mean(axis='columns'), color=[31/255, 119/255, 180/255], markersize=1, alpha=1, label='1000s Avg')
-ax1.plot(spc_data['x_nm'].loc[:,flat].mean(axis='columns'), spc_data['y_P/nm'].loc[:,flat].apply(hf.dB, result_type='broadcast').std(axis='columns'), color='0', markersize=1, alpha=1, label='Total Avg')
+data = spc_data['y_Ph/mode'].loc[spc_psb,flat]
+db_data = data.apply(hf.dB, result_type='broadcast')
+db_data -= np.median(db_data.mean(axis='columns').values)
+std_data = 10**(spc_data['y_std'].loc[spc_psb,flat]/10) - 1
+# std_data = spc_data['y_std'].loc[spc_psb,flat]
+x_data = spc_data['x_nm'].loc[spc_psb,flat]
+n_bins = 500
 
-ax1.legend()
+x_bins = np.linspace(x_data.values.min(), x_data.values.max(), len(x_data)+1)
+y_bins = np.linspace(db_data.values.min(), db_data.values.max(), n_bins)
+ax0.hist2d(x_data.values.flatten(), db_data.values.flatten(), bins=np.array([x_bins, y_bins]), cmap=plt.cm.Blues, norm=plt.matplotlib.colors.LogNorm())
+ax0.plot(x_data.mean(axis='columns'), db_data.mean(axis='columns'), color='0', markersize=0.5, alpha=1)
 
-ax0.set_ylabel('Amplitude (dBm/nm)')
-ax0.grid(b=True)
-ax1.set_ylabel('Standard Deviation (dB/nm)')
+x_bins = np.linspace(x_data.values.min(), x_data.values.max(), len(x_data)+1)
+# y_bins = np.geomspace(std_data.values[std_data.values > 0].min(), std_data.values.max(), n_bins)
+y_bins = np.geomspace(1e-3, std_data.values.max(), n_bins)
+ax1.hist2d(x_data.values.flatten(), std_data.values.flatten(), bins=np.array([x_bins, y_bins]), cmap=plt.cm.Blues, norm=plt.matplotlib.colors.LogNorm())
+ax1.semilogy(x_data.mean(axis='columns'), 10**(db_data.std(axis='columns')/10) - 1, color='0', markersize=1, alpha=1, label='Total')
+ax1.autoscale(axis="x", tight=True)
+ax1.legend(loc='upper right')
+
+ax0.set_title("Relative Amplitude")
+ax0.set_ylabel(r'dB photons/mode')
+ax0.grid(b=True, alpha=0.25)
+ax1.set_title("Standard Deviation")
+ax1.set_ylabel(r'std dev/mean')
 ax1.set_xlabel('Wavelength (nm)')
-ax1.grid(b=True)
+# ax1.set_ylim(bottom=1e-3)
+ax1.grid(b=True, alpha=0.25)
+
 
 plt.tight_layout()
 #plt.savefig('long_spectrum.png', dpi=600, transparent=True)
 
 #avg_flat = copy.deepcopy(np.array([data_list[0], data_avg]))
+
 
 # %% Flat 2D
 flat = header['time'][header['mask']==0].sort_values().index
@@ -420,7 +491,7 @@ flat = header['time'][header['mask']==0].sort_values().index
 
 fig = plt.figure("Flat 2D Diff")
 plt.clf()
-fig.set_size_inches(6.35*1.5, 4.8, forward=True)
+fig.set_size_inches(7.65, 4.8, forward=True)
 plt.pcolormesh(header['time'].loc[flat],
                spc_data['x_nm'].loc[:,flat].mean(axis='columns'),
                spc_data['y_P/nm'].loc[:,flat].apply(hf.dB, result_type='broadcast').sub(spc_data['y_P/nm'].loc[:,flat].apply(hf.dB).mean(axis='columns'), axis='index'),
@@ -461,10 +532,11 @@ fig.autofmt_xdate()
 #plt.gca().xaxis.set_major_locator(MonthLocator())
 plt.tight_layout()
 
+
 # %% Std Dev
 flat = header['time'][header['mask']==0].sort_values().index
 
-fig = plt.figure("2D Std Dev")
+fig = plt.figure("Amp-Stb 2D-Std-Dev")
 plt.clf()
 fig.set_size_inches(7.65, 4.8, forward=True)
 plt.pcolormesh(header['time'].loc[flat],
@@ -479,6 +551,7 @@ fig.autofmt_xdate()
 #plt.ylim(800, 1300)
 #plt.gca().xaxis.set_major_locator(MonthLocator())
 plt.tight_layout()
+
 
 # %% Plot DW
 plt.figure("DW")

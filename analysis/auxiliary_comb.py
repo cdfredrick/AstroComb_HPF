@@ -18,9 +18,9 @@ import datetime
 # %% Start/Stop Time
 #--- Start
 # start_time = None
-#start_time = datetime.datetime(2018, 5, 1)
+start_time = datetime.datetime(2018, 5, 1)
 # start_time = datetime.datetime.utcnow() - datetime.timedelta(weeks=4)
-start_time = datetime.datetime.utcnow() - datetime.timedelta(days=7)
+# start_time = datetime.datetime.utcnow() - datetime.timedelta(days=7)
 # start_time = datetime.datetime.utcnow() - datetime.timedelta(hours=1)
 
 #--- Stop
@@ -99,7 +99,7 @@ n_1 = len(data[1][0])
 n_1 = len(data[2][0])
 
 # Plot
-fig_0 = plt.figure("Aux. Comb - f0 PLL")
+fig_0 = plt.figure("Aux-Comb f0-PLL")
 plt.clf()
 
 gs0 = plt.matplotlib.gridspec.GridSpec(2, 1)
@@ -113,24 +113,26 @@ ax2 = plt.subplot(gs00[0,0:-1], sharex=ax0)
 ax3 = plt.subplot(gs10[:,0:-1], sharex=ax0)
 
 # f0
-n_f0_avg = int(n_0/100)
-f0_y = data[0][1].astype(np.float)
-f0_y_order = f0_y.argsort()
-f0_y_order_r = f0_y_order.argsort()
-f0_y_diff = np.append(0, np.diff(f0_y[f0_y_order]))
-f0_y_diff = hf.fftconvolve(f0_y_diff, 1/n_f0_avg*np.array([1]*n_f0_avg), mode="same")
-f0_z = 1/f0_y_diff[f0_y_order_r]
-f0_z_order = f0_z.argsort()[::1]
+std_cutoff = 10
+f0_y = data[0][1].astype(float)
+f0_std = hf.mad_std(f0_y)
+print("{:.2g} fraction outside {:} std".format(np.count_nonzero(np.abs(f0_y) > f0_std*std_cutoff)/f0_y.size, std_cutoff))
 
-ax0.scatter(data[0][0][f0_z_order], data[0][1][f0_z_order], c=f0_z[f0_z_order], edgecolor='', cmap=plt.cm.Blues_r, s=1, vmax=np.nanmax(f0_z), vmin=np.nanmin(f0_z))
-ax2.scatter(data[0][0], np.abs(data[0][1]), s=1, c=plt.cm.Blues_r(0), edgecolor='')
+x_bins = hf.ts_to_dt(hf.bins(hf.dt_to_ts(data[0][0]), n=500))
+y_bins = np.linspace(-std_cutoff*f0_std, std_cutoff*f0_std, 100)
+ax0.hist2d(data[0][0], f0_y, bins=[x_bins, y_bins], cmap=plt.cm.Blues_r, norm=plt.matplotlib.colors.LogNorm())
 
-ax3.fill_between(data[2][0], data[2][1].astype(np.float), data[2][2].astype(np.float), alpha=.25, step='post')
-ax3.plot(data[1][0], data[1][1].astype(np.float), '.', markersize=1)
+ax2.semilogy(data[0][0], np.abs(f0_y), alpha=0)
+y_bins = np.unique([
+    np.linspace(0, std_cutoff*f0_std, 50),
+    np.geomspace(std_cutoff*f0_std, ax2.get_ylim()[1], 50)])
+ax2.hist2d(data[0][0], np.abs(f0_y), bins=[x_bins, y_bins], cmap=plt.cm.Blues_r, norm=plt.matplotlib.colors.LogNorm())
+
+ax3.fill_between(data[2][0], data[2][1].astype(float), data[2][2].astype(float), alpha=.25, step='post')
+ax3.plot(data[1][0], data[1][1].astype(float), '.', markersize=1)
 
 ax0.yaxis.set_major_formatter(ticker.EngFormatter('Hz'))
-f0_std = np.sqrt(np.median((data[0][1] - np.median(data[0][1]))**2))
-ax0.set_ylim([-10*f0_std, 10*f0_std])
+ax0.set_ylim([-std_cutoff*f0_std, std_cutoff*f0_std])
 
 ax2.set_title(r"In-Loop f$_0$ Error")
 ax2.set_yscale("log")
@@ -138,11 +140,11 @@ ax2.yaxis.set_major_locator(ticker.LogLocator())
 ax2.yaxis.get_major_locator().set_params(numticks=3)
 ax2.yaxis.set_major_formatter(ticker.EngFormatter('Hz'))
 ax2.yaxis.set_minor_formatter(ticker.NullFormatter())
-ax2.set_ylim([ax0.get_ylim()[1], ax2.get_ylim()[1]])
+ax2.set_ylim(bottom=ax0.get_ylim()[1])
 ax2.autoscale(axis='x', tight=True)
 
 
-ax1.hist(data[0][1].astype(np.float), bins=10000, density=True, orientation="horizontal", range=(-1000*f0_std, 1000*f0_std))
+ax1.hist(f0_y, bins=100, density=True, orientation="horizontal", range=(-std_cutoff*f0_std, std_cutoff*f0_std))
 
 for label in ax0.xaxis.get_ticklabels():
     label.set_visible(False)
@@ -211,7 +213,7 @@ n_1 = len(data[1][0])
 n_2 = len(data[1][0])
 
 # Plot
-fig_0 = plt.figure("Aux. Comb - fR PLL")
+fig_0 = plt.figure("Aux-Comb fR-PLL")
 plt.clf()
 
 gs0 = plt.matplotlib.gridspec.GridSpec(2, 1)
@@ -225,31 +227,34 @@ ax2 = plt.subplot(gs00[0,0:-1], sharex=ax0)
 ax3 = plt.subplot(gs10[:,0:-1], sharex=ax0)
 
 # fR
-fR_td = np.fromiter((td.total_seconds() for td in np.diff(data[0][0])), np.float, n_0-1)
-fR_err = np.diff(data[0][1].astype(np.float))/(fR_td*(2*np.pi)).astype(np.float)
+fR_td = np.fromiter((td.total_seconds() for td in np.diff(data[0][0])), float, n_0-1)
+fR_err = np.diff(data[0][1].astype(float))/(fR_td*(2*np.pi)).astype(float)
 fR_mask = np.logical_not(np.ma.masked_invalid(fR_err).mask)
 fR_err = fR_err[fR_mask]
 fR_dt = data[0][0][1:][fR_mask]
 
+std_cutoff = 10
 fR_y = fR_err
-fR_y_order = fR_y.argsort()
-fR_y_order_r = fR_y_order.argsort()
-fR_y_diff = np.append(0, np.diff(fR_y[fR_y_order]))
-n_fR_avg = int(n_0/100)
-fR_y_diff = hf.fftconvolve(fR_y_diff, 1/n_fR_avg*np.array([1]*n_fR_avg), mode="same")
-fR_z = 1/fR_y_diff[fR_y_order_r]
-fR_z_order = fR_z.argsort()[::-1]
+fR_std = hf.mad_std(fR_y)
+print("{:.2g} fraction outside {:} std".format(np.count_nonzero(np.abs(fR_y) > fR_std*std_cutoff)/fR_y.size, std_cutoff))
 
-ax0.scatter(fR_dt[fR_z_order], fR_err[fR_z_order], c=fR_z[fR_z_order], edgecolor='', cmap=plt.cm.Blues_r, s=1, vmax=np.nanmax(fR_z), vmin=np.nanmin(fR_z))
-ax2.scatter(fR_dt, np.abs(fR_err), s=1, c=plt.cm.Blues_r(0), edgecolor='')
+x_bins = hf.ts_to_dt(hf.bins(hf.dt_to_ts(fR_dt), n=500))
+y_bins = np.linspace(-std_cutoff*fR_std, std_cutoff*fR_std, 100)
+ax0.hist2d(fR_dt, fR_y, bins=[x_bins, y_bins], cmap=plt.cm.Blues_r, norm=plt.matplotlib.colors.LogNorm())
+
+ax2.semilogy(fR_dt, np.abs(fR_y), alpha=0)
+y_bins = np.unique([
+    np.linspace(0, std_cutoff*fR_std, 50),
+    np.geomspace(std_cutoff*fR_std, ax2.get_ylim()[1], 50)])
+ax2.hist2d(fR_dt, np.abs(fR_y), bins=[x_bins, y_bins], cmap=plt.cm.Blues_r, norm=plt.matplotlib.colors.LogNorm())
 
 if len(data[2]):
-    ax3.fill_between(data[2][0], data[2][1].astype(np.float), data[2][2].astype(np.float), alpha=.25, step='post')
+    ax3.fill_between(data[2][0], data[2][1].astype(float), data[2][2].astype(float), alpha=.25, step='post')
 ax3.plot(data[1][0], data[1][1], '.', markersize=1)
 
 ax0.yaxis.set_major_formatter(ticker.EngFormatter('Hz'))
-fR_std = np.sqrt(np.median((fR_err - np.median(fR_err))**2))
-ax0.set_ylim([-10*fR_std, 10*fR_std])
+fR_std = hf.mad_std(fR_err)
+ax0.set_ylim([-std_cutoff*fR_std, std_cutoff*fR_std])
 
 ax2.set_title(r"In-Loop f$_R$ Error")
 ax2.set_yscale("log")
@@ -259,13 +264,12 @@ ax2.yaxis.set_major_formatter(ticker.EngFormatter('Hz'))
 ax2.yaxis.set_minor_formatter(ticker.NullFormatter())
 ax2.set_ylim([ax0.get_ylim()[1], ax2.get_ylim()[1]])
 
-ax1.hist(fR_err, bins=10000, density=True, orientation="horizontal", range=(-1000*fR_std, 1000*fR_std))
+ax1.hist(fR_err, bins=100, density=True, orientation="horizontal", range=(-std_cutoff*fR_std, std_cutoff*fR_std))
 
 for label in ax0.xaxis.get_ticklabels():
     label.set_visible(False)
 
-for label in ax1.xaxis.get_ticklabels():
-    label.set_visible(False)
+ax1.xaxis.set_ticklabels([])
 ax1.yaxis.tick_right()
 for label in ax1.yaxis.get_ticklabels():
     label.set_visible(False)
@@ -328,7 +332,7 @@ n_1 = len(data[1][0])
 n_2 = len(data[2][0])
 
 # Plot
-fig_0 = plt.figure("Aux. Comb - Slow fR Feedback")
+fig_0 = plt.figure("Aux-Comb Slow-fR-Feedback")
 fig_0.set_size_inches([6.4 , 4.78*1.25])
 plt.clf()
 ax0 = plt.subplot2grid((3,1),(0,0))

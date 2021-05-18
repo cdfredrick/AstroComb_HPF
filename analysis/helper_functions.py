@@ -6,11 +6,13 @@ Created on Fri Apr 12 16:10:41 2019
 """
 
 # %% Imports
+
+import datetime
 import math
 import numpy as np
 import matplotlib as mpl
 #mpl.rcParams['agg.path.chunksize'] = int(1000)
-mpl.rcParams['savefig.dpi'] = 200
+mpl.rcParams['savefig.dpi'] = 300
 mpl.rcParams["savefig.format"] = 'png'
 import matplotlib.pyplot as plt
 
@@ -21,6 +23,7 @@ import pytz
 from scipy.ndimage.filters import gaussian_filter as _gaussian_filter
 from scipy.ndimage.filters import median_filter as _median_filter
 from scipy.signal import fftconvolve
+from scipy import optimize, interpolate
 
 from analysis import adev
 
@@ -33,6 +36,69 @@ constants = Constants()
 constants.c = 299792458 #m/s
 constants.c_nm_ps = constants.c*1e-3 # nm/ps, or nm THz
 constants.h = 6.62607e-34 #J s
+pi = np.pi
+
+
+# %% Statistics
+
+def mad_std(data):
+    '''Approximates the standard deviation of the signal by using the median as
+    an estimator of the mean. This method provides an estimate that is robust
+    against outliers.
+
+    Parameters
+    ----------
+    data : array_like
+        Input array
+
+    Returns
+    -------
+    float
+        The mad estimate of the input array's standard deviation
+
+    Notes
+    -----
+    The factor of "1.4826" scales the estimate of the median deviation so that
+    the median deviation and the standard deviation are equal for a purely
+    gaussian distribution. Search online references for "median absolute
+    deviation" for a derivation.
+
+    '''
+    data = np.asarray(data)
+    if len(data.shape) > 1:
+        keep_dims = True
+    else:
+        keep_dims= False
+    return 1.4826 * np.nanmedian(np.abs(data - np.nanmedian(data, axis=-1, keepdims=keep_dims)), axis=-1, keepdims=keep_dims)
+
+
+# %% Fitting
+
+def lorentz(x, a, sigma, n=1):
+    return a/(1+(x/sigma)**2)**n
+
+def fit_lorentz(x_hist, y_hist, a=None, sigma=None):
+    if a is None:
+        a = y_hist.max()
+    if sigma is None:
+        sigma = (np.sum(x_hist**2 * y_hist)/np.sum(y_hist))**0.5
+
+    p0 = [a, sigma, 1]
+    popt, pcov = optimize.curve_fit(lorentz, x_hist, y_hist, p0=p0)
+    return popt
+
+def gaus(x, a, sigma, n=1):
+    return a*np.exp(-(x**2/(2*sigma**2))**n)
+
+def fit_gaus(x_hist, y_hist, a=None, sigma=None):
+    if a is None:
+        a = y_hist.max()
+    if sigma is None:
+        sigma = (np.sum(x_hist**2 * y_hist)/np.sum(y_hist))**0.5
+
+    p0 = [a, sigma, 1]
+    popt, pcov = optimize.curve_fit(gaus, x_hist, y_hist, p0=p0)
+    return popt
 
 
 # %% Unit Conversion
@@ -49,7 +115,8 @@ def dB(x):
 def dBm_to_W(x):
     return 1e-3*10**(x/10)
 
-# %% Time Zones
+
+# %% Time Manipulation
 utc_tz = pytz.utc
 central_tz = pytz.timezone('US/Central')
 
@@ -59,11 +126,26 @@ def utc_to_ct(dt):
 def ct_to_utc_conv(dt):
     return (central_tz.localize(dt.replace(tzinfo=None))).astimezone(utc_tz)
 
+def dt_to_ts(dt):
+    return [(t - datetime.datetime(1970, 1, 1))/datetime.timedelta(seconds=1) for t in dt]
+
+def ts_to_dt(ts):
+    return [(t * datetime.timedelta(seconds=1)) + datetime.datetime(1970, 1, 1) for t in ts]
+
 
 # %% Filtering
 
+def gaus_filt1D(xdata, ydata, x_3db):
+    sigma = np.log(2)**0.5/pi * x_3db
+
+    g_window = gaus(xdata - xdata.mean(), 1, sigma)
+    g_window /= np.sum(g_window)
+
+    filt_y = fftconvolve(ydata, g_window, mode="same")
+    return filt_y
+
 def gaus_avg(x, sig, offsets):
-    np_iter = (np.sum(x * (1/(np.sqrt(2*np.pi)*sig))*np.exp(-np.power(x-center, 2)/(2*sig**2))) for center in offsets)
+    np_iter = (np.sum(x * (1/(np.sqrt(2*pi)*sig))*np.exp(-np.power(x-center, 2)/(2*sig**2))) for center in offsets)
     return np.fromiter(np_iter, np.float, count=len(offsets))
 
 def med_filt(array, filt_size, num=1):
@@ -256,3 +338,35 @@ def complementary_x_ticks(old_axis, transform, inverse_transform=None,
     if not(nbins is None):
         new_axis.locator_params(axis='x', nbins=nbins)
     return new_axis
+
+def bins(data, n=None, scale="lin"):
+    """
+    Produce bins suitable for grid aligned histograms.
+
+    Parameters
+    ----------
+    data : array_like
+        The data to be histogrammed.
+    n : int, optional
+        The number of bins. The default is None, which automatically selects an
+        evenly spaced grid centered on the data coordinates.
+    scale : ("lin", "log"), optional
+        Selects whether the bins are spaced evenly on a linear scale or on a
+        log scale. The default is "lin".
+
+    Returns
+    -------
+    bins : np.array
+        The bin edges.
+
+    """
+    assert (scale=="lin") or (scale=="log")
+    data = np.asarray(data)
+    dx = np.median(np.diff(np.sort(np.unique(data))))
+    if n is None:
+        n = round((data.max() - data.min())/dx) + 2
+    if scale == "lin":
+        bins = np.linspace(data.min()-0.5*dx, data.max()+0.5*dx, num=n)
+    elif scale == "log":
+        bins = np.geomspace(data.min(), data.max(), num=n)
+    return bins

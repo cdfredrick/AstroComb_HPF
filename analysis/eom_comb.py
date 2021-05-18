@@ -83,7 +83,7 @@ finally:
 data = np.array(data).T
 
 # Plot
-fig = plt.figure("EOM Comb - IM Bias")
+fig = plt.figure("EOM-Comb IM-Bias")
 plt.clf()
 
 ax0 = plt.subplot2grid((1,1), (0,0))
@@ -92,7 +92,7 @@ ax0.plot(data[0], data[1], '.', markersize=1)
 ax0.set_title("IM Bias")
 ax0.yaxis.set_major_formatter(ticker.EngFormatter('V'))
 
-ax0.autoscale(axis='x', tight=True)
+# ax0.autoscale(axis='x', tight=True)
 ax0.grid(True, alpha=0.25)
 
 fig.autofmt_xdate()
@@ -138,7 +138,7 @@ n_1 = len(data[1][0])
 n_1 = len(data[2][0])
 
 # Plot
-fig_0 = plt.figure("EOM Comb - fCW PLL")
+fig_0 = plt.figure("EOM-Comb fCW-PLL")
 plt.clf()
 
 gs0 = plt.matplotlib.gridspec.GridSpec(2, 1)
@@ -151,25 +151,27 @@ ax2 = plt.subplot(gs00[0,0:-1], sharex=ax0)
 
 ax3 = plt.subplot(gs10[:,0:-1], sharex=ax0)
 
-# f0
-n_f0_avg = int(n_0/100)
-f0_y = data[0][1].astype(np.float)
-f0_y_order = f0_y.argsort()
-f0_y_order_r = f0_y_order.argsort()
-f0_y_diff = np.append(0, np.diff(f0_y[f0_y_order]))
-f0_y_diff = hf.fftconvolve(f0_y_diff, 1/n_f0_avg*np.array([1]*n_f0_avg), mode="same")
-f0_z = 1/f0_y_diff[f0_y_order_r]
-f0_z_order = f0_z.argsort()[::1]
+# fCW
+std_cutoff = 10
+fCW_y = data[0][1].astype(float)
+fCW_std = hf.mad_std(fCW_y)
+print("{:.2g} fraction outside {:} std".format(np.count_nonzero(np.abs(fCW_y) > fCW_std*std_cutoff)/fCW_y.size, std_cutoff))
 
-ax0.scatter(data[0][0][f0_z_order], data[0][1][f0_z_order], c=f0_z[f0_z_order], edgecolor='', cmap=plt.cm.Blues_r, s=1, vmax=np.nanmax(f0_z), vmin=np.nanmin(f0_z))
-ax2.scatter(data[0][0], np.abs(data[0][1]), s=1, c=plt.cm.Blues_r(0), edgecolor='')
+x_bins = hf.ts_to_dt(hf.bins(hf.dt_to_ts(data[0][0]), n=500))
+y_bins = np.linspace(-std_cutoff*fCW_std, std_cutoff*fCW_std, 100)
+ax0.hist2d(data[0][0], fCW_y, bins=[x_bins, y_bins], cmap=plt.cm.Blues_r, norm=plt.matplotlib.colors.LogNorm())
 
-ax3.fill_between(data[2][0], data[2][1].astype(np.float), data[2][2].astype(np.float), alpha=.25)
-ax3.plot(data[1][0], data[1][1].astype(np.float), '.', markersize=1)
+ax2.semilogy(data[0][0], np.abs(fCW_y), alpha=0)
+y_bins = np.unique([
+    np.linspace(0, std_cutoff*fCW_std, 50),
+    np.geomspace(std_cutoff*fCW_std, ax2.get_ylim()[1], 50)])
+ax2.hist2d(data[0][0], np.abs(fCW_y), bins=[x_bins, y_bins], cmap=plt.cm.Blues_r, norm=plt.matplotlib.colors.LogNorm())
+
+ax3.fill_between(data[2][0], data[2][1].astype(float), data[2][2].astype(float), alpha=.25)
+ax3.plot(data[1][0], data[1][1].astype(float), '.', markersize=1)
 
 ax0.yaxis.set_major_formatter(ticker.EngFormatter('Hz'))
-f0_std = np.sqrt(np.median((data[0][1] - np.median(data[0][1]))**2))
-ax0.set_ylim([-10*f0_std, 10*f0_std])
+ax0.set_ylim([-std_cutoff*fCW_std, std_cutoff*fCW_std])
 
 ax2.set_title(r"In-Loop f$_{CW}$ Error")
 ax2.set_yscale("log")
@@ -179,7 +181,7 @@ ax2.yaxis.set_major_formatter(ticker.EngFormatter('Hz'))
 ax2.yaxis.set_minor_formatter(ticker.NullFormatter())
 ax2.set_ylim([ax0.get_ylim()[1], ax2.get_ylim()[1]])
 
-ax1.hist(data[0][1].astype(np.float), bins=10000, density=True, orientation="horizontal", range=(-1000*f0_std, 1000*f0_std))
+ax1.hist(data[0][1].astype(float), bins=100, density=True, orientation="horizontal", range=(-std_cutoff*fCW_std, std_cutoff*fCW_std))
 
 for label in ax0.xaxis.get_ticklabels():
     label.set_visible(False)
@@ -248,10 +250,10 @@ data = [np.array(data[0]).T,
         np.array(data[2]).T,]
 n_0 = len(data[0][0])
 n_1 = len(data[1][0])
-n_1 = len(data[2][0])
+n_2 = len(data[2][0]) if len(data[2]) else 0
 
 # plot
-fig_0 = plt.figure("EOM Comb - Flt. Cav. Lock")
+fig_0 = plt.figure("EOM-Comb Flt-Cav-Lock")
 plt.clf()
 
 ax0 = plt.subplot2grid((2,1), (0,0))
@@ -259,8 +261,9 @@ ax1 = plt.subplot2grid((2,1), (1,0), sharex=ax0)
 
 ax0.plot(data[0][0], data[0][1], '.', markersize=1)
 
-ax1.fill_between(data[2][0], data[2][1].astype(np.float), data[2][2].astype(np.float), alpha=.25, step='post')
-ax1.plot(data[1][0], data[1][1], '.', markersize=1)
+if len(data[2]):
+    ax1.fill_between(data[2][0], data[2][1].astype(float), data[2][2].astype(float), alpha=.25, step='post')
+ax1.plot(data[1][0], np.ma.masked_where(data[1][1] > 10, data[1][1]), '.', markersize=1)
 
 ax0.set_title(r"Filter Cavity Reflection Signal")
 ax0.yaxis.set_major_formatter(ticker.EngFormatter('V'))
@@ -313,7 +316,7 @@ n_0 = len(data[0][0])
 n_1 = len(data[1][0])
 
 # Plot
-fig_0 = plt.figure("EOM Comb - Slow Flt. Cav. Feedback")
+fig_0 = plt.figure("EOM-Comb Slow-Flt-Cav-Feedback")
 plt.clf()
 ax0 = plt.subplot2grid((2,1),(0,0))
 ax1 = plt.subplot2grid((2,1),(1,0), sharex=ax0)

@@ -168,7 +168,7 @@ class DatabaseRead():
         self.DOCUMENT_KEYS = mongo_client.DOCUMENT_KEYS
     # Parse database name
         database = database.split('/')
-        if len(database) is 2:
+        if len(database) == 2:
             collection = database[1]+'_'
             database = database[0]
         else:
@@ -333,7 +333,7 @@ class LogRead():
         self.DOCUMENT_KEYS = mongo_client.DOCUMENT_KEYS
     # Parse database name
         database = database.split('/')
-        if len(database) is 2:
+        if len(database) == 2:
             collection = database[1]+'_'
             database = database[0]
         else:

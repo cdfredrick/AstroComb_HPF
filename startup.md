@@ -34,20 +34,22 @@ The following lists the procedure for turning on the astrocomb system. The one-o
     - Note: depending on the state of the hysteresis, the offset of the HV amplifier may need to be adjusted in order to find the lock point. This is found in the state settings as "y_voltage"
 14. Reset the Nufern amplifier to a known state
     - Note: steps 1-6 **cannot** be done remotely. The nufern control panel is located inside the comb enclosure.
-    1. Engage the interlock button (push in)
-    2. Turn the key to the off ("0") position
-    3. Disconnect power (4-pin) and USB
-    4. Reconnect power and USB
-    5. Turn the key to the "enable" position (the next position after "1")
-    6. Disengage the interlock button (pull out)
-    7. Open the nuAmp GUI and ensure that the output is at 0% and disabled
+    1. Open the nuAmp GUI
+    2. Engage the interlock button (push in)
+    3. Turn the key to the off ("0") position
+    4. Disconnect power (4-pin)
+    5. Reconnect power
+    6. Turn the key to the "1" position (the next position after "1")
+    7. On the nuAmp GUI, ensure that the output is at 0%
+    8. Disengage the interlock button (pull out)
+    9. Turn the key to "enable" position (the next position after "1")
 15. Turn on the OSA
     - Note: this step **cannot** be done remotely
     1. Press the front panel power button and skip the on-screen instructions.
 16. Reset the K-Cubes and T-Cubes to a known state
     - Note: this step is performed in the *Kinesis* app
-    1. ~~Home the rotation stage~~
-    2. ~~Set the rotation stage to 30 deg~~
+    1. Home the rotation stage
+    2. Set the rotation stage to 55 deg
     3. Latch the NanoTracks to the center of their ranges
     4. Set "in-z" and "out-z" to their last known level
 17. Reset the FiberLock to a known state

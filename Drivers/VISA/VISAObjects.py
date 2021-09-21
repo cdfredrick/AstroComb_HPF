@@ -1,9 +1,5 @@
 # -*- coding: utf-8 -*-
 """
-Created on Mon Jun 12 15:29:26 2017
-
-@author: Wesley Brand
-
 Module: VisaObjects
     import VisaObjects as vo
 
@@ -11,19 +7,6 @@ Defines the super class to which all visa controlled devices should belong
 
 Using this file you should not need to import visa
 and pyvisa into the drivers for other visa devices
-
-List of public functions:
-
-0/1 = tf_to_10(var)
-method = handle_timeout(method)
-
-
-List of public methods in class VISA:
-
-__init__(res_name, res_address)
-open_resource()
-check_connection()
-disconnected()
 """
 
 # %% Modules
@@ -39,10 +22,6 @@ from pyvisa import errors as visa_errors # for error handling
 #Astrocomb imports
 from Drivers.Logging import EventLog as log
 from Drivers.Logging import ACExceptions
-
-
-# %% Constants
-SB_ONE = visa.constants.StopBits.one
 
 
 # %% Public functions

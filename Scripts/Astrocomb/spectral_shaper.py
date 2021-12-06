@@ -342,12 +342,15 @@ rts_sign = -1 # sign of feedback
 piezo_limits = {"min":0., "max":75.}
 def zpz_setpoint():
     return sm.local_settings[CONTROL_DB]['zpz_setpoint']['value']
-zpz_offset_limits = {"min":-8., "max":-1.} # offset from peak coupling
+zpz_offset_limits = {"min":-9., "max":-3.} # offset from peak coupling
 
 def DW_setpoint():
     return sm.local_settings[CONTROL_DB]['DW_setpoint']['value']
 DW_limits = 2.
 DW_range_threshold = 1.25
+
+def_exp = 1/10 # default exp filter time constant
+def_sig = 3 # default significance for optimizers
 
 
 #--- Monitor Functions --------------------------------------------------------
@@ -460,7 +463,7 @@ thread['get_new_single_quick'] = ThreadFactory(target=sm.dev['spectral_shaper/de
 #--- Optimization Functions ---------------------------------------------------
 
 # Optimize DW Setpoint --------------------------------------------------------
-def optimize_DW_setpoint(sig=3, max_iter=None, n_avg=1, exp_alpha=0.2):
+def optimize_DW_setpoint(sig=def_sig, max_iter=None, n_avg=1, exp_alpha=def_exp):
     # Info
     mod_name = __name__
     func_name = optimize_DW_setpoint.__name__
@@ -507,7 +510,7 @@ def optimize_DW_setpoint(sig=3, max_iter=None, n_avg=1, exp_alpha=0.2):
     DWs = []
     try:
         while search:
-            #--- Ensure queues
+            #--- Refresh queues
             sm.dev[osa_db]['queue'].touch()
             sm.dev[rot_db]['queue'].touch()
 
@@ -708,7 +711,7 @@ def optimize_DW_setpoint(sig=3, max_iter=None, n_avg=1, exp_alpha=0.2):
         return new_angle, opt_DW, opt_DW_std
 
 # Optimize DW Setpoint (no rotation stage) ------------------------------------
-def optimize_DW_setpoint_zpz(sig=3, max_iter=None, n_avg=1, exp_alpha=0.2):
+def optimize_DW_setpoint_zpz(sig=def_sig, max_iter=None, n_avg=1, exp_alpha=def_exp):
     # Info
     mod_name = __name__
     func_name = optimize_DW_setpoint_zpz.__name__
@@ -720,29 +723,38 @@ def optimize_DW_setpoint_zpz(sig=3, max_iter=None, n_avg=1, exp_alpha=0.2):
     mon_db = 'spectral_shaper/DW_bulk_vs_piezo_in_voltage'
     osa_db = 'spectral_shaper/device_OSA'
     pz_db = 'spectral_shaper/device_piezo_z_in'
-
+    
+    #---  Adjust Input Power
+    adjust_quick('spectral_shaper/state_optimizer')
+    
     #--- Queue and wait ---------------------------------------------------
     sm.dev[osa_db]['queue'].queue_and_wait()
     sm.dev[pz_db]['queue'].queue_and_wait()
 
     #--- Setup  Optimizer -------------------------------------------------
-    voltage_scan_range = 10 # 10 volt range, +-5 volts
     current_voltage = sm.dev[pz_db]['driver'].voltage()
+    voltage_scan_range = 10 # 10 volt range, +-5 volts
     start_scan = current_voltage - voltage_scan_range/2
     stop_scan = current_voltage + voltage_scan_range/2
     if start_scan < piezo_limits["min"]:
         start_scan = piezo_limits["min"]
         stop_scan = start_scan + voltage_scan_range
-    if stop_scan > piezo_limits["max"]:
-        stop_scan = piezo_limits["max"]
+    if stop_scan > zpz_setpoint():
+        stop_scan = zpz_setpoint()
         start_scan = stop_scan - voltage_scan_range
+        
+        #--- Re-adjust input power
+        settings_list = [{'voltage':zpz_setpoint() - 0.5*voltage_scan_range}]
+        sm.update_device_settings(pz_db, settings_list, write_log=False)
+        adjust_quick('spectral_shaper/state_optimizer', use_zpz=False)
+        
     bounds = [(start_scan, stop_scan)]
 
     #--- Initialize optimizer ---------------------------------------------
     optimizer = Minimizer(
         bounds,
         n_initial_points=15, sig=sig,
-        abs_bounds=[(piezo_limits["min"], piezo_limits["max"])])
+        abs_bounds=[(piezo_limits["min"], zpz_setpoint())])
 
     #--- Setup OSA --------------------------------------------------------
     settings_list = STATES['spectral_shaper/state_optimizer']['optimal']['settings']['short']
@@ -755,7 +767,7 @@ def optimize_DW_setpoint_zpz(sig=3, max_iter=None, n_avg=1, exp_alpha=0.2):
     DWs = []
     try:
         while search:
-            #--- Ensure queues
+            #--- Refresh queues
             sm.dev[osa_db]['queue'].touch()
             sm.dev[pz_db]['queue'].touch()
 
@@ -948,7 +960,7 @@ def optimize_DW_setpoint_zpz(sig=3, max_iter=None, n_avg=1, exp_alpha=0.2):
 
 
 # Optimize 2nd Stage Z Coupling -----------------------------------------------
-def optimize_z_coupling(sig=3, max_iter=None, stage="in", scan_range=20, n_avg=1, exp_alpha=0.2, exp_alpha_zpz=0.2):
+def optimize_z_coupling(sig=def_sig, max_iter=None, stage="in", scan_range=20, n_avg=1, exp_alpha=def_exp, exp_alpha_zpz_sp=def_exp):
     # Info
     mod_name = __name__
     func_name = optimize_z_coupling.__name__
@@ -997,7 +1009,7 @@ def optimize_z_coupling(sig=3, max_iter=None, stage="in", scan_range=20, n_avg=1
     new_x = [current_position]
     try:
         while search:
-            #--- Ensure queues
+            #--- Refresh queues
             sm.dev[osa_db]['queue'].touch()
             sm.dev[pz_db]['queue'].touch()
 
@@ -1113,7 +1125,7 @@ def optimize_z_coupling(sig=3, max_iter=None, stage="in", scan_range=20, n_avg=1
         
         #--- Update Z-in Setpoint ---------------------------------------------
         if converged and stage=="in":
-            new_zpz = exp_alpha_zpz*opt_x[0] + (1-exp_alpha_zpz)*sm.local_settings[CONTROL_DB]['zpz_setpoint']['value']
+            new_zpz = exp_alpha_zpz_sp*opt_x[0] + (1-exp_alpha_zpz_sp)*sm.local_settings[CONTROL_DB]['zpz_setpoint']['value']
             with sm.lock[CONTROL_DB]:
                 sm.local_settings[CONTROL_DB]['zpz_setpoint']['value'] = new_zpz
                 sm.db[CONTROL_DB].write_record_and_buffer(sm.local_settings[CONTROL_DB])
@@ -1152,7 +1164,7 @@ def optimize_z_coupling(sig=3, max_iter=None, stage="in", scan_range=20, n_avg=1
 
 
 # Optimize IM Bias ------------------------------------------------------------
-def optimize_IM_bias(sig=3, max_iter=None, n_avg=1, exp_alpha=0.2):
+def optimize_IM_bias(sig=def_sig, max_iter=None, n_avg=1, exp_alpha=def_exp):
     # Info
     mod_name = __name__
     func_name = optimize_IM_bias.__name__
@@ -1164,6 +1176,9 @@ def optimize_IM_bias(sig=3, max_iter=None, n_avg=1, exp_alpha=0.2):
     mon_db = 'spectral_shaper/DW_vs_IM_bias'
     osa_db = 'spectral_shaper/device_OSA'
     IM_db = 'spectral_shaper/device_IM_bias'
+    
+    #--- Adjust Input Power
+    adjust_quick('spectral_shaper/state_optimizer')
 
     #--- Queue and wait ---------------------------------------------------
     sm.dev[osa_db]['queue'].queue_and_wait()
@@ -1198,7 +1213,7 @@ def optimize_IM_bias(sig=3, max_iter=None, n_avg=1, exp_alpha=0.2):
     new_x = [current_bias]
     try:
         while search:
-            #--- Ensure queues
+            #--- Refresh queues
             sm.dev[osa_db]['queue'].touch()
             sm.dev[IM_db]['queue'].touch()
 
@@ -1344,7 +1359,7 @@ def optimize_IM_bias(sig=3, max_iter=None, n_avg=1, exp_alpha=0.2):
 
 
 # Optimize Finisar Waveshaper Phase -------------------------------------------
-def optimize_optical_phase(sig=3, max_iter=None, n_avg=1, exp_alpha=0.2):
+def optimize_optical_phase(sig=def_sig, max_iter=None, n_avg=1, exp_alpha=def_exp):
     # Info
     mod_name = __name__
     func_name = optimize_optical_phase.__name__
@@ -1356,47 +1371,55 @@ def optimize_optical_phase(sig=3, max_iter=None, n_avg=1, exp_alpha=0.2):
     mon_db = 'spectral_shaper/optical_phase_optimizer'
     osa_db = 'spectral_shaper/device_OSA'
     ws_db = 'spectral_shaper/device_waveshaper'
-
+    
     #--- Queue and wait ---------------------------------------------------
-    sm.dev[osa_db]['queue'].queue_and_wait()
     sm.dev[ws_db]['queue'].queue_and_wait()
-
+    
     #--- Setup  Optimizer -------------------------------------------------
-#    coefs_scan_range = [1.5, 4.0, 0.75, 1.5, 0.5, 1.5] # ~3dB scan range, Legendre
-    coefs_scan_range = [5., 25., 40., 150., 300., 800.]
+    # coefs_scan_range = [1.5, 4.0, 0.75, 1.5, 0.5, 1.5] # ~3dB scan range, Legendre
+    coefs_scan_range = [5., 20., 30., 50., 100., 200.]
     opt_orders = len(coefs_scan_range)
     opt_data = {}
     total_obs = 0
     current_phase = sm.dev[ws_db]['driver'].phase_profile()
     freqs = sm.dev[ws_db]['driver'].freq
     frq_smp = (freqs > WaveShaper.SPEED_OF_LIGHT_NM_THZ/1070) & (freqs < WaveShaper.SPEED_OF_LIGHT_NM_THZ/1058)
-#    current_polyfit = np.polynomial.Legendre.fit(freqs[frq_smp], current_phase[frq_smp], 1+opt_orders)
+    # current_polyfit = np.polynomial.Legendre.fit(freqs[frq_smp], current_phase[frq_smp], 1+opt_orders)
     current_polyfit = np.polynomial.Polynomial.fit(freqs[frq_smp], current_phase[frq_smp], 1+opt_orders)
     current_coefs = current_polyfit.coef[2:].tolist()
     bounds = []
     for idx, coef in enumerate(current_coefs):
         bounds.append((coef - coefs_scan_range[idx]/2., coef + coefs_scan_range[idx]/2.))
 
-    #--- Setup OSA --------------------------------------------------------
-    settings_list = STATES['spectral_shaper/state_optimizer']['optimal']['settings']['DW']
-    sm.update_device_settings(osa_db, settings_list, write_log=False)
-
     #--- Optimize Phase Profile -------------------------------------------
     new_x = current_coefs
     opt_x = copy.copy(new_x)
     try:
         for idx in range(opt_orders):
+            #--- Adjust Input Power
+            adjust_quick('spectral_shaper/state_optimizer')
+            
+            #--- Queue and wait -----------------------------------------------
+            sm.dev[osa_db]['queue'].queue_and_wait()
+            sm.dev[ws_db]['queue'].queue_and_wait()
+            
+            #--- Setup OSA ----------------------------------------------------
+            settings_list = STATES['spectral_shaper/state_optimizer']['optimal']['settings']['DW']
+            sm.update_device_settings(osa_db, settings_list, write_log=False)
+    
+            #--- Initialize optimizer -------------------------------------
             start_time_i = time.time()
             order = idx + 2
             converged = False
             search = True
-            #--- Initialize optimizer -------------------------------------
+            
             optimizer = Minimizer(
                             [bounds[idx]], abs_bounds=None,
                             n_initial_points=15, sig=sig)
+            
             #--- Optimize coefficient -------------------------------------
             while search:
-                #--- Ensure queues
+                #--- Refresh queues
                 sm.dev[osa_db]['queue'].touch()
                 sm.dev[ws_db]['queue'].touch()
 
@@ -1494,7 +1517,6 @@ def optimize_optical_phase(sig=3, max_iter=None, n_avg=1, exp_alpha=0.2):
                     #--- Send new phase profile
                     sm.dev[ws_db]['driver'].phase_profile(new_poly_fit(freqs)) # send phase for the entire waveshaper range
             #--- Calculate phase profile
-#            new_x[idx] = opt_x[idx]
             new_x[idx] = exp_alpha*opt_x[idx] + (1-exp_alpha)*current_coefs[idx]
             new_poly_fit = np.polynomial.Polynomial([0,0]+new_x, domain=current_polyfit.domain)
             #--- Send new phase profile
@@ -1521,11 +1543,11 @@ def optimize_optical_phase(sig=3, max_iter=None, n_avg=1, exp_alpha=0.2):
         log.log_info(mod_name, func_name, log_str)
         converged = False
         search = False
-        opt_x = current_coefs
+        new_x = current_coefs
         raise
-    finally:
+    finally: # in case of errors, apply the phase mask again
         # Optimum output
-        new_coefs = opt_x
+        new_coefs = new_x
         stop_time = time.time()
 
         #--- Implement result -------------------------------------------------
@@ -1572,7 +1594,7 @@ def optimize_optical_phase(sig=3, max_iter=None, n_avg=1, exp_alpha=0.2):
         return new_phase
 
 # Optimize All Finisar Waveshaper Phase ---------------------------------------
-def optimize_all_optical_phase(sig=3, max_iter=None, n_avg=1):
+def optimize_all_optical_phase(sig=def_sig, max_iter=None, n_avg=1):
     # Info
     mod_name = __name__
     func_name = optimize_all_optical_phase.__name__
@@ -1584,6 +1606,9 @@ def optimize_all_optical_phase(sig=3, max_iter=None, n_avg=1):
     mon_db = 'spectral_shaper/optical_phase_optimizer'
     osa_db = 'spectral_shaper/device_OSA'
     ws_db = 'spectral_shaper/device_waveshaper'
+
+    #--- Adjust Input Power
+    adjust_quick('spectral_shaper/state_optimizer')
 
     #--- Queue and wait ---------------------------------------------------
     sm.dev[osa_db]['queue'].queue_and_wait()
@@ -1620,7 +1645,7 @@ def optimize_all_optical_phase(sig=3, max_iter=None, n_avg=1):
                         n_initial_points=15*opt_orders, sig=sig)
         #--- Optimize coefficient -------------------------------------
         while search:
-            #--- Ensure queues
+            #--- Refresh queues
             sm.dev[osa_db]['queue'].touch()
             sm.dev[ws_db]['queue'].touch()
 
@@ -1892,7 +1917,7 @@ def apply_mask(state_db):
     log.log_info(mod_name, func_name, log_str)
 
 # Adjust Chip Input Power (Fast) ----------------------------------------------
-def adjust_quick(state_db):
+def adjust_quick(state_db, use_zpz=True):
     mod_name = adjust_quick.__module__
     func_name = adjust_quick.__name__
     osa_db = 'spectral_shaper/device_OSA'
@@ -1902,22 +1927,22 @@ def adjust_quick(state_db):
     DW_high = DW_setpoint()+DW_range_threshold # (1-DW_range_threshold)*DW_limits['max'] + DW_range_threshold*DW_limits['min']
     DW_low = DW_setpoint()-DW_range_threshold # (1-DW_range_threshold)*DW_limits['min'] + DW_range_threshold*DW_limits['max']
 # Wait for OSA queue
-    sm.dev[osa_db]['queue'].queue_and_wait()
+    osa_queued = sm.dev[osa_db]['queue'].queue_and_wait()
 # Setup OSA
     settings_list = STATES['spectral_shaper/state_optimizer']['optimal']['settings']['DW']
     sm.update_device_settings(osa_db, settings_list, write_log=False)
 # Adjust 2nd Stage Power
-    sm.dev[rot_db]['queue'].queue_and_wait()
-    sm.dev[pz_db]['queue'].queue_and_wait()
+    rot_queued = sm.dev[rot_db]['queue'].queue_and_wait()
+    pz_queued = sm.dev[pz_db]['queue'].queue_and_wait()
     continue_adjusting = True
     DWs = []
     angles = []
     voltages = []
     while continue_adjusting:
-    # Ensure Queues
-        sm.dev[osa_db]['queue'].queue_and_wait()
-        sm.dev[rot_db]['queue'].queue_and_wait()
-        sm.dev[pz_db]['queue'].queue_and_wait()
+    # Refresh Queues
+        sm.dev[osa_db]['queue'].touch()
+        sm.dev[rot_db]['queue'].touch()
+        sm.dev[pz_db]['queue'].touch()
     # Get New Trace
         thread_name = 'get_new_single_quick'
         (alive, error) = thread[thread_name].check_thread()
@@ -1958,7 +1983,7 @@ def adjust_quick(state_db):
         low_DW_condition = (current_DW < DW_low)
     # Adjust the setpoint
         if low_DW_condition:
-            if high_voltage_condition:
+            if high_voltage_condition or not use_zpz:
                 if angle_limit_condition:
                     if maximum_voltage_condition:
                         warning_id = 'low_angle_fast'
@@ -1989,7 +2014,7 @@ def adjust_quick(state_db):
                 settings_list = [{'voltage':current_voltage+0.1}]
                 sm.update_device_settings(pz_db, settings_list, write_log=False)
         elif high_DW_condition:
-            if low_voltage_condition:
+            if low_voltage_condition or not use_zpz:
                 log_str = ' DW is {:.3f}dB from setpoint {:.3f}dBm, lowering the 2nd stage power.\n Current angle {:.3f}deg.'.format(DW_diff, DW_setpoint(), current_angle)
                 log.log_info(mod_name, func_name, log_str)
             # Lower the 2nd stage power
@@ -2005,9 +2030,12 @@ def adjust_quick(state_db):
         # Good to go
             continue_adjusting = False
 # Remove from Queue
-    sm.dev[osa_db]['queue'].remove()
-    sm.dev[rot_db]['queue'].remove()
-    sm.dev[pz_db]['queue'].remove()
+    if not osa_queued:
+        sm.dev[osa_db]['queue'].remove()
+    if not rot_queued:
+        sm.dev[rot_db]['queue'].remove()
+    if not pz_queued:
+        sm.dev[pz_db]['queue'].remove()
 # Record Movement
     monitor_db = 'spectral_shaper/DW_quick_adjust'
     with sm.lock[monitor_db]:
@@ -2035,7 +2063,7 @@ def adjust_quick(state_db):
         sm.mon[monitor_db]['data'].append(current_voltage)
 
 
-# Adjust Chip Input Power (Fast, No Rotation Stage) ---------------------------
+# Adjust Chip Input Power (Fast, Only Z-Pz, No Rotation Stage) ----------------
 def adjust_quick_zpz(state_db):
     mod_name = adjust_quick_zpz.__module__
     func_name = adjust_quick_zpz.__name__
@@ -2375,12 +2403,12 @@ def optimize_setpoints(state_db):
             sm.local_settings[CONTROL_DB]['setpoint_optimization']['value'] = tomorrow_at_noon()
             sm.db[CONTROL_DB].write_record_and_buffer(sm.local_settings[CONTROL_DB])
         # Run Optimizers
-        optimize_z_coupling(sig=3, stage="in", scan_range=20, exp_alpha=0.)
-        optimize_z_coupling(sig=3, stage="out", scan_range=30)
-        optimize_IM_bias(sig=3)
-        optimize_optical_phase(sig=3)
+        optimize_z_coupling(sig=def_sig, stage="in", scan_range=20, exp_alpha=0.)
+        optimize_z_coupling(sig=def_sig, stage="out", scan_range=30)
+        optimize_IM_bias(sig=def_sig)
+        optimize_optical_phase(sig=def_sig)
 #        optimize_DW_setpoint(sig=3)
-        optimize_DW_setpoint_zpz(sig=3)
+        optimize_DW_setpoint_zpz(sig=def_sig)
     # Check if optimizer requested
     with sm.lock[CONTROL_DB]:
         run_optimizer = {}
@@ -2393,7 +2421,7 @@ def optimize_setpoints(state_db):
         if 'sig' in run_optimizer:
             sig = run_optimizer['sig']
         else:
-            sig = 3
+            sig = def_sig
         if 'n_avg' in run_optimizer:
             n_avg = run_optimizer['n_avg']
         else:
@@ -2401,17 +2429,52 @@ def optimize_setpoints(state_db):
         if 'exp_alpha' in run_optimizer:
             alpha = run_optimizer['exp_alpha']
         else:
-            alpha = 0.2
-        if 'exp_alpha_zpz' in run_optimizer:
-            alpha_zpz = run_optimizer['exp_alpha_zpz']
-        else:
-            alpha_zpz = 0.2
+            alpha = def_exp
         target = run_optimizer['target']
         if target in optimizer_functions:
             if target == "optimize_DW_setpoint":
                 optimize_DW_setpoint_zpz(sig=sig, n_avg=n_avg, exp_alpha=alpha)
             elif target == "optimize_z_in_coupling":
-                optimize_z_coupling(sig=sig, stage="in", n_avg=n_avg, exp_alpha=alpha, exp_alpha_zpz=alpha_zpz)
+                optimize_z_coupling(sig=sig, stage="in", n_avg=n_avg, exp_alpha=0.0, exp_alpha_zpz_sp=alpha)
+            elif target == "optimize_z_out_coupling":
+                optimize_z_coupling(sig=sig, stage="out", n_avg=n_avg, exp_alpha=alpha)
+            elif target == "optimize_IM_bias":
+                optimize_IM_bias(sig=sig, n_avg=n_avg, exp_alpha=alpha)
+            elif target == "optimize_optical_phase":
+                optimize_optical_phase(sig=sig, n_avg=n_avg, exp_alpha=alpha)
+            elif target == "optimize_all_optical_phase":
+                optimize_all_optical_phase(sig=sig, n_avg=n_avg)
+
+# Optimize setpoints ----------------------------------------------------------
+def optimize_setpoints_manual(state_db):
+    # Optimizers that can be run in "safe" state
+    # Check if optimizer requested
+    with sm.lock[CONTROL_DB]:
+        run_optimizer = {}
+        if sm.local_settings[CONTROL_DB]['run_optimizer']['value']:
+            run_optimizer = sm.local_settings[CONTROL_DB]['run_optimizer']['value']
+            # Reset "run_optimizer"
+            sm.local_settings[CONTROL_DB]['run_optimizer']['value'] = {}
+            sm.db[CONTROL_DB].write_record_and_buffer(sm.local_settings[CONTROL_DB])
+    if 'target' in run_optimizer:
+        if 'sig' in run_optimizer:
+            sig = run_optimizer['sig']
+        else:
+            sig = def_sig
+        if 'n_avg' in run_optimizer:
+            n_avg = run_optimizer['n_avg']
+        else:
+            n_avg = 1
+        if 'exp_alpha' in run_optimizer:
+            alpha = run_optimizer['exp_alpha']
+        else:
+            alpha = def_exp
+        target = run_optimizer['target']
+        if target in optimizer_functions:
+            if target == "optimize_DW_setpoint":
+                optimize_DW_setpoint_zpz(sig=sig, n_avg=n_avg, exp_alpha=alpha)
+            elif target == "optimize_z_in_coupling":
+                optimize_z_coupling(sig=sig, stage="in", n_avg=n_avg, exp_alpha=0.0, exp_alpha_zpz_sp=alpha)
             elif target == "optimize_z_out_coupling":
                 optimize_z_coupling(sig=sig, stage="out", n_avg=n_avg, exp_alpha=alpha)
             elif target == "optimize_IM_bias":
@@ -2561,7 +2624,7 @@ STATES = {
                         'settings':{},
                         'prerequisites':{},
                         'routines':{
-                                'monitor':sm.nothing, 'search':sm.nothing,
+                                'monitor':monitor_spectrum, 'search':optimize_setpoints_manual,
                                 'maintain':sm.nothing, 'operate':sm.nothing}
                         },
                 'engineering':{

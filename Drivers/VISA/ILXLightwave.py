@@ -1020,7 +1020,7 @@ class TECModule(LDC3900):
             if set_limit < 0:
                 set_limit = 0
         # Send command
-            self.qrite_tec('LIM:ITE {:.3f}'.format(set_limit))
+            self.write_tec('LIM:ITE {:.3f}'.format(set_limit))
     
     @log.log_this()
     def tec_temperature_limit(self, set_limit=None):

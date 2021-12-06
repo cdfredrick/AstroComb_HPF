@@ -46,6 +46,17 @@ comb_gen.push(message={"state":{'comb_generator/state_12V_supply':{"state":'on'}
 # %% RIO TEC
 rio_tec = TECModule('GPIB0::23::INSTR', 1)
 
+#--- Constants
+rio_tec.tec_current_limit()
+#Out[6]: 1.45
+
+rio_tec.tec_temperature_limit()
+#Out[9]: 50.0
+
+rio_tec.tec_mode()
+#Out[14]: 'R'
+
+#--- Variable
 rio_tec.tec_gain()
 #Out[15]: 10
 
@@ -60,37 +71,106 @@ rio_tec.tec_output(output=True)
 rio_tec.tec_output()
 #Out[20]: True
 
+rio_tec.tec_temperature()
+
 
 # %% RIO Laser
 rio_las = LaserModule('GPIB0::23::INSTR', 2)
 
+#--- Contants
+rio_las.laser_mode()
+#Out[51]: 'Ihbw'
+
+rio_las.laser_current_limit()
+#Out[13]: 145
+
+rio_las.laser_power_limit()
+#Out[16]: 200
+
+#--- Variable
 rio_las.laser_current_setpoint()
-#Out[22]: 99.03
-
-rio_las.laser_output()
-#Out[23]: False
-
-rio_las.laser_output(output=True)
+#Out[22]: 96.13 - old
+#Out[178]: 115.65
 
 rio_las.laser_output()
 #Out[25]: True
 
+rio_las.laser_current()
+
+
 # %% RIO pre-amp
 rio_amp = CombinationModule('GPIB0::23::INSTR', 3)
+
+#--- Constants
+rio_amp.tec_mode()
+#Out[22]: 'T'
+
+rio_amp.tec_current_limit()
+#Out[25]: 2.0
+
+rio_amp.tec_temperature_limit()
+#Out[28]: 60.0
+
+rio_amp.tec_gain()
+#Out[32]: 30
+
+rio_amp.laser_mode()
+#Out[39]: 'Ihbw'
+
+rio_amp.laser_current_limit()
+#Out[35]: 1050
+
+rio_amp.laser_power_limit()
+#Out[38]: 400
+
+#--- Variable
+rio_amp.tec_temperature_setpoint()
+#Out[31]: 25.0
 
 rio_amp.laser_current_setpoint()
 #Out[27]: 900.0
 
-rio_amp.tec_temperature_setpoint()
-#Out[28]: 25.0
-
 rio_amp.output()
-#Out[29]: (False, False)
+#Out[29]: (True, True)
 
-rio_amp.output(output=True)
 
-rio_amp.output()
-#Out[31]: (True, True)
+# %% RIO combo
+rio_cmb = CombinationModule('GPIB0::23::INSTR', 4)
+
+#--- Constants
+rio_cmb.tec_current_limit()
+#Out[6]: 1.45
+
+rio_cmb.tec_temperature_limit()
+#Out[9]: 50.0
+
+rio_cmb.tec_mode()
+#Out[14]: 'R'
+
+rio_cmb.laser_mode()
+#Out[51]: 'Ihbw'
+
+rio_cmb.laser_current_limit()
+#Out[13]: 145
+
+rio_cmb.laser_power_limit()
+#Out[16]: 200
+
+#--- Variable
+rio_cmb.tec_gain()
+#Out[15]: 10
+
+rio_cmb.tec_resistance_setpoint()
+#Out[16]: 9.51
+
+rio_cmb.tec_output()
+#Out[17]: True
+
+rio_cmb.laser_current_setpoint()
+#Out[22]: 122.
+
+rio_cmb.output()
+#Out[25]: True
 
 
 # %% ILX 2 ====================================================================
@@ -202,13 +282,20 @@ domain = [280.18, 283.357]
 #    -0.56548668,
 #    -0.18849556]
 #%%
+#new_coefs = [
+#21.12229940806827,
+#0.9938880964450989,
+#-9.848254602962644,
+#-2.788857337895246,
+#-41.63125465629001,
+#4.665367657691958]
 new_coefs = [
-    17.55802827222414,
-    7.665978886488576,
-    -3.601415011690909,
-    -9.397208717696527,
-    -39.87257271060393,
-    -28.287981456253068]
+20,
+0.9938880964450989,
+-10,
+-2.788857337895246,
+-61.63125465629001,
+4.665367657691958]
 #new_coefs = [
 #    18]
 
@@ -315,6 +402,7 @@ nt_out.circle_parameters()
 # 'min diameter': 0.0,
 # 'max diameter': 0.0,
 # 'adjust type': 1}
+#%%
 
 # %% Spectral Optimization ====================================================
 # =============================================================================
@@ -325,7 +413,7 @@ spec_opt.push(message={'control_parameter':{'abort_optimizer':True}})
 spec_opt.push(message={'control_parameter':{'setpoint_optimization':0}})
 spec_opt.push(message={'control_parameter':{'setpoint_optimization':tomorrow_at_noon()}})
 
-spec_opt.push(message={'control_parameter':{'DW_setpoint':-43.5}})
+spec_opt.push(message={'control_parameter':{'DW_setpoint':-45}})
 
 spec_opt.push(message={'control_parameter':{'run_optimizer':{'target':"optimize_z_in_coupling",
                                                              'sig':3}}})
@@ -333,34 +421,44 @@ spec_opt.push(message={'control_parameter':{'run_optimizer':{'target':"optimize_
 spec_opt.push(message={'control_parameter':{'run_optimizer':{'target':"optimize_z_out_coupling",
                                                              'sig':3}}})
 
-spec_opt.push(message={'control_parameter':{'run_optimizer':{'target':"optimize_IM_bias",
-                                                             'sig':3}}})
+spec_opt.push(message={'control_parameter':{'run_optimizer':{
+'target':"optimize_IM_bias",
+'exp_alpha':1,
+'sig':3}}})
 
-spec_opt.push(message={'control_parameter':{'run_optimizer':{'target':"optimize_optical_phase",
-                                                             'sig':3}}})
+spec_opt.push(message={'control_parameter':{'run_optimizer':{
+'target':"optimize_optical_phase",
+'exp_alpha':1,
+'sig':3}}})
 
 spec_opt.push(message={'control_parameter':{'run_optimizer':{'target':"optimize_all_optical_phase",
                                                              'sig':3}}})
     
-spec_opt.push(message={'control_parameter':{'run_optimizer':{'target':"optimize_DW_setpoint",
-                                                             'sig':3}}})
+spec_opt.push(message={'control_parameter':{'run_optimizer':{
+'target':"optimize_DW_setpoint",
+'exp_alpha':1,
+'sig':3}}})
 
 # States
 spec_opt.push(message={"state":{'spectral_shaper/state_optimizer':{"state":'optimal-nrs'}}})    
 spec_opt.push(message={"state":{'spectral_shaper/state_optimizer':{"state":'optimal'}}})
+spec_opt.push(message={"state":{'spectral_shaper/state_optimizer':{"state":'safe'}}})
     
     
 #%% MLL
-#mll_state = PriorityQueue('mll_fR')
+mll_state = PriorityQueue('mll_fR')
 #
 #mll_state.push(message={"state":{'mll_fR/state':{"state":"manual"}}})
 #
-#mll_state.push(message={"state":{'mll_fR/state':{"state":"lock"}}})
+mll_state.push(message={"state":{'mll_fR/state':{"state":"lock"}}})
 
 #%% OSA
 
 #osa = OSA("GPIB0::27::INSTR")
 osa = OSA("TCPIP0::192.168.0.10::10001::SOCKET")
+osa.level_unit()
+
+#Out[288]: 'dBm/nm'
 
 #%%
 #data = osa.get_new_single(active_trace="TRA")
@@ -368,21 +466,26 @@ osa = OSA("TCPIP0::192.168.0.10::10001::SOCKET")
 osa.trace_type(set_type={"mode":"WRIT"}, active_trace="TRA")
 osa.wvl_range({"start":690, "stop":1320})
 osa.sensitivity({"sense":"HIGH1", "chop":"OFF"})
+osa.resolution(set_res=2)
 #osa.sweep_mode("REP")
 osa.initiate_sweep()
 
 #%%
 data = osa.get_new_single(get_parameters=True)
-#data = osa.spectrum()
+#data = osa.spectrum(get_parameters=True)
+
 plt.figure("OSA")
 #plt.clf()
 
 plt.plot(data["data"]["x"], data["data"]["y"])
 
-# %%
 
-#date = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-#ident = "N-PCF"
-#file_name = "_".join((date, ident))+".txt"
-#with open(file_name, "x") as opened_file:
-#    json.dump(data, opened_file, indent="\t")
+# %%
+import os
+base_dir = os.path.join("C:\\","Users","National Institute","Documents","Python Scripts","OSACtrl","2021-08-02")
+date = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+ident = "EOM-Comb"
+file_name = "_".join((date, ident))+".txt"
+file_path = os.path.join(base_dir, file_name)
+with open(file_path, "x") as opened_file:
+    json.dump(data, opened_file, indent="\t")

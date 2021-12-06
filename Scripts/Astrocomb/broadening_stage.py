@@ -762,10 +762,10 @@ def track_2nd_stage(state_db):
             else:
                 current_position = 0
                 
-        if current_position > rot_stg_limits['max']:
-            # Move to baseline minimum power (small, but measurable)
-            settings_list = [{'position':rot_stg_limits['max']}]
-            sm.update_device_settings(device_db, settings_list, write_log=True)
+#        if current_position > rot_stg_limits['max']:
+#            # Move to baseline minimum power (small, but measurable)
+#            settings_list = [{'position':rot_stg_limits['max']}]
+#            sm.update_device_settings(device_db, settings_list, write_log=True)
 
         #--- Enable input tracking ----------------------------------------
         device_db = 'broadening_stage/device_nanotrack_in'

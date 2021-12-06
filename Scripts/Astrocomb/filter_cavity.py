@@ -360,6 +360,7 @@ from scipy.optimize import minimize
 v_range_threshold = 0.1 #(limit-threshold)/(upper - lower limits)
 log_setpoint_error_interval = 60*10 #s
 lock_hold_interval = 1.0 #s
+max_ref_sig = 0.4 # V
 timer['find_lock:locked'] = time.time()
 timer['find_lock:log_setpoint_error'] = time.time()
 def find_lock(state_db, last_good_position=None):
@@ -419,7 +420,7 @@ def find_lock(state_db, last_good_position=None):
     # Check lock interval ---------------------------------
         if (time.time() - timer['find_lock:locked']) > lock_hold_interval:
             if sm.mon['filter_cavity/DAQ_error_signal']['new']:
-                if (sm.mon['filter_cavity/DAQ_error_signal']['data'][-1] > 0.5):
+                if (sm.mon['filter_cavity/DAQ_error_signal']['data'][-1] > max_ref_sig):
                     locked = False
                     log_str = ' filter_cavity lock failed, reflection signal too high'
                     log.log_info(mod_name, func_name, log_str)
@@ -598,7 +599,7 @@ def keep_lock(state_db):
             log.log_error(mod_name, func_name, log_str)
 # Check DAQ error signal --------------------------------------------
     if new_daq_err_signal_condition:
-        if (current_err_sig > 1.): # 0.55 background
+        if (current_err_sig > max_ref_sig): # 0.55 background
         # It is not locked
             locked = False
             log_str = " filter_cavity lock lost, reflection signal too high"

@@ -150,7 +150,7 @@ class OSA(vo.VISA):
     def reset(self):
         """Stops current machine operation and returns OSA to default values"""
         self.write('*RST')
-        self.__set_command_format()
+        self._set_command_format()
         self.level_unit(set_unit="dBm/nm")
 
 #Query Methods
@@ -202,7 +202,7 @@ class OSA(vo.VISA):
 
     @log.log_this()
     @_auto_connect
-    def spectrum(self, active_trace=None):
+    def spectrum(self, active_trace=None, get_parameters=False):
         """Get OSA's spectrum"""
         if (active_trace!=None):
             self.active_trace(set_trace=active_trace)
@@ -210,7 +210,13 @@ class OSA(vo.VISA):
         x_trace = self.query_list(':TRAC:DATA:X? {:}'.format(self.act_trace))
         x_trace = (np.array(x_trace)*1e9).tolist()
         data = {'x':x_trace ,'y':y_trace}
-        return data
+        # Get Parameters
+        if (get_parameters == True):
+            params = self.sweep_parameters()
+            return {'data':data, 'params':params}
+        else:
+            # Return        
+            return data
 
     @_auto_connect
     def get_new_single(self, active_trace=None, get_parameters=True):
@@ -408,6 +414,6 @@ class OSA(vo.VISA):
                 self.trace_type(set_type={'mode':'FIX'}, active_trace=trace)
     
     @log.log_this()
-    def __set_command_format(self):
+    def _set_command_format(self):
         """Sets the OSA's formatting to AQ6370 style, should always be 1"""
         self.write('CFORM1')

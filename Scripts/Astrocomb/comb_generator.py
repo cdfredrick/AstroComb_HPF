@@ -533,7 +533,8 @@ STATES = {
                                      'doc':"lambda t: (t<0.35) and (t>0.10)"}], # Below max temperature threshold 35 C
                                         },
                         'routines':{
-                                'monitor':monitor_pdu, 'search':turn_outlet_on,
+                                'monitor':sm.nothing,#monitor_pdu,
+                                'search':turn_outlet_on,
                                 'maintain':keep_outlet_on, 'operate':sm.nothing}},
                 'safe':{
                         'settings':{},

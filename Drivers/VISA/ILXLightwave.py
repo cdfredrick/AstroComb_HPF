@@ -1,49 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-Created on Mon Jun 26 10:31:06 2017
-
-@author: Wesley Brand
-
 Module: ilx_driver
 #Laser diode control
-
-Public Classes:
-    ILX(vo.VISA)
-    LDC(ILX)
-
-
-ILX's Public Methods:
-
-    las_chan_switch()
-    tec_chan_switch()
-
-
-LDC's Public Methods:
-
-Enable:
-    enable_las(las_on)
-    enable_tec(tec_on)
-
-Query laser:
-    TF = query_las_on()
-    str = query_las_mode()
-    float = query_las_current()
-    float = query_las_current_limit()
-    float = query_las_current_set_point()
-
-Set laser:
-    set_las_current(current)
-    set_las_current_limit(current)
-    set_las_mode(mode_num)
-
-Query TEC:
-    TF = query_tec_on()
-    str = query_tec_mode()
-    float = query_tec_temp()
-
-Set TEC:
-    set_tec_mode(mode_num)
-    set_tec_temp(temp)
 
 """
 #pylint: disable=W0231
@@ -57,11 +15,6 @@ from Drivers.Logging import ACExceptions
 from Drivers.Logging import EventLog as log
 
 from functools import wraps
-
-
-# %% Constants
-_MARKER = object()  #To check errors in LDControl class inheritance
-ILX_ADDRESS = '' #ADD ME!!!
 
 
 # %% Private Functions

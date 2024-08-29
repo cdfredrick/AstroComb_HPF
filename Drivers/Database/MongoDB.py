@@ -11,6 +11,12 @@ import datetime
 import logging
 import copy
 
+# %% Codec Options
+
+from bson.codec_options import CodecOptions
+tz_aware = CodecOptions(tz_aware=True)
+
+
 # %% Sync Mongo
 
 def sync_to_local_buffer(local_client, remote_client, database, sync_stop_time=None):
@@ -142,7 +148,7 @@ class MongoClient:
 class DatabaseRead():
     def __init__(self, mongo_client, database):
         '''
-        The "read only" handler for the database. This subclass is used to form
+        The "read only" handler for the database. This class is used to form
             a read only connection to a database, without needing to specify
             the database specific settings. The methods in this subclass can not
             change values in the database.
@@ -177,7 +183,8 @@ class DatabaseRead():
     # Get the requested database
         self.database_name = database
         self.collection_name = collection
-        self.database = self.client[self.database_name]
+        # self.database = self.client[self.database_name]
+        self.database = pymongo.database.Database(self.client, self.database_name, codec_options=tz_aware)
     # Get the record
         self.record = self.database[self.collection_name+'record']
     # Get the buffer
@@ -342,7 +349,8 @@ class LogRead():
     # Get the requested database
         self.database_name = database
         self.collection_name = collection
-        self.database = self.client[self.database_name]
+        # self.database = self.client[self.database_name]
+        self.database = pymongo.database.Database(self.client, self.database_name, codec_options=tz_aware)
     # Get the log
         self.log = self.database[self.collection_name+'log']
     # Get the log buffer

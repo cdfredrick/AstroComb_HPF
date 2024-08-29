@@ -18,8 +18,8 @@ import datetime
 # %% Start/Stop Time
 #--- Start
 # start_time = None
-start_time = datetime.datetime(2018, 5, 1)
-# start_time = datetime.datetime.utcnow() - datetime.timedelta(weeks=4)
+# start_time = datetime.datetime(2018, 5, 1)
+start_time = datetime.datetime.utcnow() - datetime.timedelta(weeks=4*4)
 # start_time = datetime.datetime.utcnow() - datetime.timedelta(days=7)
 # start_time = datetime.datetime.utcnow() - datetime.timedelta(hours=1)
 
@@ -118,7 +118,7 @@ f0_y = data[0][1].astype(float)
 f0_std = hf.mad_std(f0_y)
 print("{:.2g} fraction outside {:} std".format(np.count_nonzero(np.abs(f0_y) > f0_std*std_cutoff)/f0_y.size, std_cutoff))
 
-x_bins = hf.ts_to_dt(hf.bins(hf.dt_to_ts(data[0][0]), n=500))
+x_bins = hf.utc_ts_to_dt(hf.bins(hf.utc_dt_to_ts(data[0][0]), n=500))
 y_bins = np.linspace(-std_cutoff*f0_std, std_cutoff*f0_std, 100)
 ax0.hist2d(data[0][0], f0_y, bins=[x_bins, y_bins], cmap=plt.cm.Blues_r, norm=plt.matplotlib.colors.LogNorm())
 
@@ -171,7 +171,7 @@ ax2.grid(True, alpha=0.25)
 ax3.grid(True, alpha=0.25)
 ax0.set_xlim((data[0][0].min(), data[0][0].max()))
 fig_0.tight_layout()
-
+plt.draw()
 
 # %% Aux. Comb - fR PLL =======================================================
 data = [[], [], []]
@@ -238,7 +238,7 @@ fR_y = fR_err
 fR_std = hf.mad_std(fR_y)
 print("{:.2g} fraction outside {:} std".format(np.count_nonzero(np.abs(fR_y) > fR_std*std_cutoff)/fR_y.size, std_cutoff))
 
-x_bins = hf.ts_to_dt(hf.bins(hf.dt_to_ts(fR_dt), n=500))
+x_bins = hf.utc_ts_to_dt(hf.bins(hf.utc_dt_to_ts(fR_dt), n=500))
 y_bins = np.linspace(-std_cutoff*fR_std, std_cutoff*fR_std, 100)
 ax0.hist2d(fR_dt, fR_y, bins=[x_bins, y_bins], cmap=plt.cm.Blues_r, norm=plt.matplotlib.colors.LogNorm())
 
@@ -291,6 +291,7 @@ ax2.grid(True, alpha=0.25)
 ax3.grid(True, alpha=0.25)
 ax0.set_xlim((data[0][0].min(), data[0][0].max()))
 fig_0.tight_layout()
+plt.draw()
 
 
 # %% Aux. Comb - Slow fR Feedback =============================================
@@ -360,6 +361,7 @@ ax2.grid(True, alpha=0.25)
 
 fig_0.autofmt_xdate()
 fig_0.tight_layout()
+plt.draw()
 
 
 # %% Aux. Comb - fR Lock Search ===============================================

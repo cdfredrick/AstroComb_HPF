@@ -20,13 +20,13 @@ import datetime
 
 # %% Start/Stop Time
 #--- Start
-#start_time = None
-# start_time = datetime.datetime(2018, 5, 1)
+# start_time = None
+start_time = datetime.datetime(2018, 5, 1)
 # start_time = datetime.datetime(2019, 9, 1)
 # start_time = datetime.datetime(2020, 5, 1)
 #start_time = datetime.datetime.utcnow() - datetime.timedelta(days=14)
-start_time = datetime.datetime.utcnow() - datetime.timedelta(weeks=4*3)
-# start_time = datetime.datetime.utcnow() - datetime.timedelta(days=4)
+# start_time = datetime.datetime.utcnow() - datetime.timedelta(weeks=2)
+# start_time = datetime.datetime.utcnow() - datetime.timedelta(days=1)
 
 #--- Stop
 stop_time = None
@@ -95,9 +95,9 @@ try:
     cursor = db.read_record(start=start_time, stop=stop_time)
     for doc in cursor:
         if doc['deg'] > 0:
-            if doc['_timestamp'] < datetime.datetime(2020, 1, 10, 18):
+            if doc['_timestamp'] < datetime.datetime(2020, 1, 10, 18, tzinfo=datetime.timezone.utc):
                 pwr = np.sin(2*(58 - doc['deg']) * np.pi/180)**2
-            elif doc['_timestamp'] < datetime.datetime(2020, 10, 27, 20):
+            elif doc['_timestamp'] < datetime.datetime(2020, 10, 27, 20, tzinfo=datetime.timezone.utc):
                 continue
             else:
                 pwr = np.cos(2*(60 - doc['deg']) * np.pi/180)**2
@@ -131,7 +131,13 @@ ax1.grid(True, alpha=0.25)
 fig.autofmt_xdate()
 ax0.autoscale(axis='x', tight=True)
 plt.tight_layout()
+plt.draw()
 
+# # %%% Save
+
+# file_name = "Brd-Stg_Rotation-Stage-Position"
+# ts = np.fromiter((dt.timestamp() for dt in data[0]), float, count=data[0].size)
+# np.savez_compressed(file_name, **{"time":ts, "deg":data[1].astype(float), "pwr":data[2].astype(float)})
 
 # %% Brd.Stg. - NanoTrack In ==================================================
 data = [[],[],[],[],[]]
@@ -235,6 +241,7 @@ ax1.grid(True, alpha=0.25)
 ax2.grid(True, alpha=0.25)
 ax0.autoscale(axis='x', tight=True)
 fig_0.tight_layout()
+plt.draw()
 
 
 # %% Brd.Stg. - NanoTrack Out =================================================
@@ -338,6 +345,7 @@ ax1.grid(True, alpha=0.25)
 ax2.grid(True, alpha=0.25)
 ax0.autoscale(axis='x', tight=True)
 fig_0.tight_layout()
+plt.draw()
 
 
 # %% Brd.Stg. - 2nd Stage Input Optimizer =====================================
@@ -355,8 +363,8 @@ fig_0.tight_layout()
 #             doc['model']])
 #finally:
 #    mongo_client.close()
-#data = np.array(data).T
-#n = len(data[0])
+#n = len(data)
+#data = list(zip(*data))
 #
 ## Plot
 #fig = plt.figure("Brd.Stg. - 2nd Stage Input Optimizer")
@@ -371,9 +379,9 @@ fig_0.tight_layout()
 #ax2.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
 #
 #for idx in range(n):
-#    ax0.plot(data[1, idx], data[2, idx], 'o')
-#    ax1.plot(data[0, idx], data[3, idx]['opt x'][0], 'o')
-#    ax2.plot(data[0, idx], 0, 'o')
+#    ax0.plot(data[1][idx], data[2][idx], 'o')
+#    ax1.plot(data[0][idx], data[3][idx]['opt x'][0], 'o')
+#    ax2.plot(data[0][idx], 0, 'o')
 #
 #ax0.set_title("2nd Stage Input Optimization")
 #ax0.set_ylabel("TIA Current")
@@ -410,8 +418,8 @@ fig_0.tight_layout()
 #             doc['model']])
 #finally:
 #    mongo_client.close()
-#data = np.array(data).T
-#n = len(data[0])
+#n = len(data)
+#data = list(zip(*data))
 #
 ## Plot
 #fig = plt.figure("Brd.Stg. - 2nd Stage Output Optimizer")
@@ -426,9 +434,9 @@ fig_0.tight_layout()
 #ax2.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
 #
 #for idx in range(n):
-#    ax0.plot(data[1, idx], data[2, idx], 'o')
-#    ax1.plot(data[0, idx], data[3, idx]['opt x'][0], 'o')
-#    ax2.plot(data[0, idx], 0, 'o')
+#    ax0.plot(data[1][idx], data[2][idx], 'o')
+#    ax1.plot(data[0][idx], data[3][idx]['opt x'][0], 'o')
+#    ax2.plot(data[0][idx], 0, 'o')
 #
 #ax0.set_title("2nd Stage Output Optimization")
 #ax0.set_ylabel("TIA Current")
@@ -464,8 +472,8 @@ try:
              doc['model']])
 finally:
     mongo_client.close()
-data = np.array(data).T
-n = len(data[0])
+n = len(data)
+data = list(zip(*data))
 
 # Plot
 fig = plt.figure("Spc-Shp 2nd-Stage-Input-Optimizer")
@@ -480,9 +488,9 @@ ax1.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
 ax2.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
 
 for idx in range(n):
-    ax0.plot(data[1, idx], data[2, idx], 'o')
-    ax1.plot(data[0, idx], data[3, idx]['opt x'][0], 'o')
-    ax2.plot(data[0, idx], 0, 'o')
+    ax0.plot(data[1][idx], data[2][idx], 'o')
+    ax1.plot(data[0][idx], data[3][idx]['opt x'][0], 'o')
+    ax2.plot(data[0][idx], 0, 'o')
 
 ax0.set_title("2nd Stage Input Optimization")
 ax0.set_ylabel("Max DW Power")
@@ -506,6 +514,15 @@ ax1.grid(True, alpha=0.25)
 
 plt.tight_layout()
 
+# # %%% Save
+
+# file_name = "Spc-Shp_2nd-Stage-Input-Optimizer"
+# ts = np.fromiter((dt.timestamp() for dt in data[0]), float, count=data[0].size)
+# opt_x = np.fromiter((dt['opt x'][0] for dt in data[3]), float, count=data[3].size)
+# np.savez_compressed(file_name, **{
+#     'time':ts,
+#     'V':opt_x})
+
 
 # %% Spc.Shp. - 2nd Stage Output Optimizer ====================================
 data = []
@@ -522,8 +539,8 @@ try:
              doc['model']])
 finally:
     mongo_client.close()
-data = np.array(data).T
-n = len(data[0])
+n = len(data)
+data = list(zip(*data))
 
 # Plot
 fig = plt.figure("Spc-Shp 2nd-Stage-Output-Optimizer")
@@ -538,9 +555,9 @@ ax1.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
 ax2.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
 
 for idx in range(n):
-    ax0.plot(data[1, idx], data[2, idx], 'o')
-    ax1.plot(data[0, idx], data[3, idx]['opt x'][0], 'o')
-    ax2.plot(data[0, idx], 0, 'o')
+    ax0.plot(data[1][idx], data[2][idx], 'o')
+    ax1.plot(data[0][idx], data[3][idx]['opt x'][0], 'o')
+    ax2.plot(data[0][idx], 0, 'o')
 
 ax0.set_title("2nd Stage Output Optimization")
 ax0.set_ylabel("Max DW Power")
@@ -564,6 +581,14 @@ ax1.grid(True, alpha=0.25)
 
 plt.tight_layout()
 
+# # %%% Save
+
+# file_name = "Spc-Shp_2nd-Stage-Output-Optimizer"
+# ts = np.fromiter((dt.timestamp() for dt in data[0]), float, count=data[0].size)
+# opt_x = np.fromiter((dt['opt x'][0] for dt in data[3]), float, count=data[3].size)
+# np.savez_compressed(file_name, **{
+#     'time':ts,
+#     'V':opt_x})
 
 # %% Spc.Shp. - DW Setpoint Optimizer =========================================
 data = []
@@ -597,8 +622,9 @@ try:
              doc.get('DW_model', None)])
 finally:
     mongo_client.close()
-data = np.array(data).T
-n = len(data[0])
+n = len(data)
+data = list(zip(*data))
+
 
 # Plot
 fig_0 = plt.figure("Spc-Shp DW-Setpoint-Optimizer")
@@ -622,20 +648,20 @@ ax4.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
 ax5.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
 
 for idx in range(n):
-    ax0.plot(data[1, idx], data[2, idx], 'o')
-#    ax2.plot(data[0, idx], 0, 'o')
-    ax1.plot(data[1, idx], data[3, idx], 'o')
-    ax5.plot(data[0, idx], 0, 'o')
-    if data[4, idx] is not None:
-        ax3.plot(data[0, idx], data[4, idx]['opt x'][0], 'o')
+    ax0.plot(data[1][idx], data[2][idx], 'o')
+#    ax2.plot(data[0][idx], 0, 'o')
+    ax1.plot(data[1][idx], data[3][idx], 'o')
+    ax5.plot(data[0][idx], 0, 'o')
+    if data[4][idx] is not None:
+        ax3.plot(data[0][idx], data[4][idx]['opt x'][0], 'o')
     else:
-        ax3.plot(data[0, idx], np.nan, 'o')
-    if data[5, idx] is not None:
-        y = data[5, idx]['diagnostics']['optimum y']
-        y_err = data[5, idx]['diagnostics']['optimum y std']
-        ax4.errorbar(data[0, idx], y, yerr=y_err*2, fmt='.')
+        ax3.plot(data[0][idx], np.nan, 'o')
+    if data[5][idx] is not None:
+        y = data[5][idx]['diagnostics']['optimum y']
+        y_err = data[5][idx]['diagnostics']['optimum y std']
+        ax4.errorbar(data[0][idx], y, yerr=y_err*2, fmt='.')
     else:
-        ax4.errorbar(data[0, idx], np.nan, yerr=None, fmt='.')
+        ax4.errorbar(data[0][idx], np.nan, yerr=None, fmt='.')
 
 ax0.set_title("Bulk Optimization")
 ax0.set_ylabel("dBm")
@@ -693,8 +719,9 @@ try:
              doc.get('model', None)])
 finally:
     mongo_client.close()
-data = np.array(data).T
-n = len(data[0])
+n = len(data)
+data = list(zip(*data))
+
 
 # Plot
 fig_0 = plt.figure("Spc-Shp IM-Bias-Optimizer")
@@ -709,12 +736,12 @@ ax1.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
 ax2.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
 
 for idx in range(n):
-    ax0.plot(data[1, idx], data[2, idx], 'o')
-    ax2.plot(data[0, idx], 0, 'o')
-    if data[3, idx] is not None:
-        ax1.plot(data[0, idx], data[3, idx]['opt x'][0], 'o')
+    ax0.plot(data[1][idx], data[2][idx], 'o')
+    ax2.plot(data[0][idx], 0, 'o')
+    if data[3][idx] is not None:
+        ax1.plot(data[0][idx], data[3][idx]['opt x'][0], 'o')
     else:
-        ax1.plot(data[0, idx], np.nan, 'o')
+        ax1.plot(data[0][idx], np.nan, 'o')
 
 ax0.set_title("IM Bias Optimization")
 ax0.set_ylabel("dBm")
@@ -760,8 +787,8 @@ try:
              ])
 finally:
     mongo_client.close()
-data = np.array(data).T
-n = len(data[0])
+n = len(data)
+data = list(zip(*data))
 
 #--- Total Phase
 fig_0 = plt.figure("Spc-Shp Optical-Phase-Optimizer")
@@ -783,23 +810,24 @@ ax0.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
 ax2.set_prop_cycle(color=colormap(np.linspace(0, 0.99, n)))
 
 coefs = []
+poly_coefs = []
 for idx in range(n):
-    if data[5, idx] is None:
-        coefs.append([0,0] + data[3, idx]['opt x'])
+    if data[5][idx] is None:
+        coefs.append([0,0] + data[3][idx]['opt x'])
     else:
-        coefs.append([0,0] + data[4, idx])
-    freqs = np.array(data[1, idx]['freq'])
-    if data[0, idx] > datetime.datetime(2020, 6, 4, 17, 30):
-        poly_fit = np.polynomial.Polynomial(coefs[idx], domain=data[2, idx])
+        coefs.append([0,0] + data[4][idx])
+    freqs = np.array(data[1][idx]['freq'])
+    if data[0][idx] > datetime.datetime(2020, 6, 4, 17, 30, tzinfo=datetime.timezone.utc):
+        poly_fit = np.polynomial.Polynomial(coefs[idx], domain=data[2][idx])
     else:
-        poly_fit = np.polynomial.Legendre(coefs[idx], domain=data[2, idx])
-        # Switch to Polynomial
-        poly_fit2 = np.polynomial.Polynomial.fit(freqs, poly_fit(freqs), len(coefs[idx]), domain=data[2, idx])
-        poly_fit = np.polynomial.Polynomial([0,0] + poly_fit2.coef.tolist()[2:], domain=data[2, idx])
-        coefs[idx] = poly_fit.coef.tolist()
+        poly_fit = np.polynomial.Legendre(coefs[idx], domain=data[2][idx])
+    # Switch to Polynomial
+    poly_fit2 = np.polynomial.Polynomial.fit(freqs, poly_fit(freqs), 8, domain=data[2][idx])
+    poly_fit = np.polynomial.Polynomial([0,0] + poly_fit2.coef.tolist()[2:], domain=data[2][idx])
+    poly_coefs.append(poly_fit.coef.tolist())
     ax0.plot(hf.nm_to_THz(freqs), poly_fit(freqs))
     # ax0.plot(hf.nm_to_THz(freqs), poly_fit.deriv(2)(freqs))
-    ax2.plot(data[0, idx], 0, 'o')
+    ax2.plot(data[0][idx], 0, 'o')
 
     # Change coefficients to Taylor Series (phi[w] == phi[w0] + dphi/dw w + 0.5 d2phi/dw2 w**2 + ...)
     coefs[idx] = [1/(2*np.pi)**m * poly_fit.deriv(m)(hf.constants.c/1064e-9 * 1e-12) for m in range(8)]
@@ -834,7 +862,17 @@ ax1.grid(True, alpha=0.25)
 
 fig_0.tight_layout()
 
+# # %%% Save
+
+# file_name = "Spc-Shp_Optical-Phase-Optimizer"
+# ts = np.fromiter((dt.timestamp() for dt in data[0]), float, count=data[0].size)
+# np.savez_compressed(file_name, **{
+#     'time':ts,
+#     'coefs':np.array(poly_coefs),
+#     'domain':np.array(data[2].tolist())})
+
 #%%
+colormap = plt.cm.nipy_spectral
 #--- Individual Orders
 fig_1 = plt.figure("Spc.Shp. - Optical Phase Optimizer - Ind")
 fig_1.clf()
@@ -881,7 +919,7 @@ for idx, order in enumerate([data[5][-1]]):
             ax3_7.plot(order['7']['coefs'], order['7']['dBm'], 'o')
         else:
             ax3_7.plot([],[], '.')
-        ax4.plot(data[0, idx], 0, 'o')
+        ax4.plot(data[0][idx], 0, 'o')
 
 ax3_2.grid(True, alpha=.25)
 ax3_3.grid(True, alpha=.25)

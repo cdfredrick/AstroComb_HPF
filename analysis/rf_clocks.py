@@ -19,12 +19,13 @@ import datetime
 # %% Start/Stop Time
 #--- Start
 #start_time = None
-start_time = datetime.datetime(2018, 5, 1)
-#start_time = datetime.datetime.utcnow() - datetime.timedelta(days=3)
+# start_time = datetime.datetime(2018, 5, 1)
+# start_time = datetime.datetime(2023, 1, 1)
+start_time = datetime.datetime.utcnow() - datetime.timedelta(weeks=4)
 
 #--- Stop
 stop_time = None
-#stop_time = datetime.datetime(2019, 5, 1)
+# stop_time = datetime.datetime(2022, 7, 2)
 #stop_time = datetime.datetime.utcnow()
 
 
@@ -93,13 +94,16 @@ Port    Returned voltage
 
 
 # %% PLO - Phase Locks ========================================================
-data = [[],[]]
+data = [[],[],[]]
+rb_status = []
 try:
     mongo_client = MongoDB.MongoClient()
     db_100MHz = MongoDB.DatabaseRead(mongo_client,
         'rf_oscillators/100MHz_phase_lock')
     db_1GHz = MongoDB.DatabaseRead(mongo_client,
         'rf_oscillators/1GHz_phase_lock')
+    db_Rb = MongoDB.DatabaseRead(mongo_client,
+        'rf_oscillators/Rb_status')
     cursor = db_100MHz.read_record(start=start_time, stop=stop_time)
     for doc in cursor:
         data[0].append(
@@ -113,6 +117,17 @@ try:
              doc['bit'],
              doc['flips'],
              ])
+    cursor = db_Rb.read_record(start=start_time, stop=stop_time)
+    for doc in cursor:
+        # Lots of parameters in here, but only writes upon change in status
+        data[2].append(
+            [doc['_timestamp'],
+             not(doc['2']['0']), # Locked to Rb
+             doc['5']['2'], # Locked to 1PPS
+             ])
+        rb_status.append(doc)
+    if len(data[2]) == 0:
+        data[2].append([np.nan, np.nan, np.nan])
 finally:
     mongo_client.close()
 
@@ -124,15 +139,18 @@ for idx in range(len(data)):
     n.append(len(data[idx][0]))
 
 # Plot
-fig_0 = plt.figure("PLO - Phase Locks")
+fig_0 = plt.figure("PLO Phase-Locks")
 plt.clf()
-ax0 = plt.subplot2grid((2,1),(0,0))
-ax1 = plt.subplot2grid((2,1),(1,0), sharex=ax0)
+ax0 = plt.subplot2grid((3,1),(0,0))
+ax1 = plt.subplot2grid((3,1),(1,0), sharex=ax0)
+ax2 = plt.subplot2grid((3,1),(2,0), sharex=ax0)
 
-ax0.plot(data[0][0], data[0][1], '.-', markersize=1, label='lock', drawstyle='steps-post')
-ax0.plot(data[0][0], data[0][2], '.', markersize=1, label='flips')
-ax1.plot(data[1][0], data[1][1], '.-', markersize=1, label='lock', drawstyle='steps-post')
-ax1.plot(data[1][0], data[1][2], '.', markersize=1, label='flips')
+ax0.plot(data[0][0], data[0][1], '.-', markersize=2, label='lock', drawstyle='steps-post')
+ax0.plot(data[0][0], data[0][2], '.', label='flips')
+ax1.plot(data[1][0], data[1][1], '.-', markersize=2, label='lock', drawstyle='steps-post')
+ax1.plot(data[1][0], data[1][2], '.', label='flips')
+ax2.plot(data[2][0], data[2][1], '.-', markersize=2, linewidth=4, label='Rb lock', drawstyle='steps-post')
+ax2.plot(data[2][0], data[2][2], '.-', markersize=2, label='1PPS lock', drawstyle='steps-post')
 
 ax0.set_title("100MHz PLO")
 ax0.legend()
@@ -142,6 +160,9 @@ ax0.autoscale(axis='x', tight=True)
 ax1.set_title("1GHz PLO")
 ax1.legend()
 ax1.set_yticks([-1, 0, 1])
+
+ax2.set_title("Rb Clock")
+ax2.legend()
 
 fig_0.autofmt_xdate()
 fig_0.tight_layout()
@@ -186,18 +207,73 @@ for idx in range(len(data)):
     n.append(len(data[idx][0]))
 
 # Plot
-fig_0 = plt.figure("Rb Clock - Rb Frequency Control")
+fig_0 = plt.figure("Rb-Clock Rb-Frequency-Control")
 fig_0.set_size_inches([6.4 , 4.78*1.25], forward=True)
 plt.clf()
-ax0 = plt.subplot2grid((3,1),(0,0))
-ax1 = plt.subplot2grid((3,1),(1,0), sharex=ax0)
-ax2 = plt.subplot2grid((3,1),(2,0), sharex=ax0)
 
-ax0.plot(data[2][0], data[2][1]*1e-9, '.', markersize=1)
+gs0 = plt.matplotlib.gridspec.GridSpec(3, 1)
+gs00 = plt.matplotlib.gridspec.GridSpecFromSubplotSpec(3, 10, subplot_spec=gs0[0,0], wspace=0, hspace=0)
+gs10 = plt.matplotlib.gridspec.GridSpecFromSubplotSpec(1, 10, subplot_spec=gs0[1,0], wspace=0, hspace=0)
+gs20 = plt.matplotlib.gridspec.GridSpecFromSubplotSpec(1, 10, subplot_spec=gs0[2,0], wspace=0, hspace=0)
+
+ax0 = plt.subplot(gs00[1:2+1,0:-1])
+ax01 = plt.subplot(gs00[1:2+1,-1], sharey=ax0)
+ax02 = plt.subplot(gs00[0,0:-1], sharex=ax0)
+
+ax1 = plt.subplot(gs10[:,0:-1], sharex=ax0)
+ax2 = plt.subplot(gs20[:,0:-1], sharex=ax0)
+
+# GPS Timestamp
+std_cutoff = 10
+gps_y = data[2][1]*1e-9
+gps_std = hf.mad_std(gps_y)
+print("{:.2g} fraction outside {:} std".format(np.count_nonzero(np.abs(gps_y) > gps_std*std_cutoff)/gps_y.size, std_cutoff))
+
+x_bins = hf.utc_ts_to_dt(hf.bins(hf.utc_dt_to_ts(data[2][0]), n=500))
+y_bins = np.linspace(-std_cutoff*gps_std, std_cutoff*gps_std, 100)
+ax0.hist2d(data[2][0], gps_y, bins=[x_bins, y_bins], cmap=plt.cm.Blues_r, norm=plt.matplotlib.colors.LogNorm())
+
+ax02.set_ylim(std_cutoff*gps_std)
+ax02.semilogy(data[2][0], np.abs(gps_y), alpha=0)
+y_bins = np.unique([
+    np.linspace(0, std_cutoff*gps_std, 50),
+    np.geomspace(std_cutoff*gps_std, ax02.get_ylim()[1], 50)])
+ax02.hist2d(data[2][0], np.abs(gps_y), bins=[x_bins, y_bins], cmap=plt.cm.Blues_r, norm=plt.matplotlib.colors.LogNorm())
+
+ax0.yaxis.set_major_formatter(ticker.EngFormatter('Hz'))
+ax0.set_ylim([-std_cutoff*gps_std, std_cutoff*gps_std])
+
+ax02.set_title(r"GPS Time Tag")
+ax02.set_yscale("log")
+ax02.yaxis.set_major_locator(ticker.LogLocator())
+ax02.yaxis.get_major_locator().set_params(numticks=3)
+ax02.yaxis.set_major_formatter(ticker.EngFormatter('s'))
+ax02.yaxis.set_minor_formatter(ticker.NullFormatter())
+ax02.autoscale(axis='x', tight=True)
+
+ax01.hist(gps_y, bins=100, density=True, orientation="horizontal", range=(-std_cutoff*gps_std, std_cutoff*gps_std))
+
+for label in ax0.xaxis.get_ticklabels():
+    label.set_visible(False)
+
+for label in ax01.xaxis.get_ticklabels():
+    label.set_visible(False)
+ax01.yaxis.tick_right()
+for label in ax01.yaxis.get_ticklabels():
+    label.set_visible(False)
+
+ax02.xaxis.tick_top()
+for label in ax02.xaxis.get_ticklabels():
+    label.set_visible(False)
+
+
 ax1.plot(data[0][0], 10e6*data[0][1]*1e-12, '.', markersize=1)
 ax2.plot(data[1][0], data[1][1], '.', markersize=1)
 
+ax1.tick_params(labelbottom=False)
+
 ax0.set_title("GPS Time Tag")
+# ax0.set_yscale("symlog", linthresh=hf.mad_std(data[2][1]*1e-9)*5, linscale=10)
 ax0.yaxis.set_major_formatter(ticker.EngFormatter('s'))
 ax0.autoscale(axis='x', tight=True)
 ax0.grid(True, alpha=.25)
@@ -205,6 +281,9 @@ ax0.grid(True, alpha=.25)
 ax1.set_title("Frequency Offset")
 ax1.yaxis.set_major_formatter(ticker.EngFormatter('Hz'))
 ax1.grid(True, alpha=.25)
+
+frq_ost = 10e6*data[0][1]*1e-12
+ax1_s = ax1.secondary_yaxis("right", functions=(lambda f: (f - frq_ost.mean())/10e6, lambda ost: ost*10e6 + frq_ost.mean()))
 
 ax2.set_title("Magnetic Control")
 ax2.set_ylabel('DAC (arb. units)')
@@ -246,7 +325,7 @@ for idx in range(len(data)):
     n.append(len(data[idx][0]))
 
 # Plot
-fig_0 = plt.figure("Rb Clock - OCXO to Rb FLL")
+fig_0 = plt.figure("Rb-Clock OCXO-to-Rb-FLL")
 fig_0.set_size_inches([6.4 , 4.78*1.25], forward=True)
 plt.clf()
 ax0 = plt.subplot2grid((3,1),(0,0))
@@ -270,6 +349,7 @@ ax1.grid(True, alpha=.25)
 
 ax2.set_title(r"RMS Amplitude at 2$\omega$")
 ax2.set_ylabel('(arb. units)')
+# ax2.set_ylim(bottom=0)
 ax2.grid(True, alpha=.25)
 
 fig_0.autofmt_xdate()
@@ -358,7 +438,7 @@ for idx in range(len(data_dac)):
     n_dac.append(len(data_dac[idx][0]))
 
 # Plot Temperature Control
-fig_0 = plt.figure("Rb Clock - Temperature Control")
+fig_0 = plt.figure("Rb-Clock Temperature-Control")
 plt.clf()
 ax0 = plt.subplot2grid((2,1),(0,0))
 ax1 = plt.subplot2grid((2,1),(1,0), sharex=ax0)
@@ -398,7 +478,7 @@ fig_0.autofmt_xdate()
 fig_0.tight_layout()
 
 # Plot Frequency Control
-fig_0 = plt.figure("Rb Clock - Frequency Control")
+fig_0 = plt.figure("Rb-Clock Frequency-Control")
 plt.clf()
 ax0 = plt.subplot2grid((2,1),(0,0))
 ax1 = plt.subplot2grid((2,1),(1,0), sharex=ax0)
@@ -426,7 +506,7 @@ fig_0.autofmt_xdate()
 fig_0.tight_layout()
 
 # Plot Lamp Control
-fig_0 = plt.figure("Rb Clock - Lamp Control")
+fig_0 = plt.figure("Rb-Clock Lamp-Control")
 plt.clf()
 ax0 = plt.subplot2grid((2,1),(0,0))
 ax1 = plt.subplot2grid((2,1),(1,0), sharex=ax0)
@@ -456,7 +536,7 @@ fig_0.autofmt_xdate()
 fig_0.tight_layout()
 
 # Plot Power
-fig_0 = plt.figure("Rb Clock - Power")
+fig_0 = plt.figure("Rb-Clock Power")
 plt.clf()
 ax0 = plt.subplot2grid((2,1),(0,0))
 ax1 = plt.subplot2grid((2,1),(1,0), sharex=ax0)

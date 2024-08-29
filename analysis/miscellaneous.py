@@ -22,8 +22,8 @@ import datetime
 #start_time = None
 # start_time = datetime.datetime(2018, 5, 1)
 # start_time = datetime.datetime(2020, 5, 1)
-# start_time = datetime.datetime.utcnow() - datetime.timedelta(days=21)
-start_time = datetime.datetime.utcnow() - datetime.timedelta(weeks=2)
+# start_time = datetime.datetime.utcnow() - datetime.timedelta(days=2)
+start_time = datetime.datetime.utcnow() - datetime.timedelta(weeks=4)
 
 #--- Stop
 stop_time = None
@@ -117,3 +117,4 @@ ax1.grid(True, alpha=.25)
 ax2.grid(True, alpha=.25)
 ax0.autoscale(axis='x', tight=True)
 plt.tight_layout()
+plt.draw()

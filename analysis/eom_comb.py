@@ -18,8 +18,8 @@ import datetime
 # %% Start/Stop Time
 #--- Start
 start_time = None
-#start_time = datetime.datetime(2018, 5, 1)
-start_time = datetime.datetime.utcnow() - datetime.timedelta(days=14)
+start_time = datetime.datetime(2018, 5, 1)
+# start_time = datetime.datetime.utcnow() - datetime.timedelta(days=14)
 
 #--- Stop
 stop_time = None
@@ -98,6 +98,11 @@ ax0.grid(True, alpha=0.25)
 fig.autofmt_xdate()
 plt.tight_layout()
 
+# # %%% Save
+
+# file_name = "EOM-Comb_IM-Bias"
+# ts = np.fromiter((dt.timestamp() for dt in data[0]), float, count=data[0].size)
+# np.savez_compressed(file_name, **{"time":ts, "V":data[1].astype(float)})
 
 # %% EOM Comb - fCW PLL =======================================================
 data = [[], [], []]
@@ -157,7 +162,7 @@ fCW_y = data[0][1].astype(float)
 fCW_std = hf.mad_std(fCW_y)
 print("{:.2g} fraction outside {:} std".format(np.count_nonzero(np.abs(fCW_y) > fCW_std*std_cutoff)/fCW_y.size, std_cutoff))
 
-x_bins = hf.ts_to_dt(hf.bins(hf.dt_to_ts(data[0][0]), n=500))
+x_bins = hf.utc_ts_to_dt(hf.bins(hf.utc_dt_to_ts(data[0][0]), n=500))
 y_bins = np.linspace(-std_cutoff*fCW_std, std_cutoff*fCW_std, 100)
 ax0.hist2d(data[0][0], fCW_y, bins=[x_bins, y_bins], cmap=plt.cm.Blues_r, norm=plt.matplotlib.colors.LogNorm())
 
@@ -179,7 +184,7 @@ ax2.yaxis.set_major_locator(ticker.LogLocator())
 ax2.yaxis.get_major_locator().set_params(numticks=3)
 ax2.yaxis.set_major_formatter(ticker.EngFormatter('Hz'))
 ax2.yaxis.set_minor_formatter(ticker.NullFormatter())
-ax2.set_ylim([ax0.get_ylim()[1], ax2.get_ylim()[1]])
+ax2.set_ylim(bottom=std_cutoff*fCW_std)
 
 ax1.hist(data[0][1].astype(float), bins=100, density=True, orientation="horizontal", range=(-std_cutoff*fCW_std, std_cutoff*fCW_std))
 
@@ -210,6 +215,7 @@ ax2.grid(True, alpha=0.25)
 ax3.grid(True, alpha=0.25)
 
 ax0.set_xlim((data[0][0].min(), data[0][0].max()))
+ax2.set_ylim(bottom=std_cutoff*fCW_std)
 
 fig_0.tight_layout()
 
@@ -384,4 +390,3 @@ for label in ax1.xaxis.get_ticklabels():
 ax1.yaxis.set_ticks([])
 
 fig_0.tight_layout()
-

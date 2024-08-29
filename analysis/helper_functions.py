@@ -132,6 +132,12 @@ def dt_to_ts(dt):
 def ts_to_dt(ts):
     return [(t * datetime.timedelta(seconds=1)) + datetime.datetime(1970, 1, 1) for t in ts]
 
+def utc_dt_to_ts(dt):
+    return [t.timestamp() for t in dt]
+
+def utc_ts_to_dt(ts):
+    return [datetime.datetime.fromtimestamp(t, datetime.timezone.utc) for t in ts]
+
 
 # %% Filtering
 

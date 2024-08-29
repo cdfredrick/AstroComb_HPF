@@ -34,9 +34,13 @@ import colorcet
 
 from Drivers.Database import MongoDB
 
+# %% Constants
+
+lens_loss = {'LMH-50X-1064':.39, 'M-60x':1.25, 'LMH-20x-1064':0.03}
+utc = datetime.timezone.utc
+
 # %%
 plt.rcParams['savefig.dpi'] = 600
-plt.rcParams["savefig.format"] = 'png'
 plt.rcParams['savefig.bbox'] = 'tight'
 
 # %% Start/Stop Time
@@ -46,17 +50,12 @@ start_time = None
 # start_time = datetime.datetime(2018, 10, 20)
 # start_time = datetime.datetime(2020, 3, 1)
 # start_time = datetime.datetime.utcnow() - datetime.timedelta(days=2)
-start_time = datetime.datetime.utcnow() - datetime.timedelta(weeks=2)
+# start_time = datetime.datetime.utcnow() - datetime.timedelta(weeks=2)
 
 #--- Stop
 stop_time = None
 #stop_time = datetime.datetime(2019, 5, 1)
 #stop_time = datetime.datetime.utcnow()
-
-
-# %% Constants
-
-lens_loss = {'LMH-50X-1064':.39, 'M-60x':1.25, 'LMH-20x-1064':0.03}
 
 
 # %% Data
@@ -108,40 +107,35 @@ for info in header:
 header = pd.DataFrame(header)
 header = header.sort_values(by='time')
 
-header['mask'] = np.nan
+# %% SLM Masks
+header['mask'] = np.nan # initialize masks
 for mask_ind in spc_data['mask'].index:
     mask = spc_data['mask'].loc[mask_ind, 'mask']
     mask_start_time = spc_data['mask'].loc[mask_ind, 'time']
     mask_end_time = next(iter(spc_data['mask'].loc[mask_ind+1:, 'time']), header['time'].iloc[-1])
     mask_index = header.loc[((header['time'] > mask_start_time) & (header['time'] <= mask_end_time))].index[1:]
-    header.loc[mask_index, 'mask'] = mask
-mask_index = header.loc[((header['time'] > datetime.datetime(2018, 6, 15, 3, 23, 30)) & (header['time'] <= datetime.datetime(2018, 6, 15, 12, 16, 50)))].index
-header.loc[mask_index, 'mask'] = np.nan
-mask_index = header.loc[((header['time'] > datetime.datetime(2018, 6, 19, 18, 30, 13)) & (header['time'] <= datetime.datetime(2018, 6, 20, 0, 2, 30)))].index
-header.loc[mask_index, 'mask'] = np.nan
-mask_index = header.loc[((header['time'] > datetime.datetime(2018, 7, 3, 16, 56, 50)) & (header['time'] <= datetime.datetime(2018, 7, 4, 0, 10, 12)))].index
-header.loc[mask_index, 'mask'] = np.nan
-mask_index = header.loc[((header['time'] > datetime.datetime(2018, 11, 28, 18, 30, 0)) & (header['time'] <= datetime.datetime(2018, 11, 28, 23, 40, 0)))].index
-header.loc[mask_index, 'mask'] = np.nan
-mask_index = header.loc[((header['time'] > datetime.datetime(2019, 1, 8, 16, 45, 0)) & (header['time'] <= datetime.datetime(2019, 1, 8, 23, 45, 0)))].index
-header.loc[mask_index, 'mask'] = np.nan
-mask_index = header.loc[((header['time'] > datetime.datetime(2020, 6, 6, 19, 0, 0)) & (header['time'] <= datetime.datetime(2020, 6, 8, 16, 0, 0)))].index
-header.loc[mask_index, 'mask'] = np.nan
+    header.loc[mask_index, 'mask'] = mask # set known masks
 
+#---- Mask Failures (but OK spectral generation)
+mask_index = header.loc[((header['time'] > datetime.datetime(2018, 6, 15, 3, 23, 30, tzinfo=utc)) & (header['time'] <= datetime.datetime(2018, 6, 15, 12, 16, 50, tzinfo=utc)))].index
+header.loc[mask_index, 'mask'] = np.nan # seconds=32000
+mask_index = header.loc[((header['time'] > datetime.datetime(2018, 6, 19, 18, 30, 13, tzinfo=utc)) & (header['time'] <= datetime.datetime(2018, 6, 20, 0, 2, 30, tzinfo=utc)))].index
+header.loc[mask_index, 'mask'] = np.nan # seconds=19937
+mask_index = header.loc[((header['time'] > datetime.datetime(2018, 7, 3, 16, 56, 50, tzinfo=utc)) & (header['time'] <= datetime.datetime(2018, 7, 4, 0, 10, 12, tzinfo=utc)))].index
+header.loc[mask_index, 'mask'] = np.nan # seconds=26002
+mask_index = header.loc[((header['time'] > datetime.datetime(2018, 11, 28, 18, 30, 0, tzinfo=utc)) & (header['time'] <= datetime.datetime(2018, 11, 28, 23, 40, 0, tzinfo=utc)))].index
+header.loc[mask_index, 'mask'] = np.nan # seconds=18600
+mask_index = header.loc[((header['time'] > datetime.datetime(2019, 1, 8, 16, 45, 0, tzinfo=utc)) & (header['time'] <= datetime.datetime(2019, 1, 8, 23, 45, 0, tzinfo=utc)))].index
+header.loc[mask_index, 'mask'] = np.nan # seconds=25200
+mask_index = header.loc[((header['time'] > datetime.datetime(2021, 6, 14, 21, 0, 0, tzinfo=utc)) & (header['time'] <= datetime.datetime(2021, 6, 22, 3, 0, 0, tzinfo=utc)))].index
+header.loc[mask_index, 'mask'] = np.nan # days=7, seconds=21600
+mask_index = header.loc[((header['time'] > datetime.datetime(2021, 8, 24, 17, 0, 0, tzinfo=utc)) & (header['time'] <= datetime.datetime(2021, 8, 24, 22, 15, 0, tzinfo=utc)))].index
+header.loc[mask_index, 'mask'] = np.nan # seconds=18900
 
-# %% Preliminary Plots
-# fig, ax0 = hf.plot_setup(0, len(header.index))
+#---- Mystery (computer restart fixed the problem)
+mask_index = header.loc[((header['time'] > datetime.datetime(2020, 6, 6, 19, 0, 0, tzinfo=utc)) & (header['time'] <= datetime.datetime(2020, 6, 8, 16, 0, 0, tzinfo=utc)))].index
+header.loc[mask_index, 'mask'] = np.nan # spectra a bit high throughout, days=1, seconds=75600
 
-# #for spectrum in trace:
-# #    plt.plot(spectrum['data']['x'], spectrum['data']['y'])
-# #ylim = plt.ylim()
-# #plt.ylim((ylim[-1]-100, ylim[-1]))
-# idxs = header['time'][header['mask']==0].sort_values().index
-# ax0.plot(spc_data['x'].loc[:,idxs], spc_data['y'].loc[:,idxs].apply(hf.dB, result_type='broadcast'))
-# #ylim = plt.ylim()
-# #plt.ylim((ylim[-1]-80, ylim[-1]))
-
-# ax1 = hf.complementary_x_ticks(ax0, hf.nm_to_THz, nbins=7)
 
 # %% Normalize
 
@@ -261,6 +255,7 @@ spc_data['y_Ph/mode/s'] = spc_data['y_Ph/mode'].mul(header['repetition_rate'], a
 fig, ax0 = hf.plot_setup("Amp-Stb Int-Spectra", 1, size=(6.4*1.5, 4.8))
 ax0.plot(header['time'][header['mask']==0], header['output_power'][header['mask']==0], '.')
 ax0.yaxis.set_major_formatter(ticker.EngFormatter(unit='W'))
+ax0.set_ylim(bottom=0)
 plt.tight_layout()
 
 
@@ -280,7 +275,7 @@ norm_power = np.trapz(
     axis=0)
 norm_power /= np.nanmedian(norm_power)
 
-# Power flatness
+# Power flatness (smoothness)
 power_std = np.nanstd(spc_data['y_Ph/mode/s'].loc[hpf_psb, :] / avg_line_power[:, np.newaxis], axis=0)[msk_idxs]
 
 # Downtime Locations
@@ -289,52 +284,62 @@ t_thr = np.array(int(1e9 * 1e4), dtype="timedelta64[ns]")
 t_dwt_candidates = time_delta.index[time_delta > t_thr]
 t_dwt = []
 scheduled_dowtime = [
-    datetime.datetime(2018,10,16,14,26,51,469000),
-    datetime.datetime(2019,4,10,14,53,31,617000),
-    datetime.datetime(2019,4,12,14,6,51,543000),
-    datetime.datetime(2019,4,19,16,56,52,332000),
-    datetime.datetime(2019,6,5,12,8,36,584000),
-    datetime.datetime(2019,10,4,22,26,56,675000),
-    datetime.datetime(2019,10,23,18,40,16,433000),
-    datetime.datetime(2019,11,11,14,53,31,509000),
-    datetime.datetime(2019,11,12,0,36,49,221000),
-    datetime.datetime(2019,11,12,15,3,28,572000),
-    datetime.datetime(2019,11,12,21,26,52,873000),
-    datetime.datetime(2019,12,19,19,34,43,516000),
-    datetime.datetime(2020,10,27,19,30,9,63000),
-    datetime.datetime(2020,10,28,22,26,50,193000)]
+    datetime.datetime(2018,10,16,14,26,51,469000, tzinfo=utc), # maintenance trip
+    datetime.datetime(2019,1,5,17,15,27,451000, tzinfo=utc), # maintenance trip
+    datetime.datetime(2019,4,10,14,53,31,617000, tzinfo=utc), # updated kcube and optimization scripts
+    datetime.datetime(2019,4,12,14,6,51,543000, tzinfo=utc),
+    datetime.datetime(2019,4,19,16,56,52,332000, tzinfo=utc), # script error; flywheeled
+    datetime.datetime(2019,11,11,14,53,31,509000, tzinfo=utc), # maintenance trip
+    datetime.datetime(2019,11,12,0,36,49,221000, tzinfo=utc),
+    datetime.datetime(2019,11,12,15,3,28,572000, tzinfo=utc),
+    datetime.datetime(2019,11,12,21,26,52,873000, tzinfo=utc),
+    datetime.datetime(2019,12,19,19,34,43,516000, tzinfo=utc), # maintenance trip
+    datetime.datetime(2020,1,9,20,0,8,656000, tzinfo=utc), # rot. stg. failure, diagnostics
+    datetime.datetime(2020,1,10,16,50,12,326000, tzinfo=utc),
+    datetime.datetime(2020,6,6,15,37,28,461000, tzinfo=utc), # computer slowdown
+    datetime.datetime(2020,6,9,15,20,10,39000, tzinfo=utc),
+    datetime.datetime(2020,10,27,19,30,9,63000, tzinfo=utc), # maintenance trip
+    datetime.datetime(2020,10,28,22,26,50,193000, tzinfo=utc),
+    datetime.datetime(2020,11,25,17,56,46,302000, tzinfo=utc), # OSA (firmware); flywheeled
+    datetime.datetime(2021,1,10,17,50,6,603000, tzinfo=utc),
+    datetime.datetime(2021,1,29,16,0,6,326000, tzinfo=utc), # Fiberlock, OSA (firmware); flywheeled
+    datetime.datetime(2021,1,30,17,50,6,592000, tzinfo=utc), # OSA (firmware); flywheeled
+    datetime.datetime(2021,2,3,8,30,6,303000, tzinfo=utc),
+    datetime.datetime(2021,6,6,12,20,6,313000, tzinfo=utc), # OSA (system optimization required); flywheeled
+    datetime.datetime(2021,8,2,13,46,46,315000, tzinfo=utc), # maintenance trip
+    datetime.datetime(2021,8,3,13,56,46,326000, tzinfo=utc),
+    datetime.datetime(2021,8,4,13,50,6,327000, tzinfo=utc)
+    ]
 for candidate in t_dwt_candidates:
     if header["time"].loc[candidate] not in scheduled_dowtime:
         t_dwt.append(candidate)
 t_dwt = np.array(t_dwt)
 
-# t_dwt = t_dwt.delete([2,6,7,8,9,10,11]) # manual cleanup of starting from 2018-05-01
 if len(t_dwt)>0:
     t_dwt_dt = time_delta.loc[t_dwt]
 else:
-    t_dwt_dt = np.array([], dtype=np.timedelta64)
+    t_dwt_dt = pd.Series([], dtype='timedelta64[ns]')
 
 
-p_dwt_idxs = np.flatnonzero((norm_power < 0.5) | ((power_std > 0.8) & (header['time'].loc[msk_idxs] > datetime.datetime(2018,10,18))))
-p_dwt = np.append(0, 1 + np.flatnonzero(np.diff(p_dwt_idxs) > 1))
-# p_dwt = np.delete(p_dwt, [0])  # manual cleanup of starting from 2018-05-01
+p_dwt_idxs = np.flatnonzero((norm_power < 0.5) | ((power_std > 0.8) & (header['time'].loc[msk_idxs] > datetime.datetime(2018,10,18, tzinfo=utc))))
+p_dwt_candidates = np.append(0, 1 + np.flatnonzero(np.diff(p_dwt_idxs) > 1))
 if len(p_dwt_idxs)>0:
-    p_dwt_dt = header['time'].loc[p_dwt_idxs[np.append(p_dwt[1:]-1, -1)]].values - header['time'].loc[p_dwt_idxs[p_dwt]]
-    p_dwt = p_dwt_idxs[p_dwt]
+    p_dwt_dt = header['time'].loc[msk_idxs].iloc[p_dwt_idxs[np.append(p_dwt_candidates[1:]-1, -1)]].values - header['time'].loc[msk_idxs].iloc[p_dwt_idxs[p_dwt_candidates]].values
+    p_dwt = p_dwt_idxs[p_dwt_candidates]
+    nonzeros = np.flatnonzero(p_dwt_dt)
+    p_dwt_dt = p_dwt_dt[nonzeros]
+    p_dwt = p_dwt[nonzeros]
 else:
     p_dwt_dt = np.array([], dtype=np.timedelta64)
     p_dwt = np.array([])
 
-total_downtime = t_dwt_dt.sum() + p_dwt_dt.sum()
-total_time = header['time'].max() - header['time'].min()
-print("Total Time:\t{:}".format(total_time))
-print("Downtime:\t{:}".format(total_downtime))
-print("Downtime %:\t{:}".format(100*total_downtime/total_time))
-# print(p_dwt_dt.sum())
-# print(p_dwt_dt.sum()/total_time)
+for dt in scheduled_dowtime:
+    cond = (dt == header['time'].loc[msk_idxs].iloc[p_dwt])
+    if any(cond):
+        idx = np.argwhere(cond.values)
+        p_dwt = np.delete(p_dwt, idx)
+        p_dwt_dt = np.delete(p_dwt_dt, idx)
 
-
-#--- Plot Uptime
 
 # 2D Spectral Amplitudes
 spc_db_diff = spc_data['y_Ph/mode/s'].loc[hpf_psb].apply(hf.dB, result_type='broadcast')
@@ -351,110 +356,155 @@ try:
 except:
     pass
 
-#%%
-fig = plt.figure("Amp-Stb Spectral-Uptime", constrained_layout=True)
-fig.clf()
-gs = fig.add_gridspec(nrows=20, ncols=20)
-ax0 = fig.add_subplot(gs[:9, :-1])
-ax1 = fig.add_subplot(gs[9:-1, :-1], sharex=ax0)
-ax2 = fig.add_subplot(gs[9:-1, -1])
-ax3 = fig.add_subplot(gs[-1, :-1], sharex=ax0)
+#%%% Totals
+total_downtime = t_dwt_dt.sum() + p_dwt_dt.sum()
+total_time = header['time'].max() - header['time'].min()
+print("Start Time: {:}".format(header['time'].min()))
+print("Stop Time: {:}".format(header['time'].max()))
+print("Total Time:\t{:}".format(total_time))
+print("Downtime:\t{:}".format(total_downtime))
+print("Downtime %:\t{:}".format(100*total_downtime/total_time))
 
-ax0.plot(header['time'].loc[msk_idxs], norm_power, '.', markersize=1)
-# ax0.plot(header['time'].loc[msk_idxs], norm_power/norm_power[-1], '.', markersize=1)
-ax0.set_title("Relative Comb Line Amplitude")
-ax0.set_ylabel("Average")
-ax0.set_ylim(bottom=0)
-ax0.grid(True, alpha=0.25)
+# print(p_dwt_dt.sum())
+# print(p_dwt_dt.sum()/total_time)
 
-ax3.errorbar(header['time'].loc[t_dwt], np.zeros_like(t_dwt), xerr=[np.zeros_like(t_dwt_dt), t_dwt_dt], fmt='.')
-ax3.errorbar(header['time'].loc[msk_idxs].iloc[p_dwt], np.zeros_like(p_dwt), xerr=[np.zeros_like(p_dwt_dt), p_dwt_dt], fmt='.', c="C0")
+print("\nUnresponsive Downtime")
+print(header["time"].loc[t_dwt])
+print(t_dwt_dt)
+print(t_dwt_dt.sum())
 
-pcolor_cmap = colorcet.cm.diverging_bwr_20_95_c54 #plt.cm.nipy_spectral
-pcolor_cmap.set_bad(color='k')
-im = ax1.pcolormesh(
-    header['time'].loc[msk_idxs],
-    1e-3*spc_data['x_nm'].loc[hpf_psb,msk_idxs].mean(axis='columns'),
-    spc_db_diff,
-    # spc_db_diff.div(spc_db_diff.iloc[:,-1], axis="index"),
-    cmap=pcolor_cmap,
-    norm=plt.matplotlib.colors.LogNorm(),
-    vmin=1/3, vmax=3)
-ax1.set_ylabel(r"Wavelength ($\mu$m)")
+print("\nPoor Spectrum Downtime")
+print(header['time'].loc[msk_idxs].iloc[p_dwt])
+print(pd.Series(p_dwt_dt))
+print(pd.Series(p_dwt_dt).sum())
 
-tck_fmt = ticker.FormatStrFormatter("%.1g")
-cbar = fig.colorbar(im, cax=ax2, ticks=[1/3, 0.5, 1, 2, 3], format=tck_fmt)
-minorticks = np.arange(.4, 3, .1)
-cbar.ax.yaxis.set_ticks(minorticks, minor=True)
-cbar.ax.yaxis.set_minor_formatter(ticker.NullFormatter())
-cbar.set_label(r"Relative Amplitude")
+plt.figure("Amp-Stb Downtime-Histogram")
+plt.clf()
+plt.hist(
+    (1/(60**2 * 24)) * np.append(p_dwt_dt.astype(float)*1e-9,t_dwt_dt.values.astype(float)*1e-9),
+    bins=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
 
-for label in ax0.xaxis.get_ticklabels():
-    label.set_visible(False)
-ax1.xaxis.tick_bottom()
-for label in ax1.xaxis.get_ticklabels():
-    label.set_visible(False)
-ax3.xaxis.tick_bottom()
-for label in ax3.xaxis.get_ticklabels():
-    label.set_ha('right')
-    label.set_rotation(20)
-ax3.yaxis.set_ticks([])
+#%%% Plot Uptime
 
-ax1.set_xlim(left=header['time'].loc[msk_idxs].min(), right=header['time'].loc[msk_idxs].max())
+with plt.rc_context({"font.family":"arial", "font.size":17}):
+    fig = plt.figure("Amp-Stb Spectral-Uptime")#, constrained_layout=True)
+    fig.clf()
+    # fig.set_size_inches(6.4*1.25 * 1.8, 4.8, forward=True)
+    fig.set_size_inches(6.4*1.25, 4.8, forward=True)
+    gs = fig.add_gridspec(nrows=20, ncols=40)
+    ax0 = fig.add_subplot(gs[:6, :-1])
+    ax1 = fig.add_subplot(gs[7:-1, :-1], sharex=ax0)
+    ax2 = fig.add_subplot(gs[7:-1, -1])
+    ax3 = fig.add_subplot(gs[-1, :-1], sharex=ax0)
 
+    ax0.plot(header['time'].loc[msk_idxs], norm_power, '.', markersize=1, rasterized=True)
+    # ax0.plot(header['time'].loc[msk_idxs], norm_power/norm_power[-1], '.', markersize=1)
+    # ax0.set_title("Relative Comb Line Amplitude")
+    ax0.set_ylabel("Average")
+    ax0.set_ylim(bottom=0, top=3)
+    ax0.grid(True, alpha=0.25)
+    ax0.yaxis.set_label_position("right")
+    ax0.yaxis.tick_right()
+
+    ax3.errorbar(header['time'].loc[t_dwt], np.zeros_like(t_dwt_dt, dtype=float), xerr=[t_dwt_dt*0, t_dwt_dt], fmt=".")
+    # ax3.errorbar(header['time'].loc[msk_idxs].iloc[p_dwt], np.zeros_like(p_dwt, dtype=float), xerr=[p_dwt_dt*0, p_dwt_dt], fmt=".", c="C0")
+
+    pcolor_cmap = colorcet.cm.diverging_bwr_20_95_c54.copy() #plt.cm.nipy_spectral
+    pcolor_cmap.set_bad(color='k')
+    pc_time = pd.concat([header['time'].loc[msk_idxs], pd.Series(header['time'].loc[msk_idxs].iloc[-1] + datetime.timedelta(seconds=1000))])
+    pc_wvl = spc_data['x_nm'].loc[hpf_psb,msk_idxs].mean(axis='columns')
+    wvl_dx = np.abs(np.diff(pc_wvl).mean())
+    pc_wvl = np.linspace(pc_wvl.min()-wvl_dx/2, pc_wvl.max()+wvl_dx/2, pc_wvl.size+1)
+    im = ax1.pcolormesh(
+        pc_time,
+        1e-3*pc_wvl,
+        spc_db_diff,
+        # spc_db_diff.div(spc_db_diff.iloc[:,-1], axis="index"),
+        cmap=pcolor_cmap,
+        norm=plt.matplotlib.colors.LogNorm(vmin=1/3, vmax=3),
+        # norm=plt.matplotlib.colors.Normalize(vmin=1/3, vmax=3),
+        shading="flat", rasterized=True)
+    ax1.set_ylabel(r"Wavelength ($\mu$m)", labelpad=0)
+
+    tck_fmt = ticker.FormatStrFormatter("%.1g")
+    cbar = fig.colorbar(im, cax=ax2, ticks=[1/3, 0.5, 1, 2, 3], format=tck_fmt)
+    minorticks = np.arange(.4, 3, .1)
+    cbar.ax.yaxis.set_ticks(minorticks, minor=True)
+    cbar.ax.yaxis.set_minor_formatter(ticker.NullFormatter())
+    cbar.set_label(r"Relative Amplitude")
+
+    for label in ax0.xaxis.get_ticklabels():
+        label.set_visible(False)
+    ax1.xaxis.tick_bottom()
+    for label in ax1.xaxis.get_ticklabels():
+        label.set_visible(False)
+    ax3.xaxis.tick_bottom()
+    for label in ax3.xaxis.get_ticklabels():
+        label.set_ha('right')
+        label.set_rotation(20)
+    ax3.yaxis.set_ticks([])
+    ax3.xaxis.set_major_locator(plt.matplotlib.dates.AutoDateLocator(maxticks=8))
+
+    ax1.set_xlim(left=header['time'].loc[msk_idxs].min(), right=header['time'].loc[msk_idxs].max())
+    plt.subplots_adjust(wspace=0, hspace=0.8, top=0.9425)
+plt.tight_layout()
 
 # %% Plot All Traces
 
-spc_psb = (spc_data['x_nm'][0] >= 700) & (spc_data['x_nm'][0] <= 1320)
+spc_psb = (spc_data['x_nm'][0] >= 780) & (spc_data['x_nm'][0] <= 1320)
 spc_psb = spc_psb.index[spc_psb]
 
-fig = plt.figure("Amp-Stb All-Traces")
-plt.clf()
-fig.set_size_inches(6.4*1.5, 4.8, forward=True)
-ax0 = plt.subplot2grid((2,1), (0,0))
-ax1 = plt.subplot2grid((2,1), (1,0), sharex=ax0)
 
-flat = header['time'][header['mask']==0].sort_values().index
-flat_cond = (
-    ~flat.isin(flat[p_dwt_idxs])
-    & (header['time'] > datetime.datetime(2018, 10, 20))[header['mask']==0])
-flat = flat[flat_cond]
+with plt.rc_context({"font.family":"arial", "font.size":14}):#, 'lines.linewidth':3}):
+    fig = plt.figure("Amp-Stb All-Traces")
+    plt.clf()
+    fig.set_size_inches(6.4*1.25, 4.8, forward=True)
+    ax0 = plt.subplot2grid((2,1), (0,0))
+    ax1 = plt.subplot2grid((2,1), (1,0), sharex=ax0)
 
-# flat = flat[flat.isin(flat[(header['time']>datetime.datetime(2018, 10, 20))[header['mask']==0]])]
-#flat = header['time'][header['mask']==0][header['time']<utc_tz.localize(datetime.datetime(2018, 7, 24))].sort_values().index
-#flat = header['time'][header['mask']==0][header['time']>utc_tz.localize(datetime.datetime(2018, 7, 24))].sort_values().index
+    flat = header['time'][header['mask']==0].sort_values().index
+    flat_cond = (
+        ~flat.isin(flat[p_dwt_idxs])
+        & (header['time'] > datetime.datetime(2018, 10, 20, tzinfo=utc))[header['mask']==0])
+    flat = flat[flat_cond]
+
+    # flat = flat[flat.isin(flat[(header['time']>datetime.datetime(2018, 10, 20, tzinfo=utc))[header['mask']==0]])]
+    #flat = header['time'][header['mask']==0][header['time']<utc_tz.localize(datetime.datetime(2018, 7, 24, tzinfo=utc))].sort_values().index
+    #flat = header['time'][header['mask']==0][header['time']>utc_tz.localize(datetime.datetime(2018, 7, 24, tzinfo=utc))].sort_values().index
 
 
-data = spc_data['y_Ph/mode'].loc[spc_psb,flat]
-db_data = data.apply(hf.dB, result_type='broadcast')
-db_data -= np.median(db_data.mean(axis='columns').values)
-std_data = 10**(spc_data['y_std'].loc[spc_psb,flat]/10) - 1
-# std_data = spc_data['y_std'].loc[spc_psb,flat]
-x_data = spc_data['x_nm'].loc[spc_psb,flat]
-n_bins = 500
+    data = spc_data['y_Ph/mode'].loc[spc_psb,flat]
+    db_data = data.apply(hf.dB, result_type='broadcast')
+    db_data -= np.median(db_data.mean(axis='columns').values)
+    std_data = 10**(spc_data['y_std'].loc[spc_psb,flat]/10) - 1
+    # std_data = spc_data['y_std'].loc[spc_psb,flat]
+    x_data = spc_data['x_nm'].loc[spc_psb,flat]
+    n_bins = 500
 
-x_bins = np.linspace(x_data.values.min(), x_data.values.max(), len(x_data)+1)
-y_bins = np.linspace(db_data.values.min(), db_data.values.max(), n_bins)
-ax0.hist2d(x_data.values.flatten(), db_data.values.flatten(), bins=np.array([x_bins, y_bins]), cmap=plt.cm.Blues, norm=plt.matplotlib.colors.LogNorm())
-ax0.plot(x_data.mean(axis='columns'), db_data.mean(axis='columns'), color='0', markersize=0.5, alpha=1)
+    x_bins = np.linspace(x_data.values.min(), x_data.values.max(), len(x_data)+1)
+    y_bins = np.linspace(db_data.values.min(), db_data.values.max(), n_bins)
+    ax0.hist2d(x_data.values.flatten(), db_data.values.flatten(), bins=np.array([x_bins, y_bins]), cmap=plt.cm.Blues, norm=plt.matplotlib.colors.LogNorm(), rasterized=True)
+    ax0.plot(x_data.mean(axis='columns'), db_data.mean(axis='columns'), color='0', markersize=0.5, alpha=1)
 
-x_bins = np.linspace(x_data.values.min(), x_data.values.max(), len(x_data)+1)
-# y_bins = np.geomspace(std_data.values[std_data.values > 0].min(), std_data.values.max(), n_bins)
-y_bins = np.geomspace(1e-3, std_data.values.max(), n_bins)
-ax1.hist2d(x_data.values.flatten(), std_data.values.flatten(), bins=np.array([x_bins, y_bins]), cmap=plt.cm.Blues, norm=plt.matplotlib.colors.LogNorm())
-ax1.semilogy(x_data.mean(axis='columns'), 10**(db_data.std(axis='columns')/10) - 1, color='0', markersize=1, alpha=1, label='Total')
-ax1.autoscale(axis="x", tight=True)
-ax1.legend(loc='upper right')
+    x_bins = np.linspace(x_data.values.min(), x_data.values.max(), len(x_data)+1)
+    # y_bins = np.geomspace(std_data.values[std_data.values > 0].min(), std_data.values.max(), n_bins)
+    y_bins = np.geomspace(1e-3, std_data.values.max(), n_bins)
+    ax1.hist2d(x_data.values.flatten(), std_data.values.flatten(), bins=np.array([x_bins, y_bins]), cmap=plt.cm.Blues, norm=plt.matplotlib.colors.LogNorm(), rasterized=True)
+    ax1.semilogy(x_data.mean(axis='columns'), std_data.mean(axis='columns'), color="dodgerblue", markersize=1, alpha=1, label='Short Term')
+    ax1.semilogy(x_data.mean(axis='columns'), 10**(db_data.std(axis='columns')/10) - 1, color='0', markersize=1, alpha=1, label='Long Term')
+    ax1.autoscale(axis="x", tight=True)
+    leg = ax1.legend(loc='upper right', ncol=2, borderaxespad=0.25, columnspacing=.75, handletextpad=0.25, handlelength=1.5, borderpad=0.25)
+    for line in leg.get_lines():
+        line.set_linewidth(3)
 
-ax0.set_title("Relative Amplitude")
-ax0.set_ylabel(r'dB photons/mode')
-ax0.grid(b=True, alpha=0.25)
-ax1.set_title("Standard Deviation")
-ax1.set_ylabel(r'std dev/mean')
-ax1.set_xlabel('Wavelength (nm)')
-# ax1.set_ylim(bottom=1e-3)
-ax1.grid(b=True, alpha=0.25)
-
+    # ax0.set_title("Relative Amplitude")
+    ax0.set_ylabel(r'dB photons/mode')
+    ax0.grid(alpha=0.25)
+    # ax1.set_title("Standard Deviation")
+    ax1.set_ylabel(r'std dev/mean', labelpad=0)
+    ax1.set_xlabel('Wavelength (nm)')
+    # ax1.set_ylim(bottom=1e-3)
+    ax1.grid(alpha=0.25)
 
 plt.tight_layout()
 #plt.savefig('long_spectrum.png', dpi=600, transparent=True)
@@ -582,4 +632,3 @@ fig.autofmt_xdate()
 
 plt.tight_layout()
 #plt.savefig('long_DW.png', dpi=600, transparent=True)
-

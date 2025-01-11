@@ -780,36 +780,36 @@ def track_2nd_stage(state_db):
         time.sleep(2)
 
         #--- Optimize input coupling --------------------------------------
-        # Device dbs
-        nt_db = "broadening_stage/device_nanotrack_in"
-        pz_db = "broadening_stage/device_piezo_z_in"
-
-        # Monitor db
-        mon_db = 'broadening_stage/2nd_stage_z_in_optimizer'
-
-        # Optimize
-        sig = 3.
-        new_output = optimize_z_coupling(pz_db, nt_db, mon_db, sig)
-
-        # Log Result
-        log_str = ' Input coupling optimized at z = {:.3f}V'.format(new_output)
-        log.log_info(mod_name, func_name, log_str)
+#        # Device dbs
+#        nt_db = "broadening_stage/device_nanotrack_in"
+#        pz_db = "broadening_stage/device_piezo_z_in"
+#
+#        # Monitor db
+#        mon_db = 'broadening_stage/2nd_stage_z_in_optimizer'
+#
+#        # Optimize
+#        sig = 3.
+#        new_output = optimize_z_coupling(pz_db, nt_db, mon_db, sig)
+#
+#        # Log Result
+#        log_str = ' Input coupling optimized at z = {:.3f}V'.format(new_output)
+#        log.log_info(mod_name, func_name, log_str)
 
         #--- Optimize output coupling -------------------------------------
-        # Device dbs
-        nt_db = "broadening_stage/device_nanotrack_out"
-        pz_db = "broadening_stage/device_piezo_z_out"
-
-        # Monitor db
-        mon_db = 'broadening_stage/2nd_stage_z_out_optimizer'
-
-        # Optimize
-        sig = 3.
-        new_output = optimize_z_coupling(pz_db, nt_db, mon_db, sig)
-
-        # Log Result
-        log_str = ' Output coupling optimized at z = {:.3f}V'.format(new_output)
-        log.log_info(mod_name, func_name, log_str)
+#        # Device dbs
+#        nt_db = "broadening_stage/device_nanotrack_out"
+#        pz_db = "broadening_stage/device_piezo_z_out"
+#
+#        # Monitor db
+#        mon_db = 'broadening_stage/2nd_stage_z_out_optimizer'
+#
+#        # Optimize
+#        sig = 3.
+#        new_output = optimize_z_coupling(pz_db, nt_db, mon_db, sig)
+#
+#        # Log Result
+#        log_str = ' Output coupling optimized at z = {:.3f}V'.format(new_output)
+#        log.log_info(mod_name, func_name, log_str)
 
         #--- Update state db ----------------------------------------------
         with sm.lock[state_db]:

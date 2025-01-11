@@ -360,7 +360,7 @@ from scipy.optimize import minimize
 v_range_threshold = 0.1 #(limit-threshold)/(upper - lower limits)
 log_setpoint_error_interval = 60*10 #s
 lock_hold_interval = 1.0 #s
-max_ref_sig = 0.4 # V
+max_ref_sig = 0.5 # V
 timer['find_lock:locked'] = time.time()
 timer['find_lock:log_setpoint_error'] = time.time()
 def find_lock(state_db, last_good_position=None):
@@ -860,7 +860,9 @@ STATES = {
                                 'monitor':monitor, 'search':find_lock,
                                 'maintain':keep_lock, 'operate':sm.nothing}},
                 'manual':{
-                        'settings':{},
+                        'settings':{
+                                'filter_cavity/device_PID':{
+                                        'upper_output_limit':2.00, 'lower_output_limit':0.00}},
                         'prerequisites':{
                                 'critical':[],
                                 'necessary':[],
@@ -878,13 +880,15 @@ STATES = {
                                 'monitor':monitor, 'search':transfer_to_manual,
                                 'maintain':lock_disabled, 'operate':sm.nothing}},
                 'engineering':{
-                        'settings':{},
+                        'settings':{
+                                'filter_cavity/device_PID':{
+                                        'upper_output_limit':2.00, 'lower_output_limit':0.00}},
                         'prerequisites':{
                                 'critical':[],
                                 'necessary':[],
                                 'optional':[]},
                         'routines':{
-                                'monitor':sm.nothing, 'search':sm.nothing,
+                                'monitor':monitor, 'search':sm.nothing,
                                 'maintain':sm.nothing, 'operate':sm.nothing}}
                         }
         }

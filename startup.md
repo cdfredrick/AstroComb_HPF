@@ -1,5 +1,6 @@
-The following lists the procedure for turning on the astrocomb system. The one-off commands needed to enact these instructions remotely are contained within "Scripts/Misc/misc.py".
+The following lists the procedure for turning on/off the astrocomb system. The one-off commands needed to enact these instructions remotely are contained within "Scripts/Misc/misc.py".
 
+Startup -----------------------------------------------------------------------
 1. Check that the liquid chiller is on
 2. Check that the database software (mongoDB, couchbase) is running on the computer
 3. Set the IM bias to the last known level
@@ -25,7 +26,7 @@ The following lists the procedure for turning on the astrocomb system. The one-o
     3. Enable "Auto Recover" and "Limit DAC Output"
     4. Set "Recovery Threshold" of "Optical" to 7.
 11. Enable the Finisar WaveShaper and apply the last know mask
-12. Enable the Cybel amplifier
+12. Enable the Cybel amplifier (COM8)
     - Note: this step is performed in the *Cybel* app
     1. Enable 1 through 3 in that order
     2. Enable operation without the GUI
@@ -33,16 +34,18 @@ The following lists the procedure for turning on the astrocomb system. The one-o
 13. Start "filter_cavity.py"
     - Note: depending on the state of the hysteresis, the offset of the HV amplifier may need to be adjusted in order to find the lock point. This is found in the state settings as "y_voltage"
 14. Reset the Nufern amplifier to a known state
-    - Note: steps 1-6 **cannot** be done remotely. The nufern control panel is located inside the comb enclosure.
-    1. Open the nuAmp GUI
+    - Note: steps 2-9 **cannot** be done remotely. The Nufern control panel is located inside the comb enclosure.
+    1. Open the nuAmp GUI, ensure that the output is at 0%
     2. Engage the interlock button (push in)
     3. Turn the key to the off ("0") position
     4. Disconnect power (4-pin)
-    5. Reconnect power
-    6. Turn the key to the "1" position (the next position after "1")
-    7. On the nuAmp GUI, ensure that the output is at 0%
+	5. Turn the key and cycle the interlock button to release trapped charges. Ensure key and interlock are in the off position before proceeding
+    6. Reconnect power
+    7. Turn the key to the "1" position (the next position after "1")
     8. Disengage the interlock button (pull out)
     9. Turn the key to "enable" position (the next position after "1")
+	10. Enable output of the Nufern amplifier at 0% in the nuAmp GUI
+	Note: On initialization, the temperature reading will be inaccurate until after the Nufern has been fully enabled in the GUI. It should read room temperature soon after the output has turned on.
 15. Turn on the OSA
     - Note: this step **cannot** be done remotely
     1. Press the front panel power button and skip the on-screen instructions.
@@ -55,15 +58,14 @@ The following lists the procedure for turning on the astrocomb system. The one-o
 17. Reset the FiberLock to a known state
     - Note: this step is performed in the *Kangoo* app
     1. Stop at the center of its range
-    2. Disable automatic relocking (found in the "hidden parameters")
+    2. Disable automatic re-locking (found in the "hidden parameters")
 18. Setup the broadening stage
-    1. Enable output of the Nufern amplifier at 0%
-    2. Enable the FiberLock by selecting the "search" button in the Kangoo GUI
-    3. Enable the NanoTracks by selecting the "track" button in the Kinesis GUI
-    4. Turn up the Nufern amplifier to 30% in increments of 10% while confirming that the FiberLock and NanoTracks are locked and tracking
-    5. Close the FiberLock's Kangoo GUI
-    6. Adjust the ~~rotation stage~~ nufern power in 1% increments until the dispersive wave is visible on the OSA
-    7. Close the Kinesis GUI
+    1. Enable the FiberLock by selecting the "search" button in the Kangoo GUI
+    2. Enable the NanoTracks by selecting the "track" button in the Kinesis GUI
+    3. Turn up the Nufern amplifier to 30% in increments of 10% while confirming that the FiberLock and NanoTracks are locked and tracking
+    4. Adjust the Nufern power in 1% increments until the dispersive wave is visible on the OSA
+	5. Close the FiberLock's Kangoo GUI
+    6. Close the Kinesis GUI
 19. Start "broadening_stage.py"
 20. Start "spectral_shaper.py"
     - Schedule optimizations as needed
@@ -72,18 +74,23 @@ The following lists the procedure for turning on the astrocomb system. The one-o
     2. Enter: cd C:\HPFics
     3. Enter: python -m TIMS.clients.tims_nistlfc
 
+Changing the Offset Frequency -------------------------------------------------
 If the RIO frequency (optical lock) needs to be adjusted,
 1. Stop the "broadening_stage.py" and "spectral_shaper.py" scripts
 2. Latch the FiberLock and NanoTracks
-3. Move the Nufern to 0% and disable
-4. Unlock the "Optical" signal
-5. Move the frequency by adjusting the "Offset DAC" with the scroll wheel
-6. Lock the "Optical" signal
-7. Confirm that the filter cavity is still locked
-8. Follow the startup instructions starting at "17"
+3. Set the Nufern to 0% and disable
+4. Open the AC RP window to the "Optical Lock" tab
+4. Enable "Auto-refrech"  and dsiable the "lock"
+5. Adjust the frequency using the "Offset DAC" slider.
+	1. Use the scroll wheel on the mouse to slowly move the frequency
+	2. Continue adjusting until the peak in the spectrum has returned to 40 MHz and the "Detected VCO Gain" is green.
+6. Enable the lock
+7. Confirm that the filter cavity is locked
+8. Enable the Nufern at 0%
+8. Follow the startup instructions beginning at step "18"
 
 
-Shutdown Procedure:
+Shutdown ----------------------------------------------------------------------
 This is mostly just the startup in reverse.
 1. Stop "spectral_shaper.py"
 2. Stop "broadening_stage.py"
@@ -103,13 +110,13 @@ This is mostly just the startup in reverse.
     2. Depress the interlock button
     3. Turn the key to the off ("0") position
 6. Stop "filter_cavity.py"
-7. Disable the Cybel amplifier
+7. Disable the Cybel amplifier (COM8)
     - Note: this step is performed in the *Cybel* app
     1. Disable 3 through 1 in that order. Do not change the pump current settings.
 8. Stop "XEM_GUI.py"
     1. Disable the "CEO" lock in the GUI
     2. Disable the "Optical" (RIO CW) lock in the GUI
-    3. Close the GUI
+    3. Close the window
 9. Stop "mll_fR.py"
 10. Stop "rf_oscillators.py"
 11. Stop "comb_generation.py"

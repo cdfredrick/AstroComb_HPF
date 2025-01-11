@@ -196,7 +196,8 @@ mll_TEC.tec_output()
 mll_osc = CombinationModule('GPIB0::20::INSTR', 2)
 
 mll_osc.laser_current_setpoint()
-#Out[3]: 700.0
+#Out[3]: 700.0 # old, pre 2022-06
+#Out[3]: 850.0 # new
 
 mll_osc.tec_temperature_setpoint()
 #Out[4]: 25.0
@@ -246,6 +247,14 @@ mll_amp2.output()
 #Out[13]: (True, True)
 
 
+#%% MLL
+mll_state = PriorityQueue('mll_fR')
+#
+#mll_state.push(message={"state":{'mll_fR/state':{"state":"manual"}}})
+#
+mll_state.push(message={"state":{'mll_fR/state':{"state":"lock"}}})
+
+
 # %% IM Bias ==================================================================
 #==============================================================================
 imbias = E36103A('USB0::0x2A8D::0x0702::MY57427460::INSTR')
@@ -261,8 +270,9 @@ filt_cav = PriorityQueue('filter_cavity')
 
 
 filt_cav.push(message={"state":{'filter_cavity/state':{"state":'safe'}}})
+filt_cav.push(message={"state":{'filter_cavity/state':{"state":'manual'}}})
 filt_cav.push(message={"state":{'filter_cavity/state':{"state":'lock'}}})
-
+filt_cav.push(message={"state":{'filter_cavity/state':{"state":'engineering'}}})
 
 # %% WaveShaper ===============================================================
 #==============================================================================
@@ -290,12 +300,12 @@ domain = [280.18, 283.357]
 #-41.63125465629001,
 #4.665367657691958]
 new_coefs = [
-20,
-0.9938880964450989,
--10,
--2.788857337895246,
--61.63125465629001,
-4.665367657691958]
+24.592054041584475,
+3.955628221807417,
+-208.711441789688,
+-120.59044375864137,
+342.2259441464416,
+232.51492118835625]
 #new_coefs = [
 #    18]
 
@@ -415,24 +425,29 @@ spec_opt.push(message={'control_parameter':{'setpoint_optimization':tomorrow_at_
 
 spec_opt.push(message={'control_parameter':{'DW_setpoint':-45}})
 
-spec_opt.push(message={'control_parameter':{'run_optimizer':{'target':"optimize_z_in_coupling",
-                                                             'sig':3}}})
-
-spec_opt.push(message={'control_parameter':{'run_optimizer':{'target':"optimize_z_out_coupling",
-                                                             'sig':3}}})
+spec_opt.push(message={'control_parameter':{'run_optimizer':{
+        'target':"optimize_z_in_coupling",
+        'exp_alpha':1,
+        'sig':3}}})
 
 spec_opt.push(message={'control_parameter':{'run_optimizer':{
-'target':"optimize_IM_bias",
-'exp_alpha':1,
-'sig':3}}})
+        'target':"optimize_z_out_coupling",
+        'exp_alpha':1,
+        'sig':3}}})
 
 spec_opt.push(message={'control_parameter':{'run_optimizer':{
-'target':"optimize_optical_phase",
-'exp_alpha':1,
-'sig':3}}})
+        'target':"optimize_IM_bias",
+        'exp_alpha':1,
+        'sig':3}}})
 
-spec_opt.push(message={'control_parameter':{'run_optimizer':{'target':"optimize_all_optical_phase",
-                                                             'sig':3}}})
+spec_opt.push(message={'control_parameter':{'run_optimizer':{
+        'target':"optimize_optical_phase",
+        'exp_alpha':1,
+        'sig':3}}})
+
+#spec_opt.push(message={'control_parameter':{'run_optimizer':{
+#        'target':"optimize_all_optical_phase",
+#        'sig':3}}})
     
 spec_opt.push(message={'control_parameter':{'run_optimizer':{
 'target':"optimize_DW_setpoint",
@@ -444,13 +459,6 @@ spec_opt.push(message={"state":{'spectral_shaper/state_optimizer':{"state":'opti
 spec_opt.push(message={"state":{'spectral_shaper/state_optimizer':{"state":'optimal'}}})
 spec_opt.push(message={"state":{'spectral_shaper/state_optimizer':{"state":'safe'}}})
     
-    
-#%% MLL
-mll_state = PriorityQueue('mll_fR')
-#
-#mll_state.push(message={"state":{'mll_fR/state':{"state":"manual"}}})
-#
-mll_state.push(message={"state":{'mll_fR/state':{"state":"lock"}}})
 
 #%% OSA
 
@@ -465,6 +473,7 @@ osa.level_unit()
 
 osa.trace_type(set_type={"mode":"WRIT"}, active_trace="TRA")
 osa.wvl_range({"start":690, "stop":1320})
+#osa.wvl_range({"start":1520, "stop":1600})
 osa.sensitivity({"sense":"HIGH1", "chop":"OFF"})
 osa.resolution(set_res=2)
 #osa.sweep_mode("REP")
@@ -482,10 +491,11 @@ plt.plot(data["data"]["x"], data["data"]["y"])
 
 # %%
 import os
-base_dir = os.path.join("C:\\","Users","National Institute","Documents","Python Scripts","OSACtrl","2021-08-02")
+base_dir = os.path.join("C:\\","Users","National Institute","Documents","Python Scripts","OSACtrl","2022-11-15")
 date = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-ident = "EOM-Comb"
+ident = "FC"
 file_name = "_".join((date, ident))+".txt"
 file_path = os.path.join(base_dir, file_name)
 with open(file_path, "x") as opened_file:
     json.dump(data, opened_file, indent="\t")
+print(file_name)

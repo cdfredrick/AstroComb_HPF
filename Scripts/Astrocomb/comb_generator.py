@@ -54,9 +54,11 @@ controls. Each of these databases are initialized within this script.
 The databases should be grouped by function.
 '''
 STATE_DBs = [
-        'comb_generator/state_12V_supply', 'comb_generator/state_IM_bias']
+#        'comb_generator/state_12V_supply',
+        'comb_generator/state_IM_bias']
 DEVICE_DBs =[
-        'comb_generator/device_PDU_12V', 'comb_generator/device_IM_bias']
+#        'comb_generator/device_PDU_12V',
+        'comb_generator/device_IM_bias']
 MONITOR_DBs = ['comb_generator/IM_bias']
 LOG_DB = 'comb_generator'
 CONTROL_DB = 'comb_generator/control'
@@ -78,16 +80,16 @@ these settings are checked against those saved in the database, and
 populated if found empty. Each state and device database should be represented.
 '''
 STATE_SETTINGS = {
-        'comb_generator/state_12V_supply':{
-                'state':'engineering',
-                'prerequisites':{
-                        'critical':False,
-                        'necessary':False,
-                        'optional':False},
-                'compliance':False,
-                'desired_state':'on',
-                'initialized':False,
-                'heartbeat':datetime.datetime.utcnow()},
+#        'comb_generator/state_12V_supply':{
+#                'state':'engineering',
+#                'prerequisites':{
+#                        'critical':False,
+#                        'necessary':False,
+#                        'optional':False},
+#                'compliance':False,
+#                'desired_state':'on',
+#                'initialized':False,
+#                'heartbeat':datetime.datetime.utcnow()},
         'comb_generator/state_IM_bias':{
                 'state':'engineering',
                 'prerequisites':{
@@ -100,11 +102,11 @@ STATE_SETTINGS = {
                 'heartbeat':datetime.datetime.utcnow()}}
 DEVICE_SETTINGS = {
         # PDU settings
-        'comb_generator/device_PDU_12V':{
-                'driver':PDUOutlet,
-                'queue':'192.168.0.2',
-                '__init__':[['192.168.0.2', 1]],
-                'outlet_state':None, 'outlet_ramp_action':0},
+#        'comb_generator/device_PDU_12V':{
+#                'driver':PDUOutlet,
+#                'queue':'192.168.0.2',
+#                '__init__':[['192.168.0.2', 1]],
+#                'outlet_state':None, 'outlet_ramp_action':0},
         # DC IM Bias settings
         'comb_generator/device_IM_bias':{
                 'driver':E36103A,
@@ -522,38 +524,38 @@ and routines:
             the instrument's data collection state is active.
 '''
 STATES = {
-        'comb_generator/state_12V_supply':{
-                'on':{
-                        'settings':{},
-                        'prerequisites':{
-                                'critical':[
-                                    {'db':'ambience/box_temperature_0',
-                                     'key':'V',
-                                     'test':(lambda t: (t<0.35) and (t>0.10)),
-                                     'doc':"lambda t: (t<0.35) and (t>0.10)"}], # Below max temperature threshold 35 C
-                                        },
-                        'routines':{
-                                'monitor':sm.nothing,#monitor_pdu,
-                                'search':turn_outlet_on,
-                                'maintain':keep_outlet_on, 'operate':sm.nothing}},
-                'safe':{
-                        'settings':{},
-                        'prerequisites':{
-                                'exit':[
-                                    {'db':'ambience/box_temperature_0',
-                                     'key':'V',
-                                     'test':(lambda t: (t<0.245) and (t>0.10)),
-                                     'doc':"(lambda t: (t<0.245) and (t>0.10))"}]},
-                        'routines':{
-                                'monitor':monitor_pdu, 'search':turn_outlet_off,
-                                'maintain':keep_outlet_off, 'operate':sm.nothing}},
-                'engineering':{
-                        'settings':{},
-                        'prerequisites':{},
-                        'routines':{
-                                'monitor':sm.nothing, 'search':sm.nothing,
-                                'maintain':sm.nothing, 'operate':sm.nothing}}
-                        },
+#        'comb_generator/state_12V_supply':{
+#                'on':{
+#                        'settings':{},
+#                        'prerequisites':{
+#                                'critical':[
+#                                    {'db':'ambience/box_temperature_0',
+#                                     'key':'V',
+#                                     'test':(lambda t: (t<0.35) and (t>0.10)),
+#                                     'doc':"lambda t: (t<0.35) and (t>0.10)"}], # Below max temperature threshold 35 C
+#                                        },
+#                        'routines':{
+#                                'monitor':sm.nothing,#monitor_pdu,
+#                                'search':turn_outlet_on,
+#                                'maintain':keep_outlet_on, 'operate':sm.nothing}},
+#                'safe':{
+#                        'settings':{},
+#                        'prerequisites':{
+#                                'exit':[
+#                                    {'db':'ambience/box_temperature_0',
+#                                     'key':'V',
+#                                     'test':(lambda t: (t<0.245) and (t>0.10)),
+#                                     'doc':"(lambda t: (t<0.245) and (t>0.10))"}]},
+#                        'routines':{
+#                                'monitor':monitor_pdu, 'search':turn_outlet_off,
+#                                'maintain':keep_outlet_off, 'operate':sm.nothing}},
+#                'engineering':{
+#                        'settings':{},
+#                        'prerequisites':{},
+#                        'routines':{
+#                                'monitor':sm.nothing, 'search':sm.nothing,
+#                                'maintain':sm.nothing, 'operate':sm.nothing}}
+#                        },
         'comb_generator/state_IM_bias':{
                 'on':{
                         'settings':{},

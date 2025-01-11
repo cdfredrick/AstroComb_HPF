@@ -1,6 +1,10 @@
 The following lists the procedure for turning on/off the astrocomb system. The one-off commands needed to enact these instructions remotely are contained within "Scripts/Misc/misc.py".
 
-Startup -----------------------------------------------------------------------
+-----------------------------------------------------------------------
+
+Startup
+-------
+
 1. Check that the liquid chiller is on
 2. Check that the database software (mongoDB, couchbase) is running on the computer
 3. Set the IM bias to the last known level
@@ -74,7 +78,12 @@ Startup -----------------------------------------------------------------------
     2. Enter: cd C:\HPFics
     3. Enter: python -m TIMS.clients.tims_nistlfc
 
-Changing the Offset Frequency -------------------------------------------------
+
+-------------------------------------------------------------------------------
+
+Changing the Offset Frequency
+-----------------------------
+
 If the RIO frequency (optical lock) needs to be adjusted,
 1. Stop the "broadening_stage.py" and "spectral_shaper.py" scripts
 2. Latch the FiberLock and NanoTracks
@@ -90,7 +99,11 @@ If the RIO frequency (optical lock) needs to be adjusted,
 8. Follow the startup instructions beginning at step "18"
 
 
-Shutdown ----------------------------------------------------------------------
+-------------------------------------------------------------------------------
+
+Shutdown
+--------
+
 This is mostly just the startup in reverse.
 1. Stop "spectral_shaper.py"
 2. Stop "broadening_stage.py"
